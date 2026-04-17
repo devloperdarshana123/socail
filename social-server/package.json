@@ -1,0 +1,29 @@
+{
+  "name": "social-server",
+  "version": "1.0.0",
+  "description": "EroSocial Backend",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env src/index.js",
+    "dev": "nodemon --env-file=.env src/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.15.0",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.8.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.20.1",
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
