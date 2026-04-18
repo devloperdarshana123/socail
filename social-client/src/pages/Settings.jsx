@@ -234,11 +234,11 @@ const result = await dispatch(updateProfile({ name, email, designation, bio, cou
                   <div>
                     <label className="block text-xs text-gray-400 font-medium mb-1.5">Designation / Specialty</label>
                     <input className={inputCls} type="text" value={designation} onChange={e => setDesignation(e.target.value)} placeholder="e.g. Interior Designer, Tile Supplier" maxLength={60} />
-                    <p className="text-xs text-gray-400 mt-1">Posts pe dikhega</p>
+                  
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs text-gray-400 font-medium mb-1.5">Bio</label>
-                    <textarea className={`${inputCls} resize-none`} rows={3} value={bio} onChange={e => setBio(e.target.value)} placeholder="Apne baare mein kuch likho..." maxLength={200} />
+                    <textarea className={`${inputCls} resize-none`} rows={3} value={bio} onChange={e => setBio(e.target.value)} placeholder="Tell us about yourself..." maxLength={200} />
                     <p className="text-xs text-gray-400 mt-1">{bio.length}/200</p>
                   </div>
 <div>

@@ -116,49 +116,6 @@ useEffect(() => {
     Notification.requestPermission();
   }
 }, []);
-  // ── Socket setup ──────────────────────────────────────────────────────────
-//   useEffect(() => {
-//     if (!user?._id) return;
-// const onConnect    = () => setIsConnected(true);
-// const onDisconnect = () => setIsConnected(false);
-// const onNewMessage = (msg) => dispatch(appendMessage(msg));
-// const onMsgDeleted = ({ messageId }) => dispatch(removeMessage({ messageId }));
-// const onMsgEdited  = ({ messageId, newText }) => dispatch(updateMessage({ messageId, newText }));
-// const onTyping     = ({ userId: uid, isTyping }) => {
-//   if (activeConversation?._id)
-//     dispatch(setTypingUser({ userId: uid, conversationId: activeConversation._id, isTyping }));
-// };
-// const onUserOnline  = (uid) => dispatch(userCameOnline(uid));
-// const onUserOffline = (uid) => dispatch(userWentOffline(uid));
-// const onConvUpdated = (payload) => dispatch(updateConversationUnread(payload));
-
-// socket.on("connect",             onConnect);
-// socket.on("disconnect",          onDisconnect);
-// socket.on("message:receive", (data) => {
-//   console.log("📨 Received:", data);
-//   if (data?.message) dispatch(appendMessage(data.message));
-// });
-// socket.on("message:delete",      ({ messageId }) => dispatch(removeMessage({ messageId })));
-// socket.on("message:edited",      onMsgEdited);
-// socket.on("typingStatus",        onTyping);
-// socket.on("userOnline",          onUserOnline);
-// socket.on("userOffline",         onUserOffline);
-// socket.on("conversationUpdated", onConvUpdated);
-
-// return () => {
-//   socket.off("connect",             onConnect);
-//   socket.off("disconnect",          onDisconnect);
-//   socket.off("message:receive");
-// socket.off("message:delete");
-//   socket.off("message:edited",      onMsgEdited);
-//   socket.off("typingStatus",        onTyping);
-//   socket.off("userOnline",          onUserOnline);
-//   socket.off("userOffline",         onUserOffline);
-//   socket.off("conversationUpdated", onConvUpdated);
-// };
-//   },[user?._id, activeConversation?._id]); // eslint-disable-line
-
-
 
 useEffect(() => {
   if (!user?._id) return;
@@ -343,61 +300,124 @@ socket.emit("typing:start", { conversationId: activeConversation._id });
 
   const handleVoiceInput = () => {
   if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-    toast.error("Tumhara browser speech support nahi karta!");
+    toast.error("Your browser doesn't support voice input. Use Chrome!");
     return;
   }
 
   if (isListening) {
     recognitionRef.current?.stop();
+    setIsListening(false);
     return;
-  }
-
-  if (recognitionRef.current) {
-    recognitionRef.current.onresult = null;
-    recognitionRef.current.abort();
-    recognitionRef.current = null;
   }
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const recognition = new SpeechRecognition();
   recognitionRef.current = recognition;
 
-  recognition.lang = "en-US";
-  recognition.continuous = true;       // ✅ Chrome ke liye zaroori
-  recognition.interimResults = false;
+  recognition.lang = "en-IN";
+  recognition.continuous = false;
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
-  let fullTranscript = "";
+  let finalTranscript = "";
 
   recognition.onstart = () => setIsListening(true);
 
   recognition.onresult = (e) => {
-    // ✅ Saare final results combine karo
+    let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) {
-        fullTranscript += e.results[i][0].transcript + " ";
+        finalTranscript += e.results[i][0].transcript;
+      } else {
+        interim += e.results[i][0].transcript;
       }
     }
+    // Show interim results in real time
+    setText(finalTranscript + interim);
   };
 
   recognition.onend = () => {
-    // ✅ Stop pe jo bhi bola woh ek baar set karo
-    if (fullTranscript.trim()) {
-      setText(prev => prev ? prev + " " + fullTranscript.trim() : fullTranscript.trim());
-      inputRef.current?.focus();
-    }
     setIsListening(false);
     recognitionRef.current = null;
+    if (finalTranscript.trim()) {
+      setText(finalTranscript.trim());
+      inputRef.current?.focus();
+    }
   };
 
   recognition.onerror = (e) => {
-    console.error("Speech error:", e.error);
+    console.error("Voice error:", e.error);
     setIsListening(false);
     recognitionRef.current = null;
+    if (e.error === "not-allowed") toast.error("Microphone permission denied!");
+    else if (e.error === "no-speech") toast.error("No speech detected, try again!");
   };
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch (err) {
+    console.error(err);
+    setIsListening(false);
+  }
 };
+
+//   const handleVoiceInput = () => {
+//   if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
+//     toast.error("Tumhara browser speech support nahi karta!");
+//     return;
+//   }
+
+//   if (isListening) {
+//     recognitionRef.current?.stop();
+//     return;
+//   }
+
+//   if (recognitionRef.current) {
+//     recognitionRef.current.onresult = null;
+//     recognitionRef.current.abort();
+//     recognitionRef.current = null;
+//   }
+
+//   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+//   const recognition = new SpeechRecognition();
+//   recognitionRef.current = recognition;
+
+//   recognition.lang = "en-US";
+//   recognition.continuous = true;       // ✅ Chrome ke liye zaroori
+//   recognition.interimResults = false;
+//   recognition.maxAlternatives = 1;
+
+//   let fullTranscript = "";
+
+//   recognition.onstart = () => setIsListening(true);
+
+//   recognition.onresult = (e) => {
+//     // ✅ Saare final results combine karo
+//     for (let i = e.resultIndex; i < e.results.length; i++) {
+//       if (e.results[i].isFinal) {
+//         fullTranscript += e.results[i][0].transcript + " ";
+//       }
+//     }
+//   };
+
+//   recognition.onend = () => {
+//     // ✅ Stop pe jo bhi bola woh ek baar set karo
+//     if (fullTranscript.trim()) {
+//       setText(prev => prev ? prev + " " + fullTranscript.trim() : fullTranscript.trim());
+//       inputRef.current?.focus();
+//     }
+//     setIsListening(false);
+//     recognitionRef.current = null;
+//   };
+
+//   recognition.onerror = (e) => {
+//     console.error("Speech error:", e.error);
+//     setIsListening(false);
+//     recognitionRef.current = null;
+//   };
+
+//   recognition.start();
+// };
 
 //  const handleVoiceInput = () => {
 //   if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {

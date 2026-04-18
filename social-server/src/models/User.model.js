@@ -1,4 +1,3 @@
-// src/models/User.model.js
 
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -15,14 +14,13 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-      match: [/^\S+@\S+\.\S+$/, "Valid email do"],
+    match: [/^\S+@\S+\.\S+$/, "Valid email do"],
   },
   password: {
     type: String,
-    required: false, // ✅ Google users ka password nahi hoga
+    required: false,
     minlength: 6,
   },
-  // ✅ Google Auth ke liye — pehle missing tha
   googleId: {
     type: String,
     default: null,
@@ -41,9 +39,19 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  // ✅ BAHAR hai — location ke andar nahi
+  coverPhoto: {
+    type: String,
+    default: "",
+  },
   bio: {
     type: String,
     default: "",
+  },
+  // ✅ BAHAR hai — location ke andar nahi
+  interests: {
+    type: [String],
+    default: [],
   },
   isSuspended: {
     type: Boolean,
@@ -63,12 +71,12 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "SocialUser",
   }],
-followRequests: [{
+  followRequests: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: "SocialUser",
   }],
 
-  // ── Location ──────────────────────────────────────────────
+  // ── Location ──────────────────────────────────────────────────────────────
   location: {
     type: {
       type: String,
@@ -76,15 +84,15 @@ followRequests: [{
       default: "Point",
     },
     coordinates: {
-      type: [Number], // [longitude, latitude]
+      type: [Number],   // [longitude, latitude]
       default: [0, 0],
     },
- city: { type: String, default: "" },
-country: { type: String, default: "" },
-state: { type: String, default: "" },
+    city:    { type: String, default: "" },
+    state:   { type: String, default: "" },
+    country: { type: String, default: "" },
   },
 
-  // ── Business Category ─────────────────────────────────────
+  // ── Business Category ──────────────────────────────────────────────────────
   businessCategory: {
     type: String,
     enum: ["marble", "granite", "limestone", "cnc", "quarry", "supplier", "designer", "other"],
@@ -93,24 +101,22 @@ state: { type: String, default: "" },
 
 }, { timestamps: true });
 
-// Geospatial index
-userSchema.index({ "location": "2dsphere" });
+// ── Indexes ───────────────────────────────────────────────────────────────────
+userSchema.index({ location: "2dsphere" });
 userSchema.index({ followers: 1 });
 userSchema.index({ following: 1 });
 userSchema.index({ followRequests: 1 });
 userSchema.index({ email: 1 });
 
-
-// ── Password hash karo save se pehle ──────────────────────────────────────────
-// ✅ Google users ka password nahi hoga, isliye check zaroori hai
+// ── Password hash karo save se pehle ─────────────────────────────────────────
 userSchema.pre("save", async function () {
   if (!this.isModified("password") || !this.password) return;
   this.password = await bcrypt.hash(this.password, 10);
 });
 
-// ── Password compare ───────────────────────────────────────────────────────────
+// ── Password compare ──────────────────────────────────────────────────────────
 userSchema.methods.comparePassword = async function (enteredPassword) {
-  if (!this.password) return false; // Google user ke paas password nahi
+  if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 

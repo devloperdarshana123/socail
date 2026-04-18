@@ -221,6 +221,8 @@ import followRoutes      from "./routes/follow.routes.js";
 import marketplaceRoutes from "./routes/marketplace.routes.js";
 import settingsRoutes    from "./routes/settings.routes.js";
 import messageRoutes     from "./routes/message.routes.js";
+import storyRoutes from "./routes/story.js";
+import chatRoutes from "./routes/chat.routes.js";
 
 const app        = express();
 const httpServer = createServer(app);
@@ -246,7 +248,8 @@ app.use("/api/follow",      followRoutes);
 app.use("/api/settings",    settingsRoutes);
 app.use("/api/messages",    messageRoutes);
 app.use("/api/marketplace", marketplaceRoutes);
-
+app.use("/api/stories", storyRoutes);
+app.use("/api/chat", chatRoutes);
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get("/", (_, res) => {
   res.json({ success: true, message: "🚀 EroSocial Server Running!" });

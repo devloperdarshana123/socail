@@ -1,5 +1,829 @@
 
-import { useState, useEffect } from "react";
+
+// import { useState, useEffect, useRef } from "react";
+// import { useAuth } from "../context/AuthContext";
+// import { useNavigate } from "react-router-dom";
+// import { useDispatch, useSelector } from "react-redux";
+// import toast from "react-hot-toast";
+// import DeleteConfirmModal from "../components/DeleteConfirmModal";
+// import {
+//   Heart, MessageCircle, Trash2, ShieldX,
+//   Plus, X, Grid, Users, Search, UserMinus,
+//   MapPin, Pencil, Camera, Play, Eye
+// } from "lucide-react";
+
+// import {
+//   fetchMyPosts, fetchStats, fetchSuggestions,
+//   createPost, likePost, commentPost, deletePost, suspendPost,
+// } from "../store/slices/Feedslice";
+// import { toggleFollowRequest } from "../store/slices/Exploreslice";
+// import { fetchFollowers, fetchFollowing, toggleFollow } from "../store/slices/Profileslice";
+// import { uploadAvatar, uploadCoverPhoto } from "../store/slices/settingsSlice";
+// import { updateUser as updateUserAction } from "../store/slices/authSlice";
+
+// /* ─── Erovians warm palette ─────────────────────────────────── */
+// const C = {
+//   sand:    "#c8956c",
+//   sandLt:  "#f0e8df",
+//   sandDk:  "#a07050",
+//   ink:     "#1a1614",
+//   gray:    "#6b6560",
+//   grayLt:  "#f5f2f0",
+//   border:  "#e8e0d8",
+//   white:   "#ffffff",
+//   indigo:  "#6366f1",
+// };
+
+// /* ─── Tiny helpers ───────────────────────────────────────────── */
+// const Avatar = ({ src, name, size = 40, className = "" }) =>
+//   src ? (
+//     <img src={src} alt={name} className={className}
+//       style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+//   ) : (
+//     <div className={className} style={{
+//       width: size, height: size, borderRadius: "50%", flexShrink: 0,
+//       background: `linear-gradient(135deg, ${C.sand}, ${C.sandDk})`,
+//       display: "flex", alignItems: "center", justifyContent: "center",
+//       color: C.white, fontWeight: 700,
+//       fontSize: size * 0.38,
+//     }}>
+//       {name?.charAt(0).toUpperCase()}
+//     </div>
+//   );
+
+// /* ─── Story Bubble ───────────────────────────────────────────── */
+// const StoryBubble = ({ label, src, name, hasStory = true }) => (
+//   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}>
+//     <div style={{
+//       padding: hasStory ? 2 : 0,
+//       borderRadius: "50%",
+//       background: hasStory ? `linear-gradient(135deg, ${C.sand}, ${C.sandDk})` : "transparent",
+//     }}>
+//       <div style={{
+//         padding: hasStory ? 2 : 0,
+//         borderRadius: "50%",
+//         background: C.white,
+//       }}>
+//         <Avatar src={src} name={name} size={52} />
+//       </div>
+//     </div>
+//     <span style={{ fontSize: 11, color: C.gray, maxWidth: 60, textAlign: "center",
+//       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+//       {label}
+//     </span>
+//   </div>
+// );
+
+// /* ═══════════════════════════════════════════════════════════════
+//    MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════════ */
+// export default function Profile() {
+//   const { user, isAdmin } = useAuth();
+//   const navigate = useNavigate();
+//   const dispatch = useDispatch();
+
+//   const { myPosts, stats, suggestions, creating } = useSelector((s) => s.feed);
+//   const loading = useSelector((s) => s.feed.myPostsLoading);
+//   const { pendingRequests } = useSelector((s) => s.explore);
+//   const { followers, following } = useSelector((s) => s.profile);
+
+//   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+//   const [postToDelete, setPostToDelete]       = useState(null);
+//   const [commentInputs, setCommentInputs]     = useState({});
+//   const [showComments, setShowComments]       = useState({});
+//   const [showCreatePost, setShowCreatePost]   = useState(false);
+//   const [caption, setCaption]                 = useState("");
+//   const [image, setImage]                     = useState(null);
+//   const [imagePreview, setImagePreview]       = useState(null);
+//   const [activePostView, setActivePostView]   = useState("grid"); // grid | list
+//   const [selectedPost, setSelectedPost]       = useState(null);
+//   const [coverUploading, setCoverUploading]   = useState(false);
+//   const [avatarUploading, setAvatarUploading] = useState(false);
+//   const liveSelectedPost = selectedPost
+//   ? myPosts.find((p) => p._id === selectedPost._id) ?? selectedPost
+//   : null;
+
+//   // Social modal
+//   const [showSocialModal, setShowSocialModal] = useState(false);
+//   const [activeTab, setActiveTab]             = useState("followers");
+//   const [searchQuery, setSearchQuery]         = useState("");
+//   const [unfollowingId, setUnfollowingId]     = useState(null);
+
+//   useEffect(() => {
+//     dispatch(fetchMyPosts());
+//     dispatch(fetchStats());
+//     dispatch(fetchSuggestions());
+//   }, [dispatch]);
+
+//   const openSocialModal = (tab) => {
+//     setActiveTab(tab); setSearchQuery(""); setShowSocialModal(true);
+//     dispatch(tab === "followers" ? fetchFollowers() : fetchFollowing());
+//   };
+//   const handleTabSwitch = (tab) => {
+//     setActiveTab(tab); setSearchQuery("");
+//     dispatch(tab === "followers" ? fetchFollowers() : fetchFollowing());
+//   };
+
+//   const currentList  = activeTab === "followers" ? followers : following;
+//   const filteredList = currentList.filter((u) =>
+//     u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+//     u.designation?.toLowerCase().includes(searchQuery.toLowerCase())
+//   );
+
+//   const handleUnfollow = async (userId) => {
+//     setUnfollowingId(userId);
+//     const result = await dispatch(toggleFollow({ userId, isPending: false, isUnfollow: true }));
+//     if (toggleFollow.fulfilled.match(result)) {
+//       toast.success("Unfollowed successfully!");
+//       dispatch(fetchFollowing()); dispatch(fetchStats());
+//     } else toast.error(result.payload || "Unfollow failed!");
+//     setUnfollowingId(null);
+//   };
+
+//   const handleImageChange = (e) => {
+//     const file = e.target.files[0];
+//     if (file) { setImage(file); setImagePreview(URL.createObjectURL(file)); }
+//   };
+
+//   const handleCreatePost = async (e) => {
+//     e.preventDefault();
+//     if (!caption && !image) { toast.error("Caption ya image daalo!"); return; }
+//     const result = await dispatch(createPost({ caption, image }));
+//     if (createPost.fulfilled.match(result)) {
+//       toast.success("Posted successfully! 🎉");
+//       setCaption(""); setImage(null); setImagePreview(null); setShowCreatePost(false);
+//       dispatch(fetchStats());
+//     } else toast.error(result.payload || "Failed to create post!");
+//   };
+
+//   const handleLike = async (postId) => {
+//     const result = await dispatch(likePost({ postId, userId: user._id }));
+//     if (likePost.rejected.match(result)) toast.error("Like nahi hua!");
+//   };
+
+//   const handleComment = async (postId) => {
+//     const text = commentInputs[postId]?.trim();
+//     if (!text) return;
+//     const result = await dispatch(commentPost({ postId, text }));
+//     if (commentPost.fulfilled.match(result)) {
+//       setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
+//     } else toast.error("Couldn't post comment!");
+//   };
+
+//   const handleDelete = (postId) => { setPostToDelete(postId); setDeleteModalOpen(true); };
+//   const confirmDelete = async () => {
+//     setDeleteModalOpen(false);
+//     const result = await dispatch(deletePost(postToDelete));
+//     if (deletePost.fulfilled.match(result)) { toast.success("Post deleted!"); dispatch(fetchStats()); }
+//     else toast.error("Failed to delete post!");
+//     setPostToDelete(null);
+//   };
+
+//   const handleSuspend = async (postId) => {
+//     const result = await dispatch(suspendPost(postId));
+//     if (suspendPost.fulfilled.match(result)) toast.success("Post suspended!");
+//     else toast.error("Failed to suspend post!");
+//   };
+
+//   const handleFollow = async (userId) => {
+//     const isPending = pendingRequests.includes(userId);
+//     const result = await dispatch(toggleFollowRequest({ userId, isPending }));
+//     if (toggleFollowRequest.fulfilled.match(result))
+//       toast.success(isPending ? "Request canceled!" : "Follow request sent!");
+//     else toast.error(result.payload || "Request failed!");
+//   };
+
+//   const closeModal = () => { setShowCreatePost(false); setCaption(""); setImage(null); setImagePreview(null); };
+
+//   /* ── Avatar upload from Profile page ── */
+//   const handleAvatarUpload = async (e) => {
+//     const file = e.target.files[0];
+//     if (!file) return;
+//     setAvatarUploading(true);
+//     const result = await dispatch(uploadAvatar(file));
+//     if (uploadAvatar.fulfilled.match(result)) {
+//       dispatch(updateUserAction({ avatar: result.payload }));
+//       toast.success("Avatar updated!");
+//     } else {
+//       toast.error(result.payload || "Upload failed!");
+//     }
+//     setAvatarUploading(false);
+//   };
+
+//   /* ── Cover photo upload from Profile page ── */
+//   const handleCoverUpload = async (e) => {
+//     const file = e.target.files[0];
+//     if (!file) return;
+//     setCoverUploading(true);
+//     const result = await dispatch(uploadCoverPhoto(file));
+//     if (uploadCoverPhoto.fulfilled.match(result)) {
+//       dispatch(updateUserAction({ coverPhoto: result.payload }));
+//       toast.success("Cover photo updated!");
+//     } else {
+//       toast.error(result.payload || "Cover upload failed!");
+//     }
+//     setCoverUploading(false);
+//   };
+
+//   /* ── hashtags from user object or fallback ── */
+//   const hashtags = user?.interests?.length
+//     ? user.interests
+//     : ["#erovians", "#marble", "#design", "#stone", "#interiors"];
+
+//   /* ── dummy story list (own + suggestions) ── */
+//   const storyList = [
+//     { label: "Your Story", src: user?.avatar, name: user?.name, hasStory: false },
+//     ...suggestions.slice(0, 5).map((s) => ({ label: s.name?.split(" ")[0], src: s.avatar, name: s.name, hasStory: true })),
+//   ];
+
+//   /* ─────────────────────────────────────────────────────────── */
+//   return (
+//     <>
+//       <style>{`
+//         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+//         .profile-root { font-family: 'DM Sans', sans-serif; background: #f5f2f0; min-height: 100vh; }
+//         .profile-root * { box-sizing: border-box; }
+//         .cover-overlay { background: linear-gradient(to bottom, transparent 40%, rgba(26,22,20,0.55) 100%); }
+//         .tag-pill { display:inline-flex; align-items:center; padding:4px 12px; border-radius:999px;
+//           background:${C.sandLt}; color:${C.sandDk}; font-size:12px; font-weight:500; cursor:pointer;
+//           border:1px solid ${C.border}; transition:all .15s; }
+//         .tag-pill:hover { background:${C.sand}; color:#fff; border-color:${C.sand}; }
+//         .stat-btn { display:flex; flex-direction:column; align-items:center; gap:2px;
+//           padding:10px 18px; border-radius:12px; background:${C.white}; border:1px solid ${C.border};
+//           cursor:pointer; transition:all .15s; }
+//         .stat-btn:hover { background:${C.sandLt}; border-color:${C.sand}; }
+//         .stat-num { font-size:18px; font-weight:700; color:${C.ink}; line-height:1; font-family:'DM Serif Display',serif; }
+//         .stat-lbl { font-size:11px; color:${C.gray}; font-weight:500; }
+//         .post-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:3px; }
+//         @media(max-width:480px) { .post-grid { grid-template-columns:repeat(2,1fr); } }
+//         .post-thumb { position:relative; aspect-ratio:1; overflow:hidden; cursor:pointer; }
+//         .post-thumb img { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
+//         .post-thumb:hover img { transform:scale(1.06); }
+//         .post-thumb-overlay { position:absolute; inset:0; background:rgba(26,22,20,0.45);
+//           display:flex; align-items:center; justify-content:center; gap:12px;
+//           opacity:0; transition:opacity .2s; color:#fff; font-size:13px; font-weight:600; }
+//         .post-thumb:hover .post-thumb-overlay { opacity:1; }
+//         .post-thumb-overlay span { display:flex; align-items:center; gap:4px; }
+//         .btn-sand { background:${C.sand}; color:#fff; border:none; border-radius:999px;
+//           padding:9px 22px; font-size:13px; font-weight:600; cursor:pointer;
+//           transition:all .15s; font-family:'DM Sans',sans-serif; }
+//         .btn-sand:hover { background:${C.sandDk}; }
+//         .btn-outline { background:transparent; color:${C.gray}; border:1.5px solid ${C.border};
+//           border-radius:999px; padding:9px 22px; font-size:13px; font-weight:600; cursor:pointer;
+//           transition:all .15s; font-family:'DM Sans',sans-serif; }
+//         .btn-outline:hover { border-color:${C.sand}; color:${C.sand}; }
+//         .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:50;
+//           display:flex; align-items:center; justify-content:center; padding:16px; }
+//         .modal-box { background:#fff; border-radius:20px; width:100%; max-width:480px;
+//           box-shadow:0 24px 60px rgba(0,0,0,0.2); overflow:hidden; display:flex; flex-direction:column; max-height:88vh; }
+//         .scroll-hide::-webkit-scrollbar { display:none; }
+//         .anim-in { animation: fadeUp .35s ease both; }
+//         @keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+//       `}</style>
+
+//       <div className="profile-root">
+//         <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px 80px" }}>
+
+//           {/* ── COVER + AVATAR ─────────────────────────────────── */}
+//           <div className="section-card anim-in" style={{ marginBottom: 12 }}>
+
+//             {/* Cover Photo */}
+//             <div style={{ position: "relative", height: "clamp(140px, 25vw, 220px)" , background: `linear-gradient(135deg, ${C.sandLt}, ${C.border})` }}>
+//               {user?.coverPhoto ? (
+//                 <img src={user.coverPhoto} alt="cover"
+//                   style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+//               ) : (
+//                 <div style={{
+//                   width: "100%", height: "100%",
+//                   background: `linear-gradient(135deg, #e8ddd4 0%, #d4c4b0 50%, #c8b49a 100%)`,
+//                   display: "flex", alignItems: "center", justifyContent: "center",
+//                 }}>
+//                   <span style={{ fontSize: 48, opacity: 0.25 }}>🪨</span>
+//                 </div>
+//               )}
+//               <div className="cover-overlay" style={{ position: "absolute", inset: 0 }} />
+
+//               {/* Cover edit btn */}
+//               <label style={{
+//                 position: "absolute", top: 12, right: 12,
+//                 background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 999,
+//                 padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+//                 display: "flex", alignItems: "center", gap: 5, color: C.ink,
+//                 backdropFilter: "blur(6px)",
+//               }}>
+//                 {coverUploading
+//                   ? <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+//                       <div style={{ width: 12, height: 12, border: "2px solid #c8956c",
+//                         borderTopColor: "transparent", borderRadius: "50%",
+//                         animation: "spin 0.7s linear infinite" }} /> Uploading...
+//                     </span>
+//                   : <><Camera size={13} /> Edit Cover</>
+//                 }
+//                 <input type="file" accept="image/*" onChange={handleCoverUpload} style={{ display: "none" }} />
+//               </label>
+//             </div>
+
+//             {/* Avatar row */}
+//             <div style={{ position: "relative", padding: "0 20px 20px" }}>
+//             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginTop: 0, gap: 16 }}>
+
+//                 {/* Avatar with ring */}
+//  <div style={{
+//   padding: 3, borderRadius: "50%",
+//   background: C.white, boxShadow: "0 0 0 2px " + C.border,
+//   position: "relative", marginTop: -44, flexShrink: 0,
+// }}>            <Avatar src={user?.avatar} name={user?.name} size={window.innerWidth < 640 ? 64 : 88} />
+//                   <label style={{
+//                     position: "absolute", bottom: 2, right: 2,
+//                     width: 24, height: 24, borderRadius: "50%",
+//                     background: C.sand, border: "2px solid #fff",
+//                     display: "flex", alignItems: "center", justifyContent: "center",
+//                     cursor: "pointer", color: "#fff",
+//                   }}>
+//                     {avatarUploading
+//                       ? <div style={{ width: 10, height: 10, border: "2px solid #fff",
+//                           borderTopColor: "transparent", borderRadius: "50%",
+//                           animation: "spin 0.7s linear infinite" }} />
+//                       : <Camera size={11} />
+//                     }
+//                     <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: "none" }} />
+//                   </label>
+//                 </div>
+
+//                 {/* Action buttons */}
+//                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto", alignSelf: "flex-end", paddingBottom: 0, marginTop: 12 }}>
+//                   <button className="btn-outline" onClick={() => navigate("/settings")}
+//                     style={{ display: "flex", alignItems: "center", gap: 5 }}>
+//                     <Pencil size={13} /> Edit Profile
+//                   </button>
+//                   <button className="btn-sand" onClick={() => setShowCreatePost(true)}
+//                     style={{ display: "flex", alignItems: "center", gap: 5 }}>
+//                     <Plus size={13} /> Post
+//                   </button>
+//                 </div>
+//               </div>
+
+//               {/* Name + designation */}
+//               <div style={{ marginTop: 12 }}>
+//                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+//                   <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: C.ink, margin: 0 }}>
+//                     {user?.name}
+//                   </h1>
+//                   {isAdmin && (
+//                     <span style={{
+//                       background: C.sandLt, color: C.sandDk, fontSize: 10, fontWeight: 700,
+//                       padding: "2px 8px", borderRadius: 999, border: `1px solid ${C.border}`,
+//                     }}>
+//                       {user?.role === "super_admin" ? "👑 Super Admin" : "🛡️ Admin"}
+//                     </span>
+//                   )}
+//                 </div>
+//                 <p style={{ fontSize: 13, color: C.sand, fontWeight: 500, margin: "2px 0 0" }}>
+//                   {user?.designation?.trim() || "EroSocial Member"}
+//                 </p>
+//                 {(user?.location?.city || user?.location?.state || user?.location?.country) && (
+//                   <p style={{ fontSize: 12, color: C.gray, margin: "4px 0 0", display: "flex", alignItems: "center", gap: 4 }}>
+//                     <MapPin size={12} />
+//                     {[user.location.city, user.location.state, user.location.country]
+//                       .filter(Boolean).join(", ")}
+//                   </p>
+//                 )}
+//               </div>
+
+//               {/* Bio */}
+//               {user?.bio && (
+//                 <p style={{ fontSize: 13, color: C.gray, margin: "10px 0 0", lineHeight: 1.6 }}>
+//                   {user.bio}
+//                 </p>
+//               )}
+
+//               {/* Stats row */}
+//               <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap", justifyContent: window.innerWidth < 480 ? "center" : "flex-start" }}>
+//                 <div className="stat-btn">
+//                   <span className="stat-num">{stats.posts ?? 0}</span>
+//                   <span className="stat-lbl">Posts</span>
+//                 </div>
+//                 <button className="stat-btn" onClick={() => openSocialModal("followers")}>
+//                   <span className="stat-num">{stats.followers ?? 0}</span>
+//                   <span className="stat-lbl">Followers</span>
+//                 </button>
+//                 <button className="stat-btn" onClick={() => openSocialModal("following")}>
+//                   <span className="stat-num">{stats.following ?? 0}</span>
+//                   <span className="stat-lbl">Following</span>
+//                 </button>
+//               </div>
+
+//               {/* Hashtags */}
+//               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 }}>
+//                 {hashtags.map((tag) => (
+//                   <span key={tag} className="tag-pill">{tag.startsWith("#") ? tag : "#" + tag}</span>
+//                 ))}
+//               </div>
+//             </div>
+//           </div>
+
+//           {/* ── MY POSTS ───────────────────────────────────────── */}
+//           <div className="section-card anim-in">
+//             {/* Header */}
+//             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+//               padding: "14px 20px", borderBottom: `1px solid ${C.border}` }}>
+//               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+//                 <Grid size={15} color={C.sand} />
+//                 <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>My Posts</span>
+//                 <span style={{ fontSize: 11, color: C.gray, background: C.grayLt,
+//                   padding: "2px 8px", borderRadius: 999 }}>{myPosts.length}</span>
+//               </div>
+//               {/* Grid / List toggle */}
+//               <div style={{ display: "flex", gap: 4, background: C.grayLt,
+//                 borderRadius: 8, padding: 3 }}>
+//                 {["grid","list"].map((v) => (
+//                   <button key={v} onClick={() => setActivePostView(v)} style={{
+//                     padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+//                     fontSize: 11, fontWeight: 600,
+//                     background: activePostView === v ? C.white : "transparent",
+//                     color: activePostView === v ? C.ink : C.gray,
+//                     boxShadow: activePostView === v ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+//                   }}>
+//                     {v === "grid" ? "⊞ Grid" : "☰ List"}
+//                   </button>
+//                 ))}
+//               </div>
+//             </div>
+
+//             {/* Content */}
+//             {loading ? (
+//               <div style={{ textAlign: "center", padding: "60px 20px", color: C.gray }}>
+//                 <div style={{ fontSize: 28, marginBottom: 8 }}>⏳</div>
+//                 Loading posts...
+//               </div>
+//             ) : myPosts.length === 0 ? (
+//               <div style={{ textAlign: "center", padding: "60px 20px" }}>
+//                 <div style={{ fontSize: 42, marginBottom: 10 }}>📸</div>
+//                 <p style={{ fontSize: 15, fontWeight: 600, color: C.ink, margin: "0 0 4px" }}>No posts yet!</p>
+//                 <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>Create your first post 🎉</p>
+//                 <button className="btn-sand" onClick={() => setShowCreatePost(true)}>+ Create Post</button>
+//               </div>
+//             ) : activePostView === "grid" ? (
+//               /* GRID VIEW */
+//               <div className="post-grid">
+//                 {myPosts.map((post) => (
+//                   <div key={post._id} className="post-thumb" onClick={() => setSelectedPost(post)}>
+//                     {post.image ? (
+//                       <img src={post.image} alt="post" />
+//                     ) : (
+//                       <div style={{ width: "100%", height: "100%", background: C.sandLt,
+//                         display: "flex", alignItems: "center", justifyContent: "center",
+//                         fontSize: 22, color: C.sand }}>
+//                         ✍️
+//                       </div>
+//                     )}
+//                     <div className="post-thumb-overlay">
+//                       <span><Heart size={14} fill="white" stroke="none" /> {post.likes?.length || 0}</span>
+//                       <span><MessageCircle size={14} /> {post.comments?.length || 0}</span>
+//                     </div>
+//                   </div>
+//                 ))}
+//               </div>
+//             ) : (
+//               /* LIST VIEW */
+//               <div style={{ padding: "8px 0" }}>
+//                 {myPosts.map((post) => (
+//                   <div key={post._id} style={{
+//                     display: "flex", gap: 12, padding: "14px 20px",
+//                     borderBottom: `1px solid ${C.grayLt}`,
+//                   }}>
+//                     {post.image && (
+//                       <img src={post.image} alt="post" style={{
+//                         width: 72, height: 72, borderRadius: 12, objectFit: "cover", flexShrink: 0,
+//                       }} />
+//                     )}
+//                     <div style={{ flex: 1, minWidth: 0 }}>
+//                       <p style={{ fontSize: 13, color: C.ink, margin: "0 0 6px", lineHeight: 1.5 }}>
+//                         {post.caption || <span style={{ color: C.gray, fontStyle: "italic" }}>No caption</span>}
+//                       </p>
+//                       <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+//                         <button onClick={() => handleLike(post._id)}
+//                           style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12,
+//                             fontWeight: 600, color: post.likes?.includes(user?._id) ? "#ef4444" : C.gray,
+//                             background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+//                           <Heart size={14} fill={post.likes?.includes(user?._id) ? "currentColor" : "none"} />
+//                           {post.likes?.length || 0}
+//                         </button>
+//                         <button onClick={() => setShowComments((p) => ({ ...p, [post._id]: !p[post._id] }))}
+//                           style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12,
+//                             fontWeight: 600, color: C.gray, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+//                           <MessageCircle size={14} /> {post.comments?.length || 0}
+//                         </button>
+//                         <span style={{ fontSize: 11, color: C.gray, marginLeft: "auto" }}>
+//                           {new Date(post.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+//                         </span>
+//                         {isAdmin && (
+//                           <button onClick={() => handleSuspend(post._id)}
+//                             style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 0 }}>
+//                             <ShieldX size={14} />
+//                           </button>
+//                         )}
+//                         <button onClick={() => handleDelete(post._id)}
+//                           style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 0 }}>
+//                           <Trash2 size={14} />
+//                         </button>
+//                       </div>
+
+//                       {showComments[post._id] && (
+//                         <div style={{ marginTop: 10 }}>
+//                           {post.comments?.slice(-2).map((c, i) => (
+//                             <div key={i} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+//                               <Avatar src={c.user?.avatar} name={c.user?.name} size={20} />
+//                               <span style={{ fontSize: 12, color: C.ink }}>
+//                                 <strong>{c.user?.name}</strong> {c.text}
+//                               </span>
+//                             </div>
+//                           ))}
+//                           <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+//                             <input value={commentInputs[post._id] || ""}
+//                               onChange={(e) => setCommentInputs((p) => ({ ...p, [post._id]: e.target.value }))}
+//                               onKeyDown={(e) => e.key === "Enter" && handleComment(post._id)}
+//                               placeholder="Comment..." style={{
+//                                 flex: 1, fontSize: 12, padding: "6px 12px",
+//                                 border: `1px solid ${C.border}`, borderRadius: 999,
+//                                 outline: "none", fontFamily: "inherit",
+//                               }} />
+//                             <button onClick={() => handleComment(post._id)}
+//                               style={{ fontSize: 12, fontWeight: 600, color: C.sand,
+//                                 background: "none", border: "none", cursor: "pointer" }}>Post</button>
+//                           </div>
+//                         </div>
+//                       )}
+//                     </div>
+//                   </div>
+//                 ))}
+//               </div>
+//             )}
+//           </div>
+
+//         </div>
+//       </div>
+
+//       {/* ── GRID POST DETAIL MODAL ──────────────────────────────── */}
+// {/* ── GRID POST DETAIL MODAL ──────────────────────────────── */}
+//       {liveSelectedPost && (
+//         <div className="modal-backdrop" onClick={() => setSelectedPost(null)}>
+//           <div onClick={(e) => e.stopPropagation()} style={{
+//             background: C.white, borderRadius: 20, width: "100%", maxWidth: 560,
+//             maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column",
+//             boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
+//           }}>
+//             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+//               padding: "14px 18px", borderBottom: `1px solid ${C.border}` }}>
+//               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+//                 <Avatar src={user?.avatar} name={user?.name} size={36} />
+//                 <div>
+//                   <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: 0 }}>{user?.name}</p>
+//                   <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{user?.designation?.trim() || "EroSocial Member"}</p>
+//                 </div>
+//               </div>
+//               <div style={{ display: "flex", gap: 4 }}>
+//                 {isAdmin && (
+//                   <button onClick={() => { handleSuspend(liveSelectedPost._id); setSelectedPost(null); }}
+//                     style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 6 }}>
+//                     <ShieldX size={16} />
+//                   </button>
+//                 )}
+//                 <button onClick={() => { handleDelete(liveSelectedPost._id); setSelectedPost(null); }}
+//                   style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 6 }}>
+//                   <Trash2 size={16} />
+//                 </button>
+//                 <button onClick={() => setSelectedPost(null)}
+//                   style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 6 }}>
+//                   <X size={18} />
+//                 </button>
+//               </div>
+//             </div>
+//             {liveSelectedPost.image && (
+//               <img src={liveSelectedPost.image} alt="post"
+//                 style={{ width: "100%", maxHeight: 380, objectFit: "cover" }} />
+//             )}
+//             <div style={{ padding: "12px 18px", flex: 1, overflowY: "auto" }}>
+//               {liveSelectedPost.caption && (
+//                 <p style={{ fontSize: 13, color: C.ink, marginBottom: 12, lineHeight: 1.6 }}>
+//                   <strong>{user?.name} </strong>{liveSelectedPost.caption}
+//                 </p>
+//               )}
+//               <div style={{ display: "flex", gap: 14, marginBottom: 12 }}>
+//                 <button onClick={() => handleLike(liveSelectedPost._id)}
+//                   style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13,
+//                     fontWeight: 600, color: liveSelectedPost.likes?.some(id => id?.toString() === user?._id?.toString()) ? "#ef4444" : C.gray,
+//                     background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+//                   <Heart size={18} fill={liveSelectedPost.likes?.some(id => id?.toString() === user?._id?.toString()) ? "currentColor" : "none"} />
+//                   {liveSelectedPost.likes?.length || 0}
+//                 </button>
+//                 <button onClick={() => setShowComments((p) => ({ ...p, [liveSelectedPost._id]: !p[liveSelectedPost._id] }))}
+//                   style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13,
+//                     fontWeight: 600, color: C.gray, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+//                   <MessageCircle size={18} /> {liveSelectedPost.comments?.length || 0}
+//                 </button>
+//               </div>
+//               {liveSelectedPost.comments?.map((c, i) => (
+//                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+//                   <Avatar src={c.user?.avatar} name={c.user?.name} size={28} />
+//                   <div style={{ background: C.grayLt, borderRadius: 12, padding: "6px 12px", flex: 1 }}>
+//                     <span style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginRight: 6 }}>{c.user?.name}</span>
+//                     <span style={{ fontSize: 12, color: C.gray }}>{c.text}</span>
+//                   </div>
+//                 </div>
+//               ))}
+//               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+//                 <Avatar src={user?.avatar} name={user?.name} size={30} />
+//                 <input value={commentInputs[liveSelectedPost._id] || ""}
+//                   onChange={(e) => setCommentInputs((p) => ({ ...p, [liveSelectedPost._id]: e.target.value }))}
+//                   onKeyDown={(e) => e.key === "Enter" && handleComment(liveSelectedPost._id)}
+//                   placeholder="Add a comment..." style={{
+//                     flex: 1, fontSize: 13, padding: "8px 14px",
+//                     border: `1px solid ${C.border}`, borderRadius: 999,
+//                     outline: "none", fontFamily: "inherit",
+//                   }} />
+//                 <button onClick={() => handleComment(liveSelectedPost._id)}
+//                   style={{ fontSize: 13, fontWeight: 700, color: C.sand,
+//                     background: "none", border: "none", cursor: "pointer" }}>Post</button>
+//               </div>
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* ── FOLLOWERS / FOLLOWING MODAL ─────────────────────────── */}
+//       {/* ── FOLLOWERS / FOLLOWING MODAL ─────────────────────────── */}
+//       {showSocialModal && (
+//         <div className="modal-backdrop">
+//           <div className="modal-box">
+//             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+//               padding: "16px 20px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+//               <div style={{ display: "flex", gap: 4, background: C.grayLt, borderRadius: 12, padding: 4 }}>
+//                 {["followers","following"].map((tab) => (
+//                   <button key={tab} onClick={() => handleTabSwitch(tab)} style={{
+//                     padding: "7px 16px", borderRadius: 9, border: "none", cursor: "pointer",
+//                     fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+//                     background: activeTab === tab ? C.white : "transparent",
+//                     color: activeTab === tab ? C.ink : C.gray,
+//                     boxShadow: activeTab === tab ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+//                     transition: "all .15s",
+//                   }}>
+//                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
+//                     <span style={{ marginLeft: 6, fontSize: 11, color: C.sand }}>
+//                       {tab === "followers" ? stats.followers : stats.following}
+//                     </span>
+//                   </button>
+//                 ))}
+//               </div>
+//               <button onClick={() => setShowSocialModal(false)}
+//                 style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 4 }}>
+//                 <X size={18} />
+//               </button>
+//             </div>
+
+//             <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.grayLt}`, flexShrink: 0 }}>
+//               <div style={{ display: "flex", alignItems: "center", gap: 8,
+//                 background: C.grayLt, borderRadius: 12, padding: "8px 14px" }}>
+//                 <Search size={14} color={C.gray} />
+//                 <input type="text" value={searchQuery}
+//                   onChange={(e) => setSearchQuery(e.target.value)}
+//                   placeholder={`Search ${activeTab}...`}
+//                   style={{ flex: 1, fontSize: 13, background: "transparent",
+//                     border: "none", outline: "none", color: C.ink, fontFamily: "inherit" }} />
+//                 {searchQuery && (
+//                   <button onClick={() => setSearchQuery("")}
+//                     style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 0 }}>
+//                     <X size={13} />
+//                   </button>
+//                 )}
+//               </div>
+//             </div>
+
+//             <div style={{ flex: 1, overflowY: "auto" }}>
+//               {filteredList.length === 0 ? (
+//                 <div style={{ textAlign: "center", padding: "48px 20px", color: C.gray }}>
+//                   <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
+//                   <p style={{ fontSize: 13, fontWeight: 500 }}>
+//                     {searchQuery ? "No results found"
+//                       : activeTab === "followers" ? "No followers yet" : "Not following anyone yet"}
+//                   </p>
+//                 </div>
+//               ) : filteredList.map((u, i) => (
+//                 <div key={u._id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+//                   padding: "12px 20px", borderBottom: `1px solid ${C.grayLt}` }}>
+//                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+//                     <Avatar src={u.avatar} name={u.name} size={42} />
+//                     <div>
+//                       <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: "0 0 1px" }}>{u.name}</p>
+//                       <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{u.designation?.trim() || "EroSocial Member"}</p>
+//                       <p style={{ fontSize: 11, color: C.border, margin: "2px 0 0" }}>
+//                         {u.followers?.length || 0} followers
+//                       </p>
+//                     </div>
+//                   </div>
+//                   {activeTab === "following" && (
+//                     <button onClick={() => handleUnfollow(u._id)} disabled={unfollowingId === u._id}
+//                       style={{
+//                         display: "flex", alignItems: "center", gap: 5,
+//                         fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 999,
+//                         border: `1.5px solid ${C.border}`, background: "none", cursor: "pointer",
+//                         color: C.gray, fontFamily: "inherit", opacity: unfollowingId === u._id ? 0.4 : 1,
+//                         transition: "all .15s",
+//                       }}
+//                       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#ef4444"; e.currentTarget.style.color = "#ef4444"; }}
+//                       onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.gray; }}
+//                     >
+//                       <UserMinus size={13} />
+//                       {unfollowingId === u._id ? "..." : "Unfollow"}
+//                     </button>
+//                   )}
+//                 </div>
+//               ))}
+//             </div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* ── CREATE POST MODAL ───────────────────────────────────── */}
+//       {showCreatePost && (
+//         <div className="modal-backdrop">
+//           <div className="modal-box" style={{ maxWidth: 520 }}>
+//             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+//               padding: "16px 20px", borderBottom: `1px solid ${C.border}` }}>
+//               <h2 style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: 0,
+//                 fontFamily: "'DM Serif Display', serif" }}>Create New Post</h2>
+//               <button onClick={closeModal}
+//                 style={{ background: "none", border: "none", cursor: "pointer", color: C.gray }}>
+//                 <X size={18} />
+//               </button>
+//             </div>
+//             <form onSubmit={handleCreatePost}>
+//               <div style={{ padding: 20, overflowY: "auto" }}>
+//                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+//                   <Avatar src={user?.avatar} name={user?.name} size={38} />
+//                   <div>
+//                     <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: 0 }}>{user?.name}</p>
+//                     <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{user?.designation?.trim() || "EroSocial Member"}</p>
+//                   </div>
+//                 </div>
+//                 <textarea value={caption} onChange={(e) => setCaption(e.target.value)}
+//                   placeholder="What are you thinking? Share it..."
+//                   rows={4} style={{
+//                     width: "100%", padding: "12px 16px",
+//                     border: `1.5px solid ${C.border}`, borderRadius: 14,
+//                     fontSize: 13, outline: "none", resize: "none",
+//                     fontFamily: "inherit", lineHeight: 1.6, color: C.ink,
+//                     transition: "border-color .15s",
+//                   }}
+//                   onFocus={(e) => e.target.style.borderColor = C.sand}
+//                   onBlur={(e) => e.target.style.borderColor = C.border}
+//                 />
+//                 {imagePreview && (
+//                   <div style={{ position: "relative", marginTop: 12, borderRadius: 14, overflow: "hidden" }}>
+//                     <img src={imagePreview} alt="preview"
+//                       style={{ width: "100%", maxHeight: 240, objectFit: "cover" }} />
+//                     <button type="button" onClick={() => { setImage(null); setImagePreview(null); }}
+//                       style={{ position: "absolute", top: 8, right: 8, width: 28, height: 28,
+//                         borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none",
+//                         display: "flex", alignItems: "center", justifyContent: "center",
+//                         color: "#fff", cursor: "pointer" }}>
+//                       <X size={14} />
+//                     </button>
+//                   </div>
+//                 )}
+//                 <label style={{ display: "inline-flex", alignItems: "center", gap: 6,
+//                   marginTop: 12, fontSize: 13, fontWeight: 600, color: C.sand, cursor: "pointer" }}>
+//                   <Camera size={15} /> Add Image
+//                   <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
+//                 </label>
+//               </div>
+//               <div style={{ display: "flex", gap: 10, padding: "12px 20px 20px" }}>
+//                 <button type="button" onClick={closeModal} className="btn-outline" style={{ flex: 1 }}>Cancel</button>
+//                 <button type="submit" disabled={creating} className="btn-sand" style={{
+//                   flex: 1, opacity: creating ? 0.6 : 1,
+//                 }}>
+//                   {creating ? "Posting..." : "Post Now 🚀"}
+//                 </button>
+//               </div>
+//             </form>
+//           </div>
+//         </div>
+//       )}
+
+//       <DeleteConfirmModal
+//         isOpen={deleteModalOpen}
+//         onConfirm={confirmDelete}
+//         onCancel={() => { setDeleteModalOpen(false); setPostToDelete(null); }}
+//       />
+//     </>
+//   );
+// }
+
+
+
+
+
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -7,99 +831,140 @@ import toast from "react-hot-toast";
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import {
   Heart, MessageCircle, Trash2, ShieldX,
-  Plus, X, Grid, Users, Search, UserMinus
+  Plus, X, Grid, Search, UserMinus,
+  MapPin, Pencil, Camera,
 } from "lucide-react";
 
-// ── Redux Actions ──────────────────────────────────────────
 import {
-  fetchMyPosts,
-  fetchStats,
-  fetchSuggestions,
-  createPost,
-  likePost,
-  commentPost,
-  deletePost,
-  suspendPost,
+  fetchMyPosts, fetchStats, fetchSuggestions,
+  createPost, likePost, commentPost, deletePost, suspendPost,
 } from "../store/slices/Feedslice";
+import { fetchFollowers, fetchFollowing, toggleFollow } from "../store/slices/Profileslice";
+import { uploadAvatar, uploadCoverPhoto } from "../store/slices/settingsSlice";
+import { updateUser as updateUserAction } from "../store/slices/authSlice";
 
-import { toggleFollowRequest } from "../store/slices/Exploreslice";
+/* ─── Palette ────────────────────────────────────────────────── */
+const C = {
+  sand:   "#c8956c",
+  sandLt: "#f0e8df",
+  sandDk: "#a07050",
+  ink:    "#1a1614",
+  gray:   "#6b6560",
+  grayLt: "#f5f2f0",
+  border: "#e8e0d8",
+  white:  "#ffffff",
+};
 
-import {
-  fetchFollowers,
-  fetchFollowing,
-  toggleFollow,
-} from "../store/slices/Profileslice";
+/* ─── Avatar ─────────────────────────────────────────────────── */
+const Avatar = ({ src, name, size = 40 }) =>
+  src ? (
+    <img src={src} alt={name}
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+  ) : (
+    <div style={{
+      width: size, height: size, borderRadius: "50%", flexShrink: 0,
+      background: `linear-gradient(135deg, ${C.sand}, ${C.sandDk})`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: C.white, fontWeight: 700, fontSize: size * 0.38,
+    }}>
+      {name?.charAt(0)?.toUpperCase() ?? "?"}
+    </div>
+  );
 
+/* ─── Spinner ────────────────────────────────────────────────── */
+const Spinner = ({ size = 12, color = "#fff" }) => (
+  <div style={{
+    width: size, height: size,
+    border: `2px solid ${color}`,
+    borderTopColor: "transparent",
+    borderRadius: "50%",
+    animation: "spin 0.7s linear infinite",
+  }} />
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+═══════════════════════════════════════════════════════════════ */
 export default function Profile() {
   const { user, isAdmin } = useAuth();
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const { myPosts, stats, suggestions, creating } = useSelector((s) => s.feed);
-  const loading = useSelector((s) => s.feed.myPostsLoading);
+  const navigate  = useNavigate();
+  const dispatch  = useDispatch();
+
+  const { myPosts, stats, creating }  = useSelector((s) => s.feed);
+  const loading                        = useSelector((s) => s.feed.myPostsLoading);
+  const { followers, following }       = useSelector((s) => s.profile);
+
+  /* ── responsive: track viewport width properly ── */
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  const [isXs, setIsXs]         = useState(() => window.innerWidth < 480);
+  useEffect(() => {
+    const onResize = () => {
+      setIsMobile(window.innerWidth < 640);
+      setIsXs(window.innerWidth < 480);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  /* ── post state ── */
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [postToDelete, setPostToDelete]       = useState(null);
+  const [postToDelete,    setPostToDelete]    = useState(null);
+  const [commentInputs,   setCommentInputs]   = useState({});
+  const [showComments,    setShowComments]    = useState({});
+  const [showCreatePost,  setShowCreatePost]  = useState(false);
+  const [caption,         setCaption]         = useState("");
+  const [image,           setImage]           = useState(null);
+  const [imagePreview,    setImagePreview]    = useState(null);
+  const [activePostView,  setActivePostView]  = useState("grid");
+  const [selectedPost,    setSelectedPost]    = useState(null);
 
-  // ── Redux State ────────────────────────────────────────────
-  const { pendingRequests } = useSelector((s) => s.explore);
-  const { followers, following } = useSelector((s) => s.profile);
+  /* ── upload state ── */
+  const [coverUploading,  setCoverUploading]  = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // ── Local UI State ─────────────────────────────────────────
-  const [commentInputs, setCommentInputs]   = useState({});
-  const [showComments, setShowComments]     = useState({});
-  const [showCreatePost, setShowCreatePost] = useState(false);
-  const [caption, setCaption]               = useState("");
-  const [image, setImage]                   = useState(null);
-  const [imagePreview, setImagePreview]     = useState(null);
-
-  // ── Followers/Following Modal State ────────────────────────
+  /* ── social modal ── */
   const [showSocialModal, setShowSocialModal] = useState(false);
-  const [activeTab, setActiveTab]             = useState("followers");
-  const [searchQuery, setSearchQuery]         = useState("");
-  const [unfollowingId, setUnfollowingId]     = useState(null);
+  const [activeTab,       setActiveTab]       = useState("followers");
+  const [searchQuery,     setSearchQuery]     = useState("");
+  const [unfollowingId,   setUnfollowingId]   = useState(null);
 
+  /* live-update selected post from redux */
+  const liveSelectedPost = selectedPost
+    ? myPosts.find((p) => p._id === selectedPost._id) ?? selectedPost
+    : null;
+
+  /* ── fetch on mount ── */
   useEffect(() => {
     dispatch(fetchMyPosts());
     dispatch(fetchStats());
     dispatch(fetchSuggestions());
   }, [dispatch]);
 
-  const openSocialModal = (tab) => {
-    setActiveTab(tab);
-    setSearchQuery("");
-    setShowSocialModal(true);
-    if (tab === "followers") {
-      dispatch(fetchFollowers());
-    } else {
-      dispatch(fetchFollowing());
-    }
-  };
+  /* ── social modal helpers ── */
+  const openSocialModal = useCallback((tab) => {
+    setActiveTab(tab); setSearchQuery(""); setShowSocialModal(true);
+    dispatch(tab === "followers" ? fetchFollowers() : fetchFollowing());
+  }, [dispatch]);
 
-  const handleTabSwitch = (tab) => {
-    setActiveTab(tab);
-    setSearchQuery("");
-    if (tab === "followers") {
-      dispatch(fetchFollowers());
-    } else {
-      dispatch(fetchFollowing());
-    }
-  };
+  const handleTabSwitch = useCallback((tab) => {
+    setActiveTab(tab); setSearchQuery("");
+    dispatch(tab === "followers" ? fetchFollowers() : fetchFollowing());
+  }, [dispatch]);
 
-  const currentList = activeTab === "followers" ? followers : following;
+  const currentList  = activeTab === "followers" ? followers : following;
   const filteredList = currentList.filter((u) =>
     u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     u.designation?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  /* ── handlers ── */
   const handleUnfollow = async (userId) => {
     setUnfollowingId(userId);
-    const result = await dispatch(toggleFollow({ userId, isPending: false, isUnfollow: true }));
-    if (toggleFollow.fulfilled.match(result)) {
-      toast.success("Unfollowed successfully!");
-      dispatch(fetchFollowing());
-      dispatch(fetchStats());
-    } else {
-      toast.error(result.payload || "Unfollow failed!");
-    }
+    const res = await dispatch(toggleFollow({ userId, isPending: false, isUnfollow: true }));
+    if (toggleFollow.fulfilled.match(res)) {
+      toast.success("Unfollowed!");
+      dispatch(fetchFollowing()); dispatch(fetchStats());
+    } else toast.error(res.payload || "Unfollow failed!");
     setUnfollowingId(null);
   };
 
@@ -111,518 +976,689 @@ export default function Profile() {
   const handleCreatePost = async (e) => {
     e.preventDefault();
     if (!caption && !image) { toast.error("Caption ya image daalo!"); return; }
-    const result = await dispatch(createPost({ caption, image }));
-    if (createPost.fulfilled.match(result)) {
-      toast.success("Posted successfully! 🎉");
-      setCaption(""); setImage(null); setImagePreview(null);
-      setShowCreatePost(false);
+    const res = await dispatch(createPost({ caption, image }));
+    if (createPost.fulfilled.match(res)) {
+      toast.success("Posted! 🎉");
+      setCaption(""); setImage(null); setImagePreview(null); setShowCreatePost(false);
       dispatch(fetchStats());
-    } else {
-      toast.error(result.payload || "Failed to create post!");
-    }
+    } else toast.error(res.payload || "Post failed!");
   };
 
   const handleLike = async (postId) => {
-    const result = await dispatch(likePost({ postId, userId: user._id }));
-    if (likePost.rejected.match(result)) toast.error("Like nahi hua!");
+    const res = await dispatch(likePost({ postId, userId: user._id }));
+    if (likePost.rejected.match(res)) toast.error("Like failed!");
   };
 
   const handleComment = async (postId) => {
     const text = commentInputs[postId]?.trim();
     if (!text) return;
-    const result = await dispatch(commentPost({ postId, text }));
-    if (commentPost.fulfilled.match(result)) {
-      setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
-    } else {
-      toast.error("Couldn't post comment!");
-    }
+    const res = await dispatch(commentPost({ postId, text }));
+    if (commentPost.fulfilled.match(res))
+      setCommentInputs((p) => ({ ...p, [postId]: "" }));
+    else toast.error("Comment failed!");
   };
 
-  const handleDelete = async (postId) => {
-    setPostToDelete(postId);
-    setDeleteModalOpen(true);
-  };
-
-  const confirmDelete = async () => {
+  const handleDelete    = (postId) => { setPostToDelete(postId); setDeleteModalOpen(true); };
+  const confirmDelete   = async () => {
     setDeleteModalOpen(false);
-    const result = await dispatch(deletePost(postToDelete));
-    if (deletePost.fulfilled.match(result)) {
-      toast.success("Post deleted successfully!");
-      dispatch(fetchStats());
-    } else {
-      toast.error("Failed to delete post!");
-    }
+    const res = await dispatch(deletePost(postToDelete));
+    if (deletePost.fulfilled.match(res)) { toast.success("Deleted!"); dispatch(fetchStats()); }
+    else toast.error("Delete failed!");
     setPostToDelete(null);
   };
 
   const handleSuspend = async (postId) => {
-    const result = await dispatch(suspendPost(postId));
-    if (suspendPost.fulfilled.match(result)) {
-      toast.success("Post suspended!");
-    } else {
-      toast.error("Failed to suspend post!");
-    }
-  };
-
-  const handleFollow = async (userId) => {
-    const isPending = pendingRequests.includes(userId);
-    const result = await dispatch(toggleFollowRequest({ userId, isPending }));
-    if (toggleFollowRequest.fulfilled.match(result)) {
-      toast.success(isPending ? "Request canceled!" : "Follow request sent!");
-    } else {
-      toast.error(result.payload || "Request failed!");
-    }
+    const res = await dispatch(suspendPost(postId));
+    if (suspendPost.fulfilled.match(res)) toast.success("Suspended!");
+    else toast.error("Suspend failed!");
   };
 
   const closeModal = () => {
-    setShowCreatePost(false);
-    setCaption("");
-    setImage(null);
-    setImagePreview(null);
+    setShowCreatePost(false); setCaption(""); setImage(null); setImagePreview(null);
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    const res = await dispatch(uploadAvatar(file));
+    if (uploadAvatar.fulfilled.match(res)) {
+      dispatch(updateUserAction({ avatar: res.payload }));
+      toast.success("Avatar updated!");
+    } else toast.error(res.payload || "Upload failed!");
+    setAvatarUploading(false);
+  };
+
+  const handleCoverUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCoverUploading(true);
+    const res = await dispatch(uploadCoverPhoto(file));
+    if (uploadCoverPhoto.fulfilled.match(res)) {
+      dispatch(updateUserAction({ coverPhoto: res.payload }));
+      toast.success("Cover updated!");
+    } else toast.error(res.payload || "Upload failed!");
+    setCoverUploading(false);
+  };
+
+  const hashtags = user?.interests?.length
+    ? user.interests
+    : ["#erovians", "#marble", "#design", "#stone", "#interiors"];
+
+  /* ──────────────────────────────────────────────────────────── */
   return (
     <>
-      <div className="flex gap-6 items-start w-full">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
 
-        {/* LEFT SIDEBAR */}
-      <div className="hidden lg:block w-72 shrink-0 sticky top-0 self-start">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex flex-col items-center text-center mb-5">
-              {user?.avatar ? (
-                <img src={user.avatar} alt="avatar" className="w-20 h-20 rounded-full object-cover mb-3 shadow-md" />
+        .profile-root { font-family:'DM Sans',sans-serif; background:#f5f2f0; min-height:100vh; }
+        .profile-root * { box-sizing:border-box; }
+
+        .section-card {
+          background:${C.white};
+          border-radius:20px;
+          border:1px solid ${C.border};
+          overflow:hidden;
+          box-shadow:0 2px 12px rgba(0,0,0,0.06);
+        }
+        .anim-in { animation:fadeUp .35s ease both; }
+
+        .cover-overlay { background:linear-gradient(to bottom,transparent 40%,rgba(26,22,20,0.5) 100%); }
+
+        .tag-pill {
+          display:inline-flex; align-items:center; padding:4px 12px;
+          border-radius:999px; background:${C.sandLt}; color:${C.sandDk};
+          font-size:12px; font-weight:500; cursor:pointer;
+          border:1px solid ${C.border}; transition:all .15s;
+        }
+        .tag-pill:hover { background:${C.sand}; color:#fff; border-color:${C.sand}; }
+
+        .stat-btn {
+          display:flex; flex-direction:column; align-items:center; gap:2px;
+          padding:10px 20px; border-radius:12px; background:${C.white};
+          border:1px solid ${C.border}; cursor:pointer; transition:all .15s;
+        }
+        .stat-btn:hover { background:${C.sandLt}; border-color:${C.sand}; }
+        .stat-num { font-size:18px; font-weight:700; color:${C.ink}; line-height:1; font-family:'DM Serif Display',serif; }
+        .stat-lbl { font-size:11px; color:${C.gray}; font-weight:500; }
+
+        .post-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:3px; }
+        @media(max-width:480px) { .post-grid { grid-template-columns:repeat(2,1fr); } }
+
+        .post-thumb { position:relative; aspect-ratio:1; overflow:hidden; cursor:pointer; }
+        .post-thumb img { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
+        .post-thumb:hover img { transform:scale(1.06); }
+        .post-thumb-overlay {
+          position:absolute; inset:0; background:rgba(26,22,20,0.45);
+          display:flex; align-items:center; justify-content:center; gap:12px;
+          opacity:0; transition:opacity .2s; color:#fff; font-size:13px; font-weight:600;
+        }
+        .post-thumb:hover .post-thumb-overlay { opacity:1; }
+        .post-thumb-overlay span { display:flex; align-items:center; gap:4px; }
+
+        .btn-sand {
+          background:${C.sand}; color:#fff; border:none; border-radius:999px;
+          padding:9px 22px; font-size:13px; font-weight:600; cursor:pointer;
+          transition:all .15s; font-family:'DM Sans',sans-serif;
+          display:inline-flex; align-items:center; gap:5px;
+        }
+        .btn-sand:hover { background:${C.sandDk}; }
+        .btn-sand:disabled { opacity:0.6; cursor:not-allowed; }
+
+        .btn-outline {
+          background:transparent; color:${C.gray}; border:1.5px solid ${C.border};
+          border-radius:999px; padding:9px 22px; font-size:13px; font-weight:600; cursor:pointer;
+          transition:all .15s; font-family:'DM Sans',sans-serif;
+          display:inline-flex; align-items:center; gap:5px;
+        }
+        .btn-outline:hover { border-color:${C.sand}; color:${C.sand}; }
+
+        .modal-backdrop {
+          position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100;
+          display:flex; align-items:center; justify-content:center; padding:16px;
+        }
+        .modal-box {
+          background:#fff; border-radius:20px; width:100%; max-width:480px;
+          box-shadow:0 24px 60px rgba(0,0,0,0.2); overflow:hidden;
+          display:flex; flex-direction:column; max-height:88vh;
+        }
+        .scroll-hide { overflow-y:auto; }
+        .scroll-hide::-webkit-scrollbar { display:none; }
+      `}</style>
+
+      <div className="profile-root">
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 80px" }}>
+
+          {/* ── COVER + AVATAR ── */}
+          <div className="section-card anim-in" style={{ marginBottom: 12 }}>
+
+            {/* Cover */}
+            <div style={{ position: "relative", height: "clamp(140px, 25vw, 240px)" }}>
+              {user?.coverPhoto ? (
+                <img src={user.coverPhoto} alt="cover"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-linear-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-3xl font-bold mb-3 shadow-md">
-                  {user?.name?.charAt(0).toUpperCase()}
+                <div style={{
+                  width: "100%", height: "100%",
+                  background: `linear-gradient(135deg, #e8ddd4 0%, #d4c4b0 50%, #c8b49a 100%)`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <span style={{ fontSize: 48, opacity: 0.25 }}>🪨</span>
                 </div>
               )}
-              <h2 className="text-lg font-bold text-gray-800">{user?.name}</h2>
-              <span className="text-sm font-medium mt-0.5 text-orange-500">
-                {user?.designation?.trim() || "EroSocial Member"}
-              </span>
+              <div className="cover-overlay" style={{ position: "absolute", inset: 0 }} />
+
+              {/* Edit Cover */}
+              <label style={{
+                position: "absolute", top: 12, right: 12,
+                background: "rgba(255,255,255,0.88)", borderRadius: 999,
+                padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 5, color: C.ink,
+                backdropFilter: "blur(6px)", border: "none", userSelect: "none",
+              }}>
+                {coverUploading
+                  ? <><Spinner size={12} color={C.sand} /> Uploading...</>
+                  : <><Camera size={13} /> Edit Cover</>
+                }
+                <input type="file" accept="image/*" onChange={handleCoverUpload} style={{ display: "none" }} />
+              </label>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mb-5">
-              <div className="text-center p-2 bg-gray-50 rounded-xl">
-                <div className="flex justify-center text-indigo-400 mb-1"><Grid size={14} /></div>
-                <p className="text-lg font-bold text-gray-800">{stats.posts}</p>
-                <p className="text-xs text-gray-400">Posts</p>
-              </div>
+            {/* Avatar + Actions */}
+            <div style={{ padding: "0 24px 24px" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
 
-              <button
-                onClick={() => openSocialModal("followers")}
-                className="text-center p-2 bg-gray-50 rounded-xl hover:bg-indigo-50 transition cursor-pointer group"
-              >
-                <div className="flex justify-center text-indigo-400 mb-1 group-hover:text-indigo-600 transition">
-                  <Users size={14} />
-                </div>
-                <p className="text-lg font-bold text-gray-800">{stats.followers}</p>
-                <p className="text-xs text-gray-400 group-hover:text-indigo-500 transition">Followers</p>
-              </button>
-
-              <button
-                onClick={() => openSocialModal("following")}
-                className="text-center p-2 bg-gray-50 rounded-xl hover:bg-indigo-50 transition cursor-pointer group"
-              >
-                <div className="flex justify-center text-indigo-400 mb-1 group-hover:text-indigo-600 transition">
-                  <Users size={14} />
-                </div>
-                <p className="text-lg font-bold text-gray-800">{stats.following}</p>
-                <p className="text-xs text-gray-400 group-hover:text-indigo-500 transition">Following</p>
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowCreatePost(true)}
-              className="w-full py-2.5 rounded-full text-sm font-medium transition flex items-center justify-center gap-2 hover:opacity-90"
-              style={{ background: "#c8956c", color: "#fff" }}
-            >
-              <Plus size={16} /> Create Post
-            </button>
-
-            {isAdmin && (
-              <div className="mt-4 p-3 bg-purple-50 rounded-xl border border-purple-100">
-                <p className="text-xs text-purple-600 font-medium text-center">
-                  {user?.role === "super_admin" ? "👑 Super Admin Access" : "🛡️ Admin Access"}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CENTER — My Posts */}
-        <div className="flex-1 min-w-0 h-full overflow-y-auto pr-1 space-y-4 pb-6">
-
-          {/* Mobile Profile Bar */}
-          <div className="lg:hidden bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
-            {user?.avatar ? (
-              <img src={user.avatar} alt="avatar" className="w-14 h-14 rounded-full object-cover shrink-0" />
-            ) : (
-              <div className="w-14 h-14 rounded-full bg-linear-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xl font-bold shrink-0">
-                {user?.name?.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-800 truncate">{user?.name}</p>
-              <span className="text-xs font-medium text-orange-500">
-                {user?.designation?.trim() || "EroSocial Member"}
-              </span>
-            </div>
-            <div className="flex gap-3 text-center shrink-0">
-              <div>
-                <p className="text-sm font-bold text-gray-800">{stats.posts}</p>
-                <p className="text-xs text-gray-400">Posts</p>
-              </div>
-              <button onClick={() => openSocialModal("followers")} className="hover:opacity-70 transition">
-                <p className="text-sm font-bold text-gray-800">{stats.followers}</p>
-                <p className="text-xs text-indigo-500">Followers</p>
-              </button>
-              <button onClick={() => openSocialModal("following")} className="hover:opacity-70 transition">
-                <p className="text-sm font-bold text-gray-800">{stats.following}</p>
-                <p className="text-xs text-indigo-500">Following</p>
-              </button>
-            </div>
-          </div>
-
-          {/* My Posts Header */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Grid size={15} className="text-indigo-400" />
-              <span className="text-sm font-semibold text-gray-700">My Posts</span>
-            </div>
-            <span className="text-xs text-gray-400">{myPosts.length} posts</span>
-          </div>
-
-          {/* Posts */}
-          {loading ? (
-            <div className="text-center py-16 text-gray-400">Loading...</div>
-          ) : myPosts.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
-              <p className="text-4xl mb-3">📸</p>
-              <p className="text-lg font-medium">No posts yet!</p>
-              <p className="text-sm mt-1">Create your first post 🎉</p>
-              <button
-                onClick={() => setShowCreatePost(true)}
-                className="mt-4 px-5 py-2 rounded-full text-sm font-medium text-white transition hover:opacity-90"
-                style={{ background: "#c8956c" }}
-              >
-                + Create Post
-              </button>
-            </div>
-          ) : (
-            myPosts.map((post) => (
-              <div key={post._id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    {user?.avatar ? (
-                      <img src={user.avatar} alt="avatar" className="w-10 h-10 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-linear-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                        {user?.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {user?.designation?.trim() || "EroSocial Member"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {isAdmin && (
-                      <button onClick={() => handleSuspend(post._id)}
-                        className="p-1.5 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition">
-                        <ShieldX size={15} />
-                      </button>
-                    )}
-                    <button onClick={() => handleDelete(post._id)}
-                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                {/* Avatar */}
+                <div style={{
+                  padding: 3, borderRadius: "50%",
+                  background: C.white, boxShadow: `0 0 0 2px ${C.border}`,
+                  position: "relative", marginTop: -44, flexShrink: 0,
+                }}>
+                  <Avatar src={user?.avatar} name={user?.name} size={isMobile ? 64 : 92} />
+                  <label style={{
+                    position: "absolute", bottom: 2, right: 2,
+                    width: 26, height: 26, borderRadius: "50%",
+                    background: C.sand, border: "2px solid #fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", color: "#fff",
+                  }}>
+                    {avatarUploading ? <Spinner size={10} /> : <Camera size={11} />}
+                    <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: "none" }} />
+                  </label>
                 </div>
 
-                {post.image && (
-                  <img src={post.image} alt="post" className="w-full object-cover" style={{ maxHeight: "500px" }} />
-                )}
-
-                <div className="px-4 pt-3 flex items-center gap-4">
-                  <button onClick={() => handleLike(post._id)}
-                    className={`flex items-center gap-1.5 text-sm font-medium transition ${post.likes?.includes(user?._id) ? "text-red-500" : "text-gray-400 hover:text-red-400"}`}>
-                    <Heart size={20} fill={post.likes?.includes(user?._id) ? "currentColor" : "none"} />
-                    {post.likes?.length || 0}
+                {/* Action Buttons */}
+                <div style={{ display: "flex", gap: 8, marginTop: 14, marginLeft: "auto", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button className="btn-outline" onClick={() => navigate("/settings")}>
+                    <Pencil size={13} /> Edit Profile
                   </button>
-                  <button onClick={() => setShowComments((prev) => ({ ...prev, [post._id]: !prev[post._id] }))}
-                    className="flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-indigo-500 transition">
-                    <MessageCircle size={20} />
-                    {post.comments?.length || 0}
+                  <button className="btn-sand" onClick={() => setShowCreatePost(true)}>
+                    <Plus size={13} /> Post
                   </button>
                 </div>
-
-                {post.caption && (
-                  <div className="px-4 py-2">
-                    <span className="text-sm font-semibold text-gray-800 mr-2">{user?.name}</span>
-                    <span className="text-sm text-gray-700">{post.caption}</span>
-                  </div>
-                )}
-
-                {showComments[post._id] && (
-                  <div className="px-4 pb-3 space-y-2 border-t border-gray-50 mt-2 pt-2">
-                    {post.comments?.slice(-3).map((c, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        {c.user?.avatar ? (
-                          <img src={c.user.avatar} alt="avatar" className="w-6 h-6 rounded-full object-cover shrink-0" />
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xs font-bold shrink-0">
-                            {c.user?.name?.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-xs font-semibold text-gray-800 mr-1">{c.user?.name}</span>
-                          <span className="text-xs text-gray-600">{c.text}</span>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex gap-2 mt-2">
-                      <input type="text"
-                        value={commentInputs[post._id] || ""}
-                        onChange={(e) => setCommentInputs((prev) => ({ ...prev, [post._id]: e.target.value }))}
-                        onKeyDown={(e) => e.key === "Enter" && handleComment(post._id)}
-                        placeholder="Write a comment..."
-                        className="flex-1 text-xs px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                      <button onClick={() => handleComment(post._id)}
-                        className="text-xs text-indigo-600 font-medium hover:text-indigo-700 px-2">
-                        Post
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <p className="px-4 pb-3 text-xs text-gray-400">
-                  {new Date(post.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                </p>
               </div>
-            ))
-          )}
-        </div>
 
-        {/* RIGHT SIDEBAR */}
-        <div className="hidden xl:block w-64 shrink-0">
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <p className="text-sm font-semibold text-gray-500 mb-4">Suggestions For You</p>
-              <div className="space-y-3">
-                {suggestions.slice(0, 5).map((s, i) => (
-                  <div key={s._id} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      {s.avatar ? (
-                        <img src={s.avatar} alt={s.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                          style={{
-                            background: ["#f0e8df","#fde8e8","#e8f5e9","#ede7f6","#fff8e1"][i % 5],
-                            color:      ["#6b3f2a","#c0392b","#2e7d32","#6a1b9a","#f57f17"][i % 5],
-                          }}>
-                          {s.name?.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-xs font-semibold text-gray-800 leading-tight">{s.name}</p>
-                        <p className="text-xs text-gray-400">{s.designation?.trim() || "EroSocial Member"}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleFollow(s._id)}
-                      className="text-xs font-semibold transition hover:opacity-70"
-                      style={{ color: pendingRequests.includes(s._id) ? "#94a3b8" : "#c8956c" }}
-                    >
-                      {pendingRequests.includes(s._id) ? "Requested" : "Follow"}
-                    </button>
-                  </div>
+              {/* Name */}
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <h1 style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, color: C.ink, margin: 0 }}>
+                    {user?.name}
+                  </h1>
+                  {isAdmin && (
+                    <span style={{
+                      background: C.sandLt, color: C.sandDk, fontSize: 10, fontWeight: 700,
+                      padding: "2px 8px", borderRadius: 999, border: `1px solid ${C.border}`,
+                    }}>
+                      {user?.role === "super_admin" ? "👑 Super Admin" : "🛡️ Admin"}
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: 13, color: C.sand, fontWeight: 500, margin: "3px 0 0" }}>
+                  {user?.designation?.trim() || "EroSocial Member"}
+                </p>
+                {(user?.location?.city || user?.location?.state || user?.location?.country) && (
+                  <p style={{ fontSize: 12, color: C.gray, margin: "5px 0 0", display: "flex", alignItems: "center", gap: 4 }}>
+                    <MapPin size={12} />
+                    {[user.location.city, user.location.state, user.location.country].filter(Boolean).join(", ")}
+                  </p>
+                )}
+              </div>
+
+              {/* Bio */}
+              {user?.bio && (
+                <p style={{ fontSize: 13, color: C.gray, margin: "10px 0 0", lineHeight: 1.65, maxWidth: 600 }}>
+                  {user.bio}
+                </p>
+              )}
+
+              {/* Stats */}
+              <div style={{
+                display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap",
+                justifyContent: isXs ? "center" : "flex-start",
+              }}>
+                <div className="stat-btn">
+                  <span className="stat-num">{stats.posts ?? 0}</span>
+                  <span className="stat-lbl">Posts</span>
+                </div>
+                <button className="stat-btn" onClick={() => openSocialModal("followers")}>
+                  <span className="stat-num">{stats.followers ?? 0}</span>
+                  <span className="stat-lbl">Followers</span>
+                </button>
+                <button className="stat-btn" onClick={() => openSocialModal("following")}>
+                  <span className="stat-num">{stats.following ?? 0}</span>
+                  <span className="stat-lbl">Following</span>
+                </button>
+              </div>
+
+              {/* Hashtags */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 }}>
+                {hashtags.map((tag) => (
+                  <span key={tag} className="tag-pill">
+                    {tag.startsWith("#") ? tag : "#" + tag}
+                  </span>
                 ))}
               </div>
             </div>
-            <div className="px-2">
-              <p className="text-xs text-gray-400 leading-relaxed">
-                EroSocial · Erovians Community · Marbles, Tiles, Stones
-              </p>
-              <p className="text-xs text-gray-300 mt-2">© 2025 EroSocial</p>
+          </div>
+
+          {/* ── MY POSTS ── */}
+          <div className="section-card anim-in">
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "14px 20px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Grid size={15} color={C.sand} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>My Posts</span>
+                <span style={{
+                  fontSize: 11, color: C.gray, background: C.grayLt,
+                  padding: "2px 8px", borderRadius: 999,
+                }}>{myPosts.length}</span>
+              </div>
+              <div style={{ display: "flex", gap: 4, background: C.grayLt, borderRadius: 8, padding: 3 }}>
+                {["grid", "list"].map((v) => (
+                  <button key={v} onClick={() => setActivePostView(v)} style={{
+                    padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                    fontSize: 11, fontWeight: 600,
+                    background: activePostView === v ? C.white : "transparent",
+                    color: activePostView === v ? C.ink : C.gray,
+                    boxShadow: activePostView === v ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+                    transition: "all .15s",
+                  }}>
+                    {v === "grid" ? "⊞ Grid" : "☰ List"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "60px 20px", color: C.gray }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>⏳</div>
+                Loading posts...
+              </div>
+            ) : myPosts.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "60px 20px" }}>
+                <div style={{ fontSize: 42, marginBottom: 10 }}>📸</div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: C.ink, margin: "0 0 4px" }}>No posts yet!</p>
+                <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>Share your first post 🎉</p>
+                <button className="btn-sand" onClick={() => setShowCreatePost(true)}>+ Create Post</button>
+              </div>
+            ) : activePostView === "grid" ? (
+              <div className="post-grid">
+                {myPosts.map((post) => (
+                  <div key={post._id} className="post-thumb" onClick={() => setSelectedPost(post)}>
+                    {post.image ? (
+                      <img src={post.image} alt="post" loading="lazy" />
+                    ) : (
+                      <div style={{
+                        width: "100%", height: "100%", background: C.sandLt,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 22, color: C.sand,
+                      }}>✍️</div>
+                    )}
+                    <div className="post-thumb-overlay">
+                      <span><Heart size={14} fill="white" stroke="none" /> {post.likes?.length || 0}</span>
+                      <span><MessageCircle size={14} /> {post.comments?.length || 0}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: "8px 0" }}>
+                {myPosts.map((post) => (
+                  <div key={post._id} style={{
+                    display: "flex", gap: 12, padding: "14px 20px",
+                    borderBottom: `1px solid ${C.grayLt}`,
+                  }}>
+                    {post.image && (
+                      <img src={post.image} alt="post" loading="lazy" style={{
+                        width: 72, height: 72, borderRadius: 12, objectFit: "cover", flexShrink: 0,
+                      }} />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, color: C.ink, margin: "0 0 6px", lineHeight: 1.5 }}>
+                        {post.caption || <span style={{ color: C.gray, fontStyle: "italic" }}>No caption</span>}
+                      </p>
+                      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                        <button onClick={() => handleLike(post._id)}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600,
+                            color: post.likes?.includes(user?._id) ? "#ef4444" : C.gray,
+                            background: "none", border: "none", cursor: "pointer", padding: 0,
+                          }}>
+                          <Heart size={14} fill={post.likes?.includes(user?._id) ? "currentColor" : "none"} />
+                          {post.likes?.length || 0}
+                        </button>
+                        <button onClick={() => setShowComments((p) => ({ ...p, [post._id]: !p[post._id] }))}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600,
+                            color: C.gray, background: "none", border: "none", cursor: "pointer", padding: 0,
+                          }}>
+                          <MessageCircle size={14} /> {post.comments?.length || 0}
+                        </button>
+                        <span style={{ fontSize: 11, color: C.gray, marginLeft: "auto" }}>
+                          {new Date(post.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                        {isAdmin && (
+                          <button onClick={() => handleSuspend(post._id)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 0 }}>
+                            <ShieldX size={14} />
+                          </button>
+                        )}
+                        <button onClick={() => handleDelete(post._id)}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: 0 }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+
+                      {showComments[post._id] && (
+                        <div style={{ marginTop: 10 }}>
+                          {post.comments?.slice(-2).map((c, i) => (
+                            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+                              <Avatar src={c.user?.avatar} name={c.user?.name} size={20} />
+                              <span style={{ fontSize: 12, color: C.ink }}>
+                                <strong>{c.user?.name}</strong> {c.text}
+                              </span>
+                            </div>
+                          ))}
+                          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                            <input value={commentInputs[post._id] || ""}
+                              onChange={(e) => setCommentInputs((p) => ({ ...p, [post._id]: e.target.value }))}
+                              onKeyDown={(e) => e.key === "Enter" && handleComment(post._id)}
+                              placeholder="Comment..." style={{
+                                flex: 1, fontSize: 12, padding: "6px 12px",
+                                border: `1px solid ${C.border}`, borderRadius: 999,
+                                outline: "none", fontFamily: "inherit",
+                              }} />
+                            <button onClick={() => handleComment(post._id)}
+                              style={{ fontSize: 12, fontWeight: 600, color: C.sand, background: "none", border: "none", cursor: "pointer" }}>
+                              Post
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── POST DETAIL MODAL ── */}
+      {liveSelectedPost && (
+        <div className="modal-backdrop" onClick={() => setSelectedPost(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: C.white, borderRadius: 20, width: "100%", maxWidth: 580,
+            maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "14px 18px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Avatar src={user?.avatar} name={user?.name} size={36} />
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: 0 }}>{user?.name}</p>
+                  <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{user?.designation?.trim() || "EroSocial Member"}</p>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 4 }}>
+                {isAdmin && (
+                  <button onClick={() => { handleSuspend(liveSelectedPost._id); setSelectedPost(null); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 6 }}>
+                    <ShieldX size={16} />
+                  </button>
+                )}
+                <button onClick={() => { handleDelete(liveSelectedPost._id); setSelectedPost(null); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: 6 }}>
+                  <Trash2 size={16} />
+                </button>
+                <button onClick={() => setSelectedPost(null)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 6 }}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {liveSelectedPost.image && (
+              <img src={liveSelectedPost.image} alt="post"
+                style={{ width: "100%", maxHeight: 400, objectFit: "cover" }} />
+            )}
+
+            <div className="scroll-hide" style={{ padding: "12px 18px", flex: 1 }}>
+              {liveSelectedPost.caption && (
+                <p style={{ fontSize: 13, color: C.ink, marginBottom: 12, lineHeight: 1.6 }}>
+                  <strong>{user?.name} </strong>{liveSelectedPost.caption}
+                </p>
+              )}
+              <div style={{ display: "flex", gap: 14, marginBottom: 12 }}>
+                <button onClick={() => handleLike(liveSelectedPost._id)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 600,
+                    color: liveSelectedPost.likes?.some(id => id?.toString() === user?._id?.toString()) ? "#ef4444" : C.gray,
+                    background: "none", border: "none", cursor: "pointer", padding: 0,
+                  }}>
+                  <Heart size={18} fill={liveSelectedPost.likes?.some(id => id?.toString() === user?._id?.toString()) ? "currentColor" : "none"} />
+                  {liveSelectedPost.likes?.length || 0}
+                </button>
+                <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: C.gray }}>
+                  <MessageCircle size={18} /> {liveSelectedPost.comments?.length || 0}
+                </span>
+              </div>
+
+              {liveSelectedPost.comments?.map((c, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <Avatar src={c.user?.avatar} name={c.user?.name} size={28} />
+                  <div style={{ background: C.grayLt, borderRadius: 12, padding: "6px 12px", flex: 1 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginRight: 6 }}>{c.user?.name}</span>
+                    <span style={{ fontSize: 12, color: C.gray }}>{c.text}</span>
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <Avatar src={user?.avatar} name={user?.name} size={30} />
+                <input value={commentInputs[liveSelectedPost._id] || ""}
+                  onChange={(e) => setCommentInputs((p) => ({ ...p, [liveSelectedPost._id]: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && handleComment(liveSelectedPost._id)}
+                  placeholder="Add a comment..." style={{
+                    flex: 1, fontSize: 13, padding: "8px 14px",
+                    border: `1px solid ${C.border}`, borderRadius: 999,
+                    outline: "none", fontFamily: "inherit",
+                  }} />
+                <button onClick={() => handleComment(liveSelectedPost._id)}
+                  style={{ fontSize: 13, fontWeight: 700, color: C.sand, background: "none", border: "none", cursor: "pointer" }}>
+                  Post
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
 
-      </div>
-
-      {/* ── Followers / Following Modal ──────────────────────────── */}
+      {/* ── FOLLOWERS / FOLLOWING MODAL ── */}
       {showSocialModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: "85vh" }}>
-
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-              <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-                <button
-                  onClick={() => handleTabSwitch("followers")}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${
-                    activeTab === "followers"
-                      ? "bg-white text-gray-800 shadow-sm"
-                      : "text-gray-400 hover:text-gray-600"
-                  }`}
-                >
-                  Followers
-                  <span className="ml-1.5 text-xs font-medium text-indigo-400">{stats.followers}</span>
-                </button>
-                <button
-                  onClick={() => handleTabSwitch("following")}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition ${
-                    activeTab === "following"
-                      ? "bg-white text-gray-800 shadow-sm"
-                      : "text-gray-400 hover:text-gray-600"
-                  }`}
-                >
-                  Following
-                  <span className="ml-1.5 text-xs font-medium text-indigo-400">{stats.following}</span>
-                </button>
+        <div className="modal-backdrop">
+          <div className="modal-box">
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "16px 20px", borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+            }}>
+              <div style={{ display: "flex", gap: 4, background: C.grayLt, borderRadius: 12, padding: 4 }}>
+                {["followers", "following"].map((tab) => (
+                  <button key={tab} onClick={() => handleTabSwitch(tab)} style={{
+                    padding: "7px 16px", borderRadius: 9, border: "none", cursor: "pointer",
+                    fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+                    background: activeTab === tab ? C.white : "transparent",
+                    color: activeTab === tab ? C.ink : C.gray,
+                    boxShadow: activeTab === tab ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+                    transition: "all .15s",
+                  }}>
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    <span style={{ marginLeft: 6, fontSize: 11, color: C.sand }}>
+                      {tab === "followers" ? stats.followers : stats.following}
+                    </span>
+                  </button>
+                ))}
               </div>
-              <button
-                onClick={() => setShowSocialModal(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-400"
-              >
+              <button onClick={() => setShowSocialModal(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 4 }}>
                 <X size={18} />
               </button>
             </div>
 
-            <div className="px-4 py-3 border-b border-gray-50 shrink-0">
-              <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
-                <Search size={14} className="text-gray-400 shrink-0" />
-                <input
-                  type="text"
-                  value={searchQuery}
+            <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.grayLt}`, flexShrink: 0 }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                background: C.grayLt, borderRadius: 12, padding: "8px 14px",
+              }}>
+                <Search size={14} color={C.gray} />
+                <input type="text" value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={`Search ${activeTab}...`}
-                  className="flex-1 text-sm bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
-                />
+                  style={{ flex: 1, fontSize: 13, background: "transparent", border: "none", outline: "none", color: C.ink, fontFamily: "inherit" }} />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} className="text-gray-400 hover:text-gray-600 transition">
+                  <button onClick={() => setSearchQuery("")}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 0 }}>
                     <X size={13} />
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="scroll-hide" style={{ flex: 1 }}>
               {filteredList.length === 0 ? (
-                <div className="text-center py-14 text-gray-400">
-                  <p className="text-3xl mb-2">👥</p>
-                  <p className="text-sm font-medium">
-                    {searchQuery
-                      ? "No results found"
-                      : activeTab === "followers"
-                      ? "No followers yet"
-                      : "Not following anyone yet"}
+                <div style={{ textAlign: "center", padding: "48px 20px", color: C.gray }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
+                  <p style={{ fontSize: 13, fontWeight: 500 }}>
+                    {searchQuery ? "No results found"
+                      : activeTab === "followers" ? "No followers yet" : "Not following anyone"}
                   </p>
                 </div>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {filteredList.map((u, i) => (
-                    <div key={u._id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
-                      <div className="flex items-center gap-3">
-                        {u.avatar ? (
-                          <img src={u.avatar} alt={u.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
-                        ) : (
-                          <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                            style={{
-                              background: ["#f0e8df","#fde8e8","#e8f5e9","#ede7f6","#fff8e1"][i % 5],
-                              color:      ["#6b3f2a","#c0392b","#2e7d32","#6a1b9a","#f57f17"][i % 5],
-                            }}
-                          >
-                            {u.name?.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-sm font-semibold text-gray-800 leading-tight">{u.name}</p>
-                          <p className="text-xs text-gray-400">{u.designation?.trim() || "EroSocial Member"}</p>
-                          <p className="text-xs text-gray-300 mt-0.5">
-                            {u.followers?.length || 0} followers
-                          </p>
-                        </div>
-                      </div>
-
-                      {activeTab === "following" && (
-                        <button
-                          onClick={() => handleUnfollow(u._id)}
-                          disabled={unfollowingId === u._id}
-                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-40"
-                        >
-                          <UserMinus size={13} />
-                          {unfollowingId === u._id ? "..." : "Unfollow"}
-                        </button>
-                      )}
+              ) : filteredList.map((u) => (
+                <div key={u._id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "12px 20px", borderBottom: `1px solid ${C.grayLt}`,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <Avatar src={u.avatar} name={u.name} size={42} />
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: "0 0 1px" }}>{u.name}</p>
+                      <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{u.designation?.trim() || "EroSocial Member"}</p>
                     </div>
-                  ))}
+                  </div>
+                  {activeTab === "following" && (
+                    <button onClick={() => handleUnfollow(u._id)} disabled={unfollowingId === u._id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 5,
+                        fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 999,
+                        border: `1.5px solid ${C.border}`, background: "none", cursor: "pointer",
+                        color: C.gray, fontFamily: "inherit",
+                        opacity: unfollowingId === u._id ? 0.4 : 1, transition: "all .15s",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#ef4444"; e.currentTarget.style.color = "#ef4444"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.gray; }}
+                    >
+                      <UserMinus size={13} />
+                      {unfollowingId === u._id ? "..." : "Unfollow"}
+                    </button>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-
           </div>
         </div>
       )}
 
-      {/* Create Post Modal */}
+      {/* ── CREATE POST MODAL ── */}
       {showCreatePost && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-800">Create New Post</h2>
-              <button onClick={closeModal}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-400">
+        <div className="modal-backdrop">
+          <div className="modal-box" style={{ maxWidth: 520 }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "16px 20px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: 0, fontFamily: "'DM Serif Display',serif" }}>
+                Create New Post
+              </h2>
+              <button onClick={closeModal} style={{ background: "none", border: "none", cursor: "pointer", color: C.gray }}>
                 <X size={18} />
               </button>
             </div>
+
             <form onSubmit={handleCreatePost}>
-              <div className="p-5 space-y-4">
-                <div className="flex items-center gap-3">
-                  {user?.avatar ? (
-                    <img src={user.avatar} alt="avatar" className="w-9 h-9 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-linear-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                      {user?.name?.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+              <div className="scroll-hide" style={{ padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <Avatar src={user?.avatar} name={user?.name} size={38} />
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {user?.designation?.trim() || "EroSocial Member"}
-                    </p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: 0 }}>{user?.name}</p>
+                    <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{user?.designation?.trim() || "EroSocial Member"}</p>
                   </div>
                 </div>
+
                 <textarea value={caption} onChange={(e) => setCaption(e.target.value)}
                   placeholder="What are you thinking? Share it..."
-                  rows={3}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+                  rows={4} style={{
+                    width: "100%", padding: "12px 16px",
+                    border: `1.5px solid ${C.border}`, borderRadius: 14,
+                    fontSize: 13, outline: "none", resize: "none",
+                    fontFamily: "inherit", lineHeight: 1.6, color: C.ink,
+                    transition: "border-color .15s",
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = C.sand}
+                  onBlur={(e) => e.target.style.borderColor = C.border}
+                />
+
                 {imagePreview && (
-                  <div className="relative rounded-xl overflow-hidden">
-                    <img src={imagePreview} alt="preview" className="w-full object-cover max-h-60 rounded-xl" />
+                  <div style={{ position: "relative", marginTop: 12, borderRadius: 14, overflow: "hidden" }}>
+                    <img src={imagePreview} alt="preview" style={{ width: "100%", maxHeight: 240, objectFit: "cover" }} />
                     <button type="button" onClick={() => { setImage(null); setImagePreview(null); }}
-                      className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80">
+                      style={{
+                        position: "absolute", top: 8, right: 8, width: 28, height: 28,
+                        borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "#fff", cursor: "pointer",
+                      }}>
                       <X size={14} />
                     </button>
                   </div>
                 )}
-                <label className="flex items-center gap-2 cursor-pointer text-sm text-indigo-600 font-medium hover:text-indigo-700">
-                  <Plus size={16} />
-                  <span>Add Image</span>
-                  <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13, fontWeight: 600, color: C.sand, cursor: "pointer" }}>
+                  <Camera size={15} /> Add Image
+                  <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
                 </label>
               </div>
-              <div className="px-5 pb-5 flex gap-3">
-                <button type="button" onClick={closeModal}
-                  className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">
-                  Cancel
-                </button>
-                <button type="submit" disabled={creating}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition disabled:opacity-50">
-                  {creating ? "In Progress..." : "Post Now"}
+
+              <div style={{ display: "flex", gap: 10, padding: "12px 20px 20px" }}>
+                <button type="button" onClick={closeModal} className="btn-outline" style={{ flex: 1, justifyContent: "center" }}>Cancel</button>
+                <button type="submit" disabled={creating} className="btn-sand" style={{ flex: 1, justifyContent: "center" }}>
+                  {creating ? "Posting..." : "Post Now 🚀"}
                 </button>
               </div>
             </form>

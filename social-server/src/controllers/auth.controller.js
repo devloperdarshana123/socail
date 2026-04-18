@@ -1,8 +1,6 @@
 
 
 
-// src/controllers/auth.controller.js
-
 import jwt from "jsonwebtoken";
 import SocialUser from "../models/User.model.js";
 import Post from "../models/Post.model.js";
@@ -13,6 +11,22 @@ const generateToken = (id) => {
     expiresIn: process.env.JWT_EXPIRES_IN,
   });
 };
+
+// ── ✅ Helper — har jagah ek jaisa user object return hoga ────────────────────
+const formatUser = (user) => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  avatar: user.avatar,
+  coverPhoto: user.coverPhoto,
+  bio: user.bio,
+  designation: user.designation,
+  location: user.location,          // { city, state, country, coordinates }
+  interests: user.interests,
+  businessCategory: user.businessCategory,
+  isSuspended: user.isSuspended,
+});
 
 // ── Register ─────────────────────────────────────────────────────────────────
 export const register = async (req, res) => {
@@ -37,19 +51,7 @@ export const register = async (req, res) => {
 
     const token = generateToken(user._id);
 
-    res.status(201).json({
-      token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar,
-        bio: user.bio,
-        designation: user.designation,
-        isSuspended: user.isSuspended,
-      },
-    });
+    res.status(201).json({ token, user: formatUser(user) }); // ✅
   } catch (err) {
     res.status(500).json({ message: "Server error!", error: err.message });
   }
@@ -65,7 +67,6 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password!" });
     }
 
-    // ✅ Google-only account pe email/password login try karo toh friendly error do
     if (!user.password && user.googleId) {
       return res.status(401).json({
         message: "This account uses Google login. Please sign in with Google.",
@@ -85,26 +86,13 @@ export const login = async (req, res) => {
 
     const token = generateToken(user._id);
 
-    res.json({
-      token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar,
-        bio: user.bio,
-        isSuspended: user.isSuspended,
-      },
-    });
+    res.json({ token, user: formatUser(user) }); // ✅
   } catch (err) {
     res.status(500).json({ message: "Server error!", error: err.message });
   }
 };
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
-// Frontend se idToken aata hai → Firebase Admin SDK se verify karo → JWT do
-
 export const googleAuth = async (req, res) => {
   try {
     const { idToken } = req.body;
@@ -152,23 +140,12 @@ export const googleAuth = async (req, res) => {
 
     const token = generateToken(user._id);
 
-    res.json({
-      token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar,
-        bio: user.bio,
-        designation: user.designation,
-        isSuspended: user.isSuspended,
-      },
-    });
+    res.json({ token, user: formatUser(user) }); // ✅
   } catch (err) {
     res.status(500).json({ message: "Server error!", error: err.message });
   }
 };
+
 // ── Get Me ───────────────────────────────────────────────────────────────────
 export const getMe = async (req, res) => {
   try {
@@ -213,7 +190,6 @@ export const getSuggestions = async (req, res) => {
       .select("name role avatar followers following designation")
       .limit(20);
 
-    // ✅ Yeh 2 lines add karo
     const shuffled = users.sort(() => Math.random() - 0.5).slice(0, 8);
     res.json({ success: true, users: shuffled });
 
@@ -289,9 +265,9 @@ export const deleteUser = async (req, res) => {
 
     await Post.deleteMany({ author: req.params.id });
     await SocialUser.updateMany(
-  { $or: [{ followers: req.params.id }, { following: req.params.id }] },
-  { $pull: { followers: req.params.id, following: req.params.id } }
-);
+      { $or: [{ followers: req.params.id }, { following: req.params.id }] },
+      { $pull: { followers: req.params.id, following: req.params.id } }
+    );
 
     await SocialUser.findByIdAndDelete(req.params.id);
 
@@ -305,6 +281,29 @@ export const deleteUser = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     res.json({ message: "Logged out successfully!" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error!", error: err.message });
+  }
+};
+
+
+// ── Get Public User Profile ───────────────────────────────────────────────────
+export const getUserProfile = async (req, res) => {
+  try {
+    const user = await SocialUser.findById(req.params.userId).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found!" });
+
+    const postCount = await Post.countDocuments({ author: req.params.userId });
+
+    res.json({
+      success: true,
+      user,
+      stats: {
+        posts: postCount,
+        followers: user.followers?.length || 0,
+        following: user.following?.length || 0,
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error!", error: err.message });
   }

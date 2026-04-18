@@ -6,7 +6,7 @@ import { useDispatch } from "react-redux";
 import { useEffect } from "react";
 import { incrementFollowRequest } from "../store/slices/Exploreslice";
 import {
-  LayoutGrid, Telescope, Store, MessageCircle, UserCheck,
+  LayoutGrid, Telescope, MessageCircle, UserCheck,
   BookMarked, UserCircle, Settings, Plus, LogOut, X, PanelLeftClose, PanelLeftOpen
 } from "lucide-react";
 const Avatar = ({ src, name, size = "w-10 h-10", textSize = "text-sm" }) =>
@@ -49,9 +49,7 @@ useEffect(() => {
 }, [socket, dispatch]);
   
   const navItems = [
-  { path: "/feed",            label: "Feed",            icon: <LayoutGrid size={20} />,    badge: null },
   { path: "/explore",         label: "Explore",         icon: <Telescope size={20} />,     badge: null },
-  { path: "/marketplace",     label: "Marketplace",     icon: <Store size={20} />,         badge: null },
 { path: "/messages", label: "Messages", icon: <MessageCircle size={20} />, badge: totalUnread || null },
   { path: "/follow-requests", label: "Follow Requests", icon: <UserCheck size={20} />, badge: followRequestCount || null },
   { path: "/saved",           label: "Saved Posts",     icon: <BookMarked size={20} />,    badge: null },
@@ -61,14 +59,6 @@ useEffect(() => {
 
   const NavContent = ({ onNavigate }) => (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
-      <button
-        onClick={() => { onCreatePost(); onNavigate?.(); }}
-        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white mb-3 hover:opacity-90 transition"
-        style={{ background: "#1e3a5f" }}
-      >
-        <Plus size={16} /> Create Post
-      </button>
-
       <nav className="space-y-1">
         {navItems.map((item) => {
           const active = location.pathname === item.path;
@@ -120,14 +110,6 @@ useEffect(() => {
 
   {!sidebarOpen && (
     <div className="flex flex-col items-center gap-1 pt-1">
-      <button
-        onClick={() => onCreatePost()}
-        className="w-10 h-10 flex items-center justify-center rounded-xl text-white hover:opacity-90 transition"
-        style={{ background: "#1e3a5f" }}
-        title="Create Post"
-      >
-        <Plus size={18} />
-      </button>
       {navItems.map((item) => {
         const active = location.pathname === item.path;
         return (

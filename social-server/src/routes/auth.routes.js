@@ -13,6 +13,7 @@ import {
   getSuggestions,
   searchUsers,
   googleAuth,
+  getUserProfile, 
 } from "../controllers/auth.controller.js";
 import { protect, superAdminOnly } from "../middleware/auth.middleware.js";
 
@@ -31,6 +32,7 @@ router.post("/google",   googleAuth);
 // ── Users — Suggestions & Search ─────────────────────────────────────────────
 router.get("/users/suggestions", protect, getSuggestions);
 router.get("/users/search",      protect, searchUsers);
+router.get("/users/:userId",     protect, getUserProfile);
 
 // ── Super Admin Only Routes ───────────────────────────────────────────────────
 router.get("/admin/users",              protect, superAdminOnly, getAllUsers);

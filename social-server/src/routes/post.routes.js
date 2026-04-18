@@ -18,6 +18,7 @@ import {
   getMyPosts,
   getTrendingPosts,
   searchPosts,
+  getUserPosts,
 } from "../controllers/post.controller.js";
 import { protect, superAdminOnly } from "../middleware/auth.middleware.js";
 
@@ -28,6 +29,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.get("/feed",     protect, getFeed);
 router.get("/explore",  protect, getExplore);
 router.get("/my",       protect, getMyPosts);
+router.get("/user/:userId", protect, getUserPosts);
 router.get("/trending", protect, getTrendingPosts);
 router.get("/search",   protect, searchPosts);
 router.get("/saved",    protect, getSavedPosts);

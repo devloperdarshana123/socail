@@ -1,33 +1,38 @@
 
-
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
-import { LogOut, Search, X, User, Settings} from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { LogOut, Search, X, User, Settings, Menu } from "lucide-react";
 import EroviansLogo from "../assets/seller_logo.png";
 import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:9001";
 
-export default function Navbar({ onSearch, onMenuClick }) {
+const NAV_LINKS = [
+  { label: "Feed",     path: "/" },
+  { label: "Explore",  path: "/explore" },
+  { label: "Messages", path: "/messages" },
+  { label: "Requests", path: "/follow-requests" },
+  { label: "Saved",    path: "/saved" },
+];
+
+export default function Navbar({ onSearch }) {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const location  = useLocation();
 
-  const [searchQuery, setSearchQuery]     = useState("");
-  const [searchOpen, setSearchOpen]       = useState(false);
-  const [dropdownOpen, setDropdownOpen]   = useState(false);
-
-  // Search dropdown state
+  const [searchQuery,   setSearchQuery]   = useState("");
+  const [searchOpen,    setSearchOpen]    = useState(false);
+  const [dropdownOpen,  setDropdownOpen]  = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [showResults, setShowResults]     = useState(false);
+  const [showResults,   setShowResults]   = useState(false);
 
   const dropdownRef   = useRef(null);
   const searchRef     = useRef(null);
   const debounceTimer = useRef(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
@@ -39,7 +44,6 @@ export default function Navbar({ onSearch, onMenuClick }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Live search with debounce
   const fetchUsers = useCallback(async (q) => {
     if (!q.trim()) { setSearchResults([]); setShowResults(false); return; }
     setSearchLoading(true);
@@ -61,14 +65,12 @@ export default function Navbar({ onSearch, onMenuClick }) {
     const val = e.target.value;
     setSearchQuery(val);
     if (onSearch) onSearch(val);
-
     clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => fetchUsers(val), 350);
   };
 
   const clearSearch = () => {
-    setSearchQuery("");
-    setSearchResults([]);
+    setSearchQuery(""); setSearchResults([]);
     setShowResults(false);
     if (onSearch) onSearch("");
   };
@@ -79,116 +81,96 @@ export default function Navbar({ onSearch, onMenuClick }) {
   };
 
   const handleUserClick = (userId) => {
-    setShowResults(false);
-    setSearchQuery("");
+    setShowResults(false); setSearchQuery("");
     navigate(`/user/${userId}`);
   };
 
-  const handleLogout = () => {
-    setDropdownOpen(false);
-    logout();
-  };
+  const handleLogout = () => { setDropdownOpen(false); logout(); };
+
+  const UserAvatar = ({ size = "w-9 h-9", text = "text-sm" }) =>
+    user?.avatar ? (
+      <img src={user.avatar} alt="avatar" className={`${size} rounded-full object-cover shrink-0`} />
+    ) : (
+      <div className={`${size} ${text} rounded-full flex items-center justify-center font-bold shrink-0`}
+        style={{ background: "#f0e8df", color: "#6b3f2a" }}>
+        {user?.name?.charAt(0).toUpperCase()}
+      </div>
+    );
 
   return (
-    <nav
-      className="sticky top-0 z-50 w-full"
-      style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb" }}
-    >
-      {/* MAIN ROW */}
-      <div className="w-full px-4 py-3 flex items-center justify-between gap-3">
+    <nav className="sticky top-0 z-9999 w-full bg-white border-b border-gray-200">
 
-        {/* LEFT — Hamburger + Logo */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
-            <img src={EroviansLogo} alt="Erovians" className="h-10 sm:h-12 w-auto object-contain" />
-            <div className="w-px h-7 hidden sm:block" style={{ background: "#e5e7eb" }} />
-          </div>
+      {/* ── MAIN ROW ── */}
+      <div className="w-full px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3">
+
+        {/* Logo */}
+        <div className="flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => navigate("/")}>
+          <img src={EroviansLogo} alt="Erovians" className="h-8 sm:h-10 w-auto object-contain" />
+          <div className="w-px h-6 hidden sm:block bg-gray-200" />
         </div>
 
-        {/* CENTER — Search Bar with Live Dropdown */}
-        <div className="hidden md:block flex-1 max-w-2xl mx-4 relative" ref={searchRef}>
-          <form
-            onSubmit={handleSearchSubmit}
-            style={{ border: "1.5px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff", display: "flex" }}
-          >
+        {/* Desktop Search */}
+        <div className="hidden md:block flex-1 max-w-xs lg:max-w-sm xl:max-w-md relative" ref={searchRef}>
+          <form onSubmit={handleSearchSubmit}
+            className="flex border border-gray-300 rounded-lg overflow-hidden bg-white">
             <input
-              type="text"
-              value={searchQuery}
+              type="text" value={searchQuery}
               onChange={handleSearchChange}
               onFocus={() => searchQuery && setShowResults(true)}
-              placeholder="Search Users ..."
-              className="flex-1 px-4 py-2.5 text-sm outline-none bg-transparent"
-              style={{ color: "#1f2937" }}
+              placeholder="Search Users..."
+              className="flex-1 px-3 py-2 text-sm outline-none bg-transparent text-gray-800"
               autoComplete="off"
             />
             {searchQuery && (
-              <button type="button" onClick={clearSearch} className="px-2 flex items-center" style={{ color: "#9ca3af" }}>
-                <X size={14} />
+              <button type="button" onClick={clearSearch} className="px-2 text-gray-400">
+                <X size={13} />
               </button>
             )}
-            <button
-              type="submit"
-              className="px-4 flex items-center justify-center transition hover:opacity-90"
-              style={{ background: "#1e3a5f", color: "#ffffff", minWidth: "48px" }}
-            >
-              <Search size={17} />
+            <button type="submit"
+              className="px-3 flex items-center justify-center hover:opacity-90 transition"
+              style={{ background: "#1e3a5f", color: "#fff", minWidth: 40 }}>
+              <Search size={15} />
             </button>
           </form>
 
-          {/* ── Search Dropdown ── */}
+          {/* Search Dropdown */}
           {showResults && (
-            <div
-              className="absolute left-0 right-0 mt-2 rounded-2xl shadow-2xl border overflow-hidden z-50"
-              style={{ background: "#fff", borderColor: "#e5e7eb", top: "100%" }}
-            >
+            <div className="absolute left-0 right-0 mt-1.5 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 bg-white"
+              style={{ top: "100%" }}>
               {searchLoading ? (
-                <div className="flex items-center justify-center py-6 gap-2 text-sm text-gray-400">
+                <div className="flex items-center justify-center py-5 gap-2 text-sm text-gray-400">
                   <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
                   Searching...
                 </div>
               ) : searchResults.length === 0 ? (
-                <div className="py-6 text-center text-sm text-gray-400">
+                <div className="py-5 text-center text-sm text-gray-400">
                   No users found for "<span className="font-medium text-gray-600">{searchQuery}</span>"
                 </div>
               ) : (
                 <div>
-                  <p className="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                    Users
-                  </p>
+                  <p className="px-4 pt-3 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Users</p>
                   {searchResults.map((u) => (
-                    <button
-                      key={u._id}
-                      onClick={() => handleUserClick(u._id)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left"
-                    >
-                      {/* Avatar */}
+                    <button key={u._id} onClick={() => handleUserClick(u._id)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left">
                       {u.avatar ? (
-                        <img src={u.avatar} alt={u.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                        <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
                       ) : (
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                          style={{ background: "#f0e8df", color: "#6b3f2a" }}
-                        >
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                          style={{ background: "#f0e8df", color: "#6b3f2a" }}>
                           {u.name?.charAt(0).toUpperCase()}
                         </div>
                       )}
-
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
                         <p className="text-xs text-gray-400 truncate">
                           {u.designation?.trim() || "EroSocial Member"} · {u.followersCount} followers
                         </p>
                       </div>
-
-                      {/* Follow Status Badge */}
-                      <span
-                        className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
                         style={{
                           background: u.isFollowing ? "#f0fdf4" : u.isPending ? "#f8fafc" : "#fef3e2",
                           color: u.isFollowing ? "#16a34a" : u.isPending ? "#94a3b8" : "#c8956c",
-                        }}
-                      >
+                        }}>
                         {u.isFollowing ? "Following" : u.isPending ? "Requested" : "Follow"}
                       </span>
                     </button>
@@ -199,162 +181,139 @@ export default function Navbar({ onSearch, onMenuClick }) {
           )}
         </div>
 
-        {/* RIGHT */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Desktop Nav Links */}
+        <div className="hidden lg:flex items-center gap-0.5 ml-1">
+          {NAV_LINKS.map(({ label, path }) => {
+            const active = location.pathname === path;
+            return (
+              <button key={path} onClick={() => navigate(path)}
+                className="px-3 py-1.5 text-sm rounded-lg transition hover:bg-stone-100 whitespace-nowrap"
+                style={{
+                  color: active ? "#1e3a5f" : "#6b7280",
+                  fontWeight: active ? 700 : 500,
+                  background: active ? "#f0f4ff" : "transparent",
+                }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
-          {/* Mobile Search Toggle */}
-          <button
-            className="md:hidden p-2 rounded-full hover:bg-gray-100 transition"
-            style={{ color: "#6b7280" }}
-            onClick={() => setSearchOpen(!searchOpen)}
-          >
-            <Search size={19} />
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Mobile Search Icon */}
+        <button className="md:hidden p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
+          onClick={() => setSearchOpen(!searchOpen)}>
+          <Search size={18} />
+        </button>
+
+        {/* Mobile Hamburger */}
+        <button className="lg:hidden p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          <Menu size={18} />
+        </button>
+
+        {/* Profile Dropdown */}
+        <div className="relative shrink-0" ref={dropdownRef}>
+          <button onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-50 transition">
+            <UserAvatar />
           </button>
 
-          {/* Profile Dropdown */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-gray-50 transition"
-            >
-              {user?.avatar ? (
-                <img src={user.avatar} alt="avatar" className="w-9 h-9 rounded-full object-cover shrink-0" />
-              ) : (
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                  style={{ background: "#f0e8df", color: "#6b3f2a" }}
-                >
-                  {user?.name?.charAt(0).toUpperCase()}
-                </div>
-              )}
-            </button>
-
-            {/* DROPDOWN MENU */}
-            {dropdownOpen && (
-              <div
-                className="absolute right-0 mt-2 w-64 rounded-2xl shadow-xl border overflow-hidden z-50"
-                style={{ background: "#fff", borderColor: "#e5e7eb", top: "100%" }}
-              >
-                <div className="px-4 py-4 border-b" style={{ borderColor: "#f3f4f6", background: "#fafafa" }}>
-                  <div className="flex items-center gap-3">
-                    {user?.avatar ? (
-                      <img src={user.avatar} alt="avatar" className="w-11 h-11 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <div
-                        className="w-11 h-11 rounded-full flex items-center justify-center text-base font-bold shrink-0"
-                        style={{ background: "#f0e8df", color: "#6b3f2a" }}
-                      >
-                        {user?.name?.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">{user?.name}</p>
-                      <p className="text-xs text-gray-400">{user?.email}</p>
-                    </div>
+          {dropdownOpen && (
+            <div className="absolute right-0 mt-2 w-60 rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-9999 bg-white"
+              style={{ top: "100%" }}>
+              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <UserAvatar size="w-10 h-10" text="text-base" />
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">{user?.name}</p>
+                    <p className="text-xs text-gray-400 truncate max-w-35">{user?.email}</p>
                   </div>
                 </div>
-
-                <div className="py-2">
-                  <button
-                    onClick={() => { setDropdownOpen(false); navigate("/profile"); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left"
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#f0e8df" }}>
-                      <User size={15} style={{ color: "#6b3f2a" }} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">My Profile</p>
-                      <p className="text-xs text-gray-400">View your posts & info</p>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => { setDropdownOpen(false); navigate("/settings"); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left"
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#f0f4ff" }}>
-                      <Settings size={15} style={{ color: "#4f46e5" }} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">Settings</p>
-                      <p className="text-xs text-gray-400">Account & preferences</p>
-                    </div>
-                  </button>
-                </div>
-
-                <div className="border-t py-2" style={{ borderColor: "#f3f4f6" }}>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition text-left"
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#fff0f0" }}>
-                      <LogOut size={15} style={{ color: "#ef4444" }} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-red-500">Sign Out</p>
-                      <p className="text-xs text-gray-400">End your session</p>
-                    </div>
-                  </button>
-                </div>
               </div>
-            )}
-          </div>
+              <div className="py-1.5">
+                <button onClick={() => { setDropdownOpen(false); navigate("/profile"); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#f0e8df" }}>
+                    <User size={13} style={{ color: "#6b3f2a" }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">My Profile</p>
+                    <p className="text-xs text-gray-400">View your posts & info</p>
+                  </div>
+                </button>
+                <button onClick={() => { setDropdownOpen(false); navigate("/settings"); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#f0f4ff" }}>
+                    <Settings size={13} style={{ color: "#4f46e5" }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Settings</p>
+                    <p className="text-xs text-gray-400">Account & preferences</p>
+                  </div>
+                </button>
+              </div>
+              <div className="border-t border-gray-100 py-1.5">
+                <button onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 transition text-left">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#fff0f0" }}>
+                    <LogOut size={13} style={{ color: "#ef4444" }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-red-500">Sign Out</p>
+                    <p className="text-xs text-gray-400">End your session</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* MOBILE SEARCH BAR */}
+      {/* ── MOBILE SEARCH BAR ── */}
       {searchOpen && (
-        <div className="md:hidden px-4 pb-3" ref={searchRef}>
-          <form
-            onSubmit={handleSearchSubmit}
-            className="flex w-full"
-            style={{ border: "1.5px solid #d1d5db", borderRadius: "8px", overflow: "hidden", background: "#fff" }}
-          >
+        <div className="md:hidden px-3 pb-2.5" ref={searchRef}>
+          <form onSubmit={handleSearchSubmit}
+            className="flex border border-gray-300 rounded-lg overflow-hidden bg-white">
             <input
-              type="text"
-              value={searchQuery}
+              type="text" value={searchQuery}
               onChange={handleSearchChange}
               placeholder="Search Users..."
-              autoFocus
-              autoComplete="off"
-              className="flex-1 px-4 py-2.5 text-sm outline-none bg-transparent"
-              style={{ color: "#1f2937" }}
+              autoFocus autoComplete="off"
+              className="flex-1 px-3 py-2 text-sm outline-none bg-transparent text-gray-800"
             />
             {searchQuery && (
-              <button type="button" onClick={clearSearch} className="px-2 flex items-center" style={{ color: "#9ca3af" }}>
-                <X size={14} />
+              <button type="button" onClick={clearSearch} className="px-2 text-gray-400">
+                <X size={13} />
               </button>
             )}
-            <button
-              type="submit"
-              className="px-4 flex items-center justify-center"
-              style={{ background: "#1e3a5f", color: "#ffffff", minWidth: "48px" }}
-            >
-              <Search size={17} />
+            <button type="submit"
+              className="px-3 flex items-center justify-center"
+              style={{ background: "#1e3a5f", color: "#fff", minWidth: 40 }}>
+              <Search size={15} />
             </button>
           </form>
 
-          {/* Mobile search results */}
           {showResults && (
-            <div className="mt-2 rounded-2xl shadow-xl border overflow-hidden" style={{ background: "#fff", borderColor: "#e5e7eb" }}>
+            <div className="mt-1.5 rounded-2xl shadow-xl border border-gray-100 overflow-hidden bg-white">
               {searchLoading ? (
-                <div className="flex items-center justify-center py-5 gap-2 text-sm text-gray-400">
+                <div className="flex items-center justify-center py-4 gap-2 text-sm text-gray-400">
                   <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
                   Searching...
                 </div>
               ) : searchResults.length === 0 ? (
-                <div className="py-5 text-center text-sm text-gray-400">No users found</div>
+                <div className="py-4 text-center text-sm text-gray-400">No users found</div>
               ) : (
                 searchResults.map((u) => (
-                  <button
-                    key={u._id}
+                  <button key={u._id}
                     onClick={() => { setSearchOpen(false); handleUserClick(u._id); }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left border-b border-gray-50 last:border-0"
-                  >
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left border-b border-gray-50 last:border-0">
                     {u.avatar ? (
-                      <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                      <img src={u.avatar} alt={u.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
                     ) : (
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                         style={{ background: "#f0e8df", color: "#6b3f2a" }}>
                         {u.name?.charAt(0).toUpperCase()}
                       </div>
@@ -368,6 +327,29 @@ export default function Navbar({ onSearch, onMenuClick }) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── MOBILE NAV MENU ── */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden border-t border-gray-100 px-3 py-2 bg-white">
+          <div className="flex flex-col gap-0.5">
+            {NAV_LINKS.map(({ label, path }) => {
+              const active = location.pathname === path;
+              return (
+                <button key={path}
+                  onClick={() => { navigate(path); setMobileMenuOpen(false); }}
+                  className="w-full text-left px-4 py-2.5 text-sm rounded-xl transition hover:bg-stone-50"
+                  style={{
+                    color: active ? "#1e3a5f" : "#374151",
+                    fontWeight: active ? 700 : 500,
+                    background: active ? "#f0f4ff" : "transparent",
+                  }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </nav>

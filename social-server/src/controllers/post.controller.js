@@ -58,7 +58,7 @@ const followingIds = currentUser.following;
     // Show posts only from followed users
     const posts = await Post.find({
       isSuspended: false,
-    author: { $in: followingIds },
+    author: { $in: [...followingIds, req.user._id] },
     })
       .populate("author", "name avatar role designation")
       .populate("comments.user", "name avatar designation")
@@ -68,7 +68,7 @@ const followingIds = currentUser.following;
 
     const total = await Post.countDocuments({
       isSuspended: false,
-      author: { $in: followingIds },
+  author: { $in: [...followingIds, req.user._id] },
     });
 
     return res.status(200).json({
@@ -94,12 +94,9 @@ export const getExplore = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip  = (page - 1) * limit;
 
-    const mongoose = await import("mongoose");
-    const currentUserId = new mongoose.Types.ObjectId(req.user._id);
-
     const posts = await Post.aggregate([
       // Step 1: Sirf active posts, apni khud ki nahi
-      { $match: { isSuspended: false, author: { $ne: currentUserId } } },
+   { $match: { isSuspended: false } },
 
       // Step 2: likesCount field add karo sorting ke liye
       { $addFields: { likesCount: { $size: "$likes" } } },
@@ -143,11 +140,7 @@ export const getExplore = async (req, res) => {
       },
     ]);
 
-    const total = await Post.countDocuments({
-      isSuspended: false,
-      author: { $ne: currentUserId },
-    });
-
+  const total = await Post.countDocuments({ isSuspended: false });
     return res.status(200).json({
       success: true,
       posts,
@@ -444,11 +437,31 @@ export const getMyPosts = async (req, res) => {
   try {
     const posts = await Post.find({ author: req.user._id })
       .populate("author", "name avatar role designation")
+        .populate("comments.user", "name avatar designation")  
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, posts });
   } catch (error) {
     console.error("Get my posts error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error!" });
+  }
+};
+
+
+// ── Get User Posts (Public) ───────────────────────────────────────────────────
+export const getUserPosts = async (req, res) => {
+  try {
+    const posts = await Post.find({ 
+      author: req.params.userId,
+      isSuspended: false,
+    })
+      .populate("author", "name avatar role designation")
+      .populate("comments.user", "name avatar designation")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, posts });
+  } catch (error) {
+    console.error("Get user posts error:", error);
     return res.status(500).json({ success: false, message: "Internal server error!" });
   }
 };

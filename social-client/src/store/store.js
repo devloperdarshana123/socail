@@ -8,6 +8,7 @@ import savedReducer    from "./slices/Savedslice";
 import followReducer   from "./slices/Followslice";
 
 import messagesReducer from "./slices/Messageslice";
+import StoryReducer  from "./slices/storySlice";
 
 const store = configureStore({
   reducer: {
@@ -18,8 +19,8 @@ const store = configureStore({
     profile:  profileReducer,
     saved:    savedReducer,
     follow:   followReducer,
-   
-     messages: messagesReducer, 
+    messages: messagesReducer, 
+    story:StoryReducer
   },
 });
 
