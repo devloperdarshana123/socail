@@ -16,7 +16,7 @@ const NAV_LINKS = [
   { label: "Saved",    path: "/saved" },
 ];
 
-export default function Navbar({ onSearch }) {
+export default function Navbar({ onSearch, onCreatePost }) {
   const { user, logout } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -201,6 +201,16 @@ export default function Navbar({ onSearch }) {
 
         {/* Spacer */}
         <div className="flex-1" />
+
+
+<button
+  onClick={onCreatePost}
+  className="hidden sm:flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-full transition hover:opacity-90 shrink-0"
+  style={{ background: "#c8956c" }}
+>
+  + Post
+</button>
+
 
         {/* Mobile Search Icon */}
         <button className="md:hidden p-2 rounded-full hover:bg-gray-100 transition text-gray-500"

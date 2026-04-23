@@ -209,7 +209,7 @@ function UploadModal({ onClose }) {
             <div>
               <div style={{ borderRadius: 12, overflow: "hidden", background: bg, padding: 24, minHeight: 160, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
                 <textarea value={text} onChange={(e) => setText(e.target.value)}
-                  placeholder="Kuch likho..."
+                  placeholder="Write Something..."
                   style={{ background: "none", border: "none", outline: "none", color: "#fff", fontSize: 18, fontWeight: 700, textAlign: "center", resize: "none", width: "100%", fontFamily: "inherit" }}
                   rows={4}
                 />
