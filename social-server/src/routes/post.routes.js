@@ -38,7 +38,7 @@ router.get("/saved",    protect, getSavedPosts);
 router.get("/:id", protect, getPost);
 
 // ── Post CRUD ─────────────────────────────────────────────────────────────────
-router.post("/",          protect, upload.single("image"), createPost);
+router.post("/",          protect, upload.single("media"), createPost);
 router.delete("/:id",     protect, deletePost);
 
 // ── Like, Save, Comment ───────────────────────────────────────────────────────

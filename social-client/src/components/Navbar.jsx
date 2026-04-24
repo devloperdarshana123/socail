@@ -206,7 +206,7 @@ export default function Navbar({ onSearch, onCreatePost }) {
 <button
   onClick={onCreatePost}
   className="hidden sm:flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-full transition hover:opacity-90 shrink-0"
-  style={{ background: "#c8956c" }}
+  style={{ background: "#1e3a5f" }}
 >
   + Post
 </button>

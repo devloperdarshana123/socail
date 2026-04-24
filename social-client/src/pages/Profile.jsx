@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import GlobalCreatePostModal from "../components/Globalcreatepostmodal";
 import toast from "react-hot-toast";
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import {
@@ -70,7 +71,6 @@ export default function Profile() {
   const loading                        = useSelector((s) => s.feed.myPostsLoading);
   const { followers, following }       = useSelector((s) => s.profile);
 
-  /* ── responsive: track viewport width properly ── */
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
   const [isXs, setIsXs]         = useState(() => window.innerWidth < 480);
   useEffect(() => {
@@ -264,8 +264,10 @@ export default function Profile() {
         @media(max-width:480px) { .post-grid { grid-template-columns:repeat(2,1fr); } }
 
         .post-thumb { position:relative; aspect-ratio:1; overflow:hidden; cursor:pointer; }
-        .post-thumb img { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
-        .post-thumb:hover img { transform:scale(1.06); }
+        .post-thumb img,
+        .post-thumb video { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
+        .post-thumb:hover img,
+        .post-thumb:hover video { transform:scale(1.06); }
         .post-thumb-overlay {
           position:absolute; inset:0; background:rgba(26,22,20,0.45);
           display:flex; align-items:center; justify-content:center; gap:12px;
@@ -302,6 +304,18 @@ export default function Profile() {
         }
         .scroll-hide { overflow-y:auto; }
         .scroll-hide::-webkit-scrollbar { display:none; }
+
+        .video-play-btn {
+          position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+          background:rgba(0,0,0,0.2);
+        }
+        .video-play-btn div {
+          width:44px; height:44px; border-radius:50%;
+          background:rgba(255,255,255,0.9);
+          display:flex; align-items:center; justify-content:center;
+          font-size:18px; transition:transform .2s;
+        }
+        .post-thumb:hover .video-play-btn div { transform:scale(1.1); }
       `}</style>
 
       <div className="profile-root">
@@ -370,7 +384,7 @@ export default function Profile() {
                   <button className="btn-outline" onClick={() => navigate("/settings")}>
                     <Pencil size={13} /> Edit Profile
                   </button>
-                  <button className="btn-sand" onClick={() => setShowCreatePost(true)}>
+        <button className="btn-sand" onClick={() => setShowCreatePost(true)} style={{ background: "#1e3a5f" }}>
                     <Plus size={13} /> Post
                   </button>
                 </div>
@@ -453,8 +467,9 @@ export default function Profile() {
                   padding: "2px 8px", borderRadius: 999,
                 }}>{myPosts.length}</span>
               </div>
+              {/* ── Tab Buttons: Grid | Videos ── */}
               <div style={{ display: "flex", gap: 4, background: C.grayLt, borderRadius: 8, padding: 3 }}>
-                {["grid", "list"].map((v) => (
+                {["grid", "videos"].map((v) => (
                   <button key={v} onClick={() => setActivePostView(v)} style={{
                     padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
                     fontSize: 11, fontWeight: 600,
@@ -463,7 +478,7 @@ export default function Profile() {
                     boxShadow: activePostView === v ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
                     transition: "all .15s",
                   }}>
-                    {v === "grid" ? "⊞ Grid" : "☰ List"}
+                    {v === "grid" ? "⊞ Grid" : "🎬 Videos"}
                   </button>
                 ))}
               </div>
@@ -481,12 +496,21 @@ export default function Profile() {
                 <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>Share your first post 🎉</p>
                 <button className="btn-sand" onClick={() => setShowCreatePost(true)}>+ Create Post</button>
               </div>
+
             ) : activePostView === "grid" ? (
+              /* ── GRID VIEW ── */
               <div className="post-grid">
                 {myPosts.map((post) => (
                   <div key={post._id} className="post-thumb" onClick={() => setSelectedPost(post)}>
                     {post.image ? (
                       <img src={post.image} alt="post" loading="lazy" />
+                    ) : post.video ? (
+                      <>
+                        <video src={post.video} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <div className="video-play-btn">
+                          <div>▶</div>
+                        </div>
+                      </>
                     ) : (
                       <div style={{
                         width: "100%", height: "100%", background: C.sandLt,
@@ -501,85 +525,37 @@ export default function Profile() {
                   </div>
                 ))}
               </div>
-            ) : (
-              <div style={{ padding: "8px 0" }}>
-                {myPosts.map((post) => (
-                  <div key={post._id} style={{
-                    display: "flex", gap: 12, padding: "14px 20px",
-                    borderBottom: `1px solid ${C.grayLt}`,
-                  }}>
-                    {post.image && (
-                      <img src={post.image} alt="post" loading="lazy" style={{
-                        width: 72, height: 72, borderRadius: 12, objectFit: "cover", flexShrink: 0,
-                      }} />
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 13, color: C.ink, margin: "0 0 6px", lineHeight: 1.5 }}>
-                        {post.caption || <span style={{ color: C.gray, fontStyle: "italic" }}>No caption</span>}
-                      </p>
-                      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                        <button onClick={() => handleLike(post._id)}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600,
-                            color: post.likes?.includes(user?._id) ? "#ef4444" : C.gray,
-                            background: "none", border: "none", cursor: "pointer", padding: 0,
-                          }}>
-                          <Heart size={14} fill={post.likes?.includes(user?._id) ? "currentColor" : "none"} />
-                          {post.likes?.length || 0}
-                        </button>
-                        <button onClick={() => setShowComments((p) => ({ ...p, [post._id]: !p[post._id] }))}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 600,
-                            color: C.gray, background: "none", border: "none", cursor: "pointer", padding: 0,
-                          }}>
-                          <MessageCircle size={14} /> {post.comments?.length || 0}
-                        </button>
-                        <span style={{ fontSize: 11, color: C.gray, marginLeft: "auto" }}>
-                          {new Date(post.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                        </span>
-                        {isAdmin && (
-                          <button onClick={() => handleSuspend(post._id)}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: C.gray, padding: 0 }}>
-                            <ShieldX size={14} />
-                          </button>
-                        )}
-                        <button onClick={() => handleDelete(post._id)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", padding: 0 }}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
 
-                      {showComments[post._id] && (
-                        <div style={{ marginTop: 10 }}>
-                          {post.comments?.slice(-2).map((c, i) => (
-                            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-                              <Avatar src={c.user?.avatar} name={c.user?.name} size={20} />
-                              <span style={{ fontSize: 12, color: C.ink }}>
-                                <strong>{c.user?.name}</strong> {c.text}
-                              </span>
-                            </div>
-                          ))}
-                          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                            <input value={commentInputs[post._id] || ""}
-                              onChange={(e) => setCommentInputs((p) => ({ ...p, [post._id]: e.target.value }))}
-                              onKeyDown={(e) => e.key === "Enter" && handleComment(post._id)}
-                              placeholder="Comment..." style={{
-                                flex: 1, fontSize: 12, padding: "6px 12px",
-                                border: `1px solid ${C.border}`, borderRadius: 999,
-                                outline: "none", fontFamily: "inherit",
-                              }} />
-                            <button onClick={() => handleComment(post._id)}
-                              style={{ fontSize: 12, fontWeight: 600, color: C.sand, background: "none", border: "none", cursor: "pointer" }}>
-                              Post
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+            ) : activePostView === "videos" ? (
+              /* ── VIDEOS VIEW ── */
+              <div>
+                {myPosts.filter((post) => post.video).length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "60px 20px" }}>
+                    <div style={{ fontSize: 42, marginBottom: 10 }}>🎬</div>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: C.ink, margin: "0 0 4px" }}>No videos yet!</p>
+                    <p style={{ fontSize: 13, color: C.gray, marginBottom: 16 }}>Upload your first video</p>
+                    <button className="btn-sand" onClick={() => setShowCreatePost(true)}>+ Upload Video</button>
                   </div>
-                ))}
+                ) : (
+                  <div className="post-grid">
+                    {myPosts.filter((post) => post.video).map((post) => (
+                      <div key={post._id} className="post-thumb" onClick={() => setSelectedPost(post)}
+                        style={{ background: "#111" }}>
+                        <video src={post.video} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <div className="video-play-btn">
+                          <div>▶</div>
+                        </div>
+                        <div className="post-thumb-overlay">
+                          <span><Heart size={14} fill="white" stroke="none" /> {post.likes?.length || 0}</span>
+                          <span><MessageCircle size={14} /> {post.comments?.length || 0}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+
+            ) : null}
           </div>
         </div>
       </div>
@@ -621,10 +597,14 @@ export default function Profile() {
               </div>
             </div>
 
-            {liveSelectedPost.image && (
+            {/* ── Image ya Video ── */}
+            {liveSelectedPost.image ? (
               <img src={liveSelectedPost.image} alt="post"
                 style={{ width: "100%", maxHeight: 400, objectFit: "cover" }} />
-            )}
+            ) : liveSelectedPost.video ? (
+              <video src={liveSelectedPost.video} controls
+                style={{ width: "100%", maxHeight: 400, objectFit: "cover", background: "#000" }} />
+            ) : null}
 
             <div className="scroll-hide" style={{ padding: "12px 18px", flex: 1 }}>
               {liveSelectedPost.caption && (
@@ -772,74 +752,9 @@ export default function Profile() {
       )}
 
       {/* ── CREATE POST MODAL ── */}
+     {/* ── CREATE POST MODAL ── */}
       {showCreatePost && (
-        <div className="modal-backdrop">
-          <div className="modal-box" style={{ maxWidth: 520 }}>
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "16px 20px", borderBottom: `1px solid ${C.border}`,
-            }}>
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: 0, fontFamily: "'DM Serif Display',serif" }}>
-                Create New Post
-              </h2>
-              <button onClick={closeModal} style={{ background: "none", border: "none", cursor: "pointer", color: C.gray }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreatePost}>
-              <div className="scroll-hide" style={{ padding: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                  <Avatar src={user?.avatar} name={user?.name} size={38} />
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: 0 }}>{user?.name}</p>
-                    <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{user?.designation?.trim() || "EroSocial Member"}</p>
-                  </div>
-                </div>
-
-                <textarea value={caption} onChange={(e) => setCaption(e.target.value)}
-                  placeholder="What are you thinking? Share it..."
-                  rows={4} style={{
-                    width: "100%", padding: "12px 16px",
-                    border: `1.5px solid ${C.border}`, borderRadius: 14,
-                    fontSize: 13, outline: "none", resize: "none",
-                    fontFamily: "inherit", lineHeight: 1.6, color: C.ink,
-                    transition: "border-color .15s",
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = C.sand}
-                  onBlur={(e) => e.target.style.borderColor = C.border}
-                />
-
-                {imagePreview && (
-                  <div style={{ position: "relative", marginTop: 12, borderRadius: 14, overflow: "hidden" }}>
-                    <img src={imagePreview} alt="preview" style={{ width: "100%", maxHeight: 240, objectFit: "cover" }} />
-                    <button type="button" onClick={() => { setImage(null); setImagePreview(null); }}
-                      style={{
-                        position: "absolute", top: 8, right: 8, width: 28, height: 28,
-                        borderRadius: "50%", background: "rgba(0,0,0,0.6)", border: "none",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "#fff", cursor: "pointer",
-                      }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
-
-                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12, fontSize: 13, fontWeight: 600, color: C.sand, cursor: "pointer" }}>
-                  <Camera size={15} /> Add Image
-                  <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
-                </label>
-              </div>
-
-              <div style={{ display: "flex", gap: 10, padding: "12px 20px 20px" }}>
-                <button type="button" onClick={closeModal} className="btn-outline" style={{ flex: 1, justifyContent: "center" }}>Cancel</button>
-                <button type="submit" disabled={creating} className="btn-sand" style={{ flex: 1, justifyContent: "center" }}>
-                  {creating ? "Posting..." : "Post Now 🚀"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <GlobalCreatePostModal onClose={() => setShowCreatePost(false)} />
       )}
 
       <DeleteConfirmModal

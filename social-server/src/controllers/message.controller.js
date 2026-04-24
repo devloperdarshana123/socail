@@ -53,7 +53,7 @@ export const getFollowingForMessages = async (req, res) => {
       .select("following")
       .populate("following", "name avatar designation");
 
-    // Existing conversations fetch karo
+    // Saare conversations fetch karo
     const conversations = await Conversation.find({
       participants: req.user._id,
     })
@@ -64,13 +64,15 @@ export const getFollowingForMessages = async (req, res) => {
       })
       .sort({ updatedAt: -1 });
 
-    // Following list ko conversations ke saath merge karo
+    const followingIds = new Set(
+      (currentUser.following || []).map((u) => u._id.toString())
+    );
+
+    // Following users with conversations
     const followingList = (currentUser.following || []).map((followedUser) => {
-      // Kya is user ke saath pehle se conversation hai?
       const existingConv = conversations.find((conv) =>
         conv.participants.some((p) => p._id.toString() === followedUser._id.toString())
       );
-
       return {
         user: followedUser,
         conversation: existingConv || null,
@@ -78,6 +80,30 @@ export const getFollowingForMessages = async (req, res) => {
           ? existingConv.unreadCount?.get(req.user._id.toString()) || 0
           : 0,
       };
+    });
+
+    // Ab conversation wale users jo following mein nahi hain unhe bhi add karo
+    conversations.forEach((conv) => {
+      const otherUser = conv.participants.find(
+        (p) => p._id.toString() !== req.user._id.toString()
+      );
+      if (!otherUser) return;
+      if (!followingIds.has(otherUser._id.toString())) {
+        followingList.push({
+          user: otherUser,
+          conversation: conv,
+          myUnread: conv.unreadCount?.get(req.user._id.toString()) || 0,
+        });
+      }
+    });
+
+    // Latest conversation wale pehle dikhao
+    followingList.sort((a, b) => {
+      const aTime = a.conversation?.updatedAt
+        ? new Date(a.conversation.updatedAt) : new Date(0);
+      const bTime = b.conversation?.updatedAt
+        ? new Date(b.conversation.updatedAt) : new Date(0);
+      return bTime - aTime;
     });
 
     res.json({ success: true, followingList });

@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import MapView from "../components/MapView";
 import StoryRow from "../components/StoryRow";
-import { Heart, MessageCircle, Trash2, X, Send, Bookmark, Camera } from "lucide-react";
+import { Heart, MessageCircle, Trash2, X, Send, Bookmark, Camera, MapPin } from "lucide-react";
 import {
   fetchFeed, fetchStats, fetchSuggestions, fetchSavedPostIds,
   createPost, likePost, commentPost, savePost, deletePost, toggleSavedLocal,
@@ -41,6 +41,10 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
   const [caption, setCaption]             = useState("");
   const [image, setImage]                 = useState(null);
   const [imagePreview, setImagePreview]   = useState(null);
+  const [video, setVideo]                 = useState(null);
+  const [videoPreview, setVideoPreview]   = useState(null);
+  const [location, setLocation] = useState("");
+const [locationLoading, setLocationLoading] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [postToDelete, setPostToDelete]   = useState(null);
   const [mapSearch, setMapSearch]         = useState("");
@@ -66,14 +70,13 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
     dispatch(fetchSentFollowRequests());
   }, [dispatch]);
 
-
   useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("createPost") === "true") {
-    setShowCreatePost(true);
-    window.history.replaceState({}, "", "/");
-  }
-}, []);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("createPost") === "true") {
+      setShowCreatePost(true);
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
 
   useEffect(() => {
     const el = feedRef.current;
@@ -86,19 +89,53 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
     return () => el.removeEventListener("scroll", onScroll);
   }, [dispatch]);
 
-  const closeModal = () => { setShowCreatePost(false); setCaption(""); setImage(null); setImagePreview(null); };
+  const closeModal = () => {
+    setShowCreatePost(false);
+    setCaption("");
+    setImage(null);
+    setImagePreview(null);
+    setVideo(null);
+    setVideoPreview(null);
+    setLocation("");
+setLocationLoading(false);
+  };
 
   const handleImageChange = (e) => {
     const f = e.target.files[0];
-    if (f) { setImage(f); setImagePreview(URL.createObjectURL(f)); }
+    if (f) { setImage(f); setImagePreview(URL.createObjectURL(f)); setVideo(null); setVideoPreview(null); }
   };
+
+  const handleVideoChange = (e) => {
+    const f = e.target.files[0];
+    if (f) { setVideo(f); setVideoPreview(URL.createObjectURL(f)); setImage(null); setImagePreview(null); }
+  };
+const handleGetLocation = () => {
+  if (!navigator.geolocation) { toast.error("GPS support not Working!"); return; }
+  setLocationLoading(true);
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_SERVER}/location/reverse?lat=${latitude}&lon=${longitude}`
+        );
+        const data = await res.json();
+        setLocation(data.location || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      } catch {
+        setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      }
+      setLocationLoading(false);
+    },
+    () => { toast.error("Location not found!"); setLocationLoading(false); }
+  );
+};
 
   const handleCreatePost = async (e) => {
     e.preventDefault();
-    if (!caption && !image) { toast.error("Caption ya image daalo!"); return; }
-    const res = await dispatch(createPost({ caption, image }));
+    if (!caption && !image && !video) { toast.error("Caption or media add here !"); return; }
+    const res = await dispatch(createPost({ caption, image, video }));
     if (createPost.fulfilled.match(res)) { toast.success("Post Created! 🎉"); closeModal(); dispatch(fetchStats()); }
-    else toast.error(res.payload || "Post nahi bani!");
+    else toast.error(res.payload || "Post Not Created!");
   };
 
   const handleLike = async (postId) => {
@@ -109,7 +146,7 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
   const handleSave = async (postId) => {
     dispatch(toggleSavedLocal(postId));
     const res = await dispatch(savePost(postId));
-    if (savePost.rejected.match(res)) { dispatch(toggleSavedLocal(postId)); toast.error("Save nahi hua!"); }
+    if (savePost.rejected.match(res)) { dispatch(toggleSavedLocal(postId)); toast.error("Not Saved!"); }
     else toast.success(savedPostIds.includes(postId) ? "Unsaved!" : "Saved! 🔖");
   };
 
@@ -141,7 +178,7 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
   const CATS = ["All","Marble","Granite","Limestone","CNC","Quarry","Supplier","Designer","Other"];
 
   return (
-    <div className="flex gap-5 items-start w-full px-4 md:px-8 lg:px-16">
+    <div className="flex gap-5 items-start w-full px-4 md:px-8 lg:px-16" style={{ background: "#f8f9fb", minHeight: "100vh" }}>
 
       {/* ── MAIN COLUMN ── */}
       <div ref={feedRef} className="flex-1 min-w-0 w-full px-8">
@@ -151,8 +188,6 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
 
           {/* ── LEFT: Robot + Search + Filters ── */}
           <div className="flex flex-col gap-4">
-
-            {/* Robot + Search */}
             <div className="flex flex-col items-center gap-4">
               <img
                 ref={penguinRef}
@@ -199,8 +234,7 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
               </div>
             </div>
 
-            {/* Filters */}
-            <div className="bg-white border border-stone-200 rounded-2xl p-4">
+            <div style={{ background: "#ffffff", border: "1px solid #eef0f4", borderRadius: 16, padding: 16 }}>
               <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-3">Filter by Category</p>
               <div className="flex flex-wrap gap-2">
                 {CATS.map((cat) => {
@@ -221,9 +255,7 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
 
           {/* ── RIGHT: Map Circle ── */}
           <div className="flex flex-col gap-3">
-            
-            <div className="w-full relative" style={{ aspectRatio: "1/1" ,  zIndex: 1 }}>
-  
+            <div className="w-full relative" style={{ aspectRatio: "1/1", zIndex: 1 }}>
               <div className="absolute inset-0 rounded-full overflow-hidden border-4 border-white shadow-2xl">
                 <MapView
                   searchQuery={mapSearch}
@@ -263,13 +295,16 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
             return (
               <div key={post._id} className="bg-white border border-stone-200 rounded-2xl overflow-hidden mb-3 hover:shadow-md transition-shadow">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar src={post.author?.avatar} name={post.author?.name} />
-                    <div>
-                      <p className="text-sm font-semibold text-stone-800">{post.author?.name}</p>
-                      <p className="text-xs text-stone-400">{post.author?.designation?.trim() || "EroSocial Member"}</p>
-                    </div>
-                  </div>
+                 <div 
+  className="flex items-center gap-3 cursor-pointer"
+  onClick={() => post.author?._id !== user?._id && navigate(`/user/${post.author?._id}`)}
+>
+  <Avatar src={post.author?.avatar} name={post.author?.name} />
+  <div>
+    <p className="text-sm font-semibold text-stone-800 hover:underline">{post.author?.name}</p>
+    <p className="text-xs text-stone-400">{post.author?.designation?.trim() || "EroSocial Member"}</p>
+  </div>
+</div>
                   <div className="flex gap-1">
                     {post.author?._id !== user?._id && (
                       <button onClick={() => navigate(`/messages/${post.author?._id}`)}
@@ -286,9 +321,15 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
                   </div>
                 </div>
 
-                {post.image && (
-                  <img src={post.image} alt="post" className="w-full object-cover max-h-120" />
-                )}
+{post.video ? (
+  <video src={post.video} controls className="w-full object-cover max-h-120" />
+) : post.image ? (
+  <img src={post.image} alt="post" className="w-full object-cover max-h-120" />
+) : null}
+
+                {/* {post.image && (
+                <img src={post.image} alt="post" className="w-full object-cover max-h-120" />
+                )}   */}
 
                 <div className="flex items-center justify-between px-3 py-2">
                   <div className="flex gap-1">
@@ -366,15 +407,11 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
 
       {/* ── CREATE POST MODAL ── */}
       {showCreatePost && (
-        <div className="fixed inset-0 bg-black/55 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden">
+
+            {/* ── Modal Header ── */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
-              <h2 className="text-base font-semibold text-stone-800">Create New Post</h2>
-              <button onClick={closeModal} className="p-1.5 hover:bg-stone-100 rounded-lg transition text-stone-400">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
               <div className="flex items-center gap-3">
                 <Avatar src={user?.avatar} name={user?.name} size="w-9 h-9" text="text-sm" />
                 <div>
@@ -382,35 +419,123 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
                   <p className="text-xs text-stone-400">{user?.designation?.trim() || "EroSocial Member"}</p>
                 </div>
               </div>
-              <textarea value={caption} onChange={(e) => setCaption(e.target.value)}
-                placeholder="What are you thinking? Share it..."
-                rows={4}
-                className="w-full px-4 py-3 text-sm border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-300 resize-none transition"
-              />
-              {imagePreview && (
-                <div className="relative rounded-xl overflow-hidden">
-                  <img src={imagePreview} alt="preview" className="w-full object-cover max-h-56 rounded-xl" />
-                  <button onClick={() => { setImage(null); setImagePreview(null); }}
-                    className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80">
-                    <X size={14} />
+              <button onClick={closeModal}
+                className="w-8 h-8 rounded-full border border-stone-200 bg-stone-50 flex items-center justify-center text-stone-400 hover:bg-stone-100 transition">
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="flex">
+
+              {/* ── LEFT: Media Preview ── */}
+              <div className="w-[48%] bg-stone-50 border-r border-stone-100 flex flex-col items-center justify-center min-h-[300px] gap-4 p-6 relative">
+                {imagePreview ? (
+                  <>
+                    <img src={imagePreview} alt="preview" className="w-full h-[280px] object-cover rounded-xl" />
+                    <button onClick={() => { setImage(null); setImagePreview(null); }}
+                      className="absolute top-3 right-3 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition">
+                      <X size={13} />
+                    </button>
+                  </>
+                ) : videoPreview ? (
+                  <>
+                    <video src={videoPreview} controls className="w-full max-h-[280px] rounded-xl object-cover" />
+                    <button onClick={() => { setVideo(null); setVideoPreview(null); }}
+                      className="absolute top-3 right-3 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition">
+                      <X size={13} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-200 flex items-center justify-center">
+                      <Camera size={24} className="text-stone-400" strokeWidth={1.4} />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-stone-600 mb-0.5">Upload media</p>
+                      <p className="text-xs text-stone-400">Photo or video</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <label className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-stone-200 text-xs font-semibold text-stone-600 cursor-pointer bg-white hover:bg-stone-50 transition">
+                        📷 Image
+                        <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                      </label>
+                      <label className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-stone-200 text-xs font-semibold text-stone-600 cursor-pointer bg-white hover:bg-stone-50 transition">
+                        🎬 Video
+                        <input type="file" accept="video/*" onChange={handleVideoChange} className="hidden" />
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* ── RIGHT: Form ── */}
+              <div className="w-[52%] flex flex-col p-5 gap-4">
+
+                <textarea
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  placeholder="What's on your mind? Share something with your community..."
+                  rows={6}
+                  className="w-full px-4 py-3 text-sm border border-stone-200 rounded-2xl bg-stone-50 outline-none focus:ring-2 focus:ring-amber-300 focus:bg-white resize-none transition leading-relaxed"
+                />
+
+                {/* Location row */}
+                <div className="flex flex-col gap-1.5">
+  <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-1 px-3 py-2.5 bg-stone-50 rounded-xl border border-stone-100">
+      <MapPin size={14} className="text-stone-400 shrink-0" />
+      <input
+        value={location}
+        onChange={(e) => setLocation(e.target.value)}
+        placeholder="Add location..."
+        className="flex-1 text-xs bg-transparent outline-none text-stone-600 placeholder-stone-400"
+      />
+    </div>
+    <button
+      onClick={handleGetLocation}
+      disabled={locationLoading}
+      className="px-3 py-2.5 text-xs font-semibold rounded-xl border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 transition disabled:opacity-50 shrink-0"
+    >
+      {locationLoading ? "..." : "📍 GPS"}
+    </button>
+  </div>
+  {location && (
+    <p className="text-xs text-amber-600 px-1 truncate">📍 {location}</p>
+  )}
+</div>
+
+                {/* Change media buttons (shown after upload) */}
+                {(imagePreview || videoPreview) && (
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 cursor-pointer hover:text-amber-700 transition">
+                      <Camera size={13} /> Change Image
+                      <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                    </label>
+                    <span className="text-stone-200">|</span>
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 cursor-pointer hover:text-amber-700 transition">
+                      🎬 Change Video
+                      <input type="file" accept="video/*" onChange={handleVideoChange} className="hidden" />
+                    </label>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex gap-2 mt-auto pt-2">
+                  <button
+                    onClick={closeModal}
+                    className="flex-1 py-2.5 text-sm border border-stone-200 rounded-full text-stone-500 hover:bg-stone-50 transition font-medium">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreatePost}
+                    disabled={creating}
+                    className="flex-[2] py-2.5 text-sm font-semibold text-white rounded-full transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    style={{ background: "linear-gradient(135deg, #c8956c, #b07848)" }}>
+                    <Send size={14} />
+                    {creating ? "Posting..." : "Post Now"}
                   </button>
                 </div>
-              )}
-              <label className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-amber-600 hover:text-amber-700">
-                <Camera size={14} /> Add Image
-                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-              </label>
-            </div>
-            <div className="flex gap-3 px-5 pb-5">
-              <button onClick={closeModal}
-                className="flex-1 py-2.5 text-sm border border-stone-200 rounded-full text-stone-500 hover:bg-stone-50 transition">
-                Cancel
-              </button>
-              <button onClick={handleCreatePost} disabled={creating}
-                className="flex-1 py-2.5 text-sm font-semibold text-white rounded-full transition disabled:opacity-50"
-                style={{ background: "#c8956c" }}>
-                {creating ? "Posting..." : "Post Now 🚀"}
-              </button>
+              </div>
             </div>
           </div>
         </div>

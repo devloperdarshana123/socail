@@ -1,11 +1,15 @@
+
+
+
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
+import SharePostModal from "../components/Sharepostmodal";
 import {
-  Heart, MessageCircle, Trash2, Plus, X, Send, Bookmark
+  Heart, MessageCircle, Trash2, Plus, X, Send, Bookmark, Share2
 } from "lucide-react";
 
 import {
@@ -23,7 +27,8 @@ const Avatar = ({ src, name, size = "w-10 h-10", textSize = "text-sm" }) =>
   src ? (
     <img src={src} alt="avatar" className={`${size} rounded-full object-cover shrink-0`} />
   ) : (
-    <div className={`${size} rounded-full bg-linear-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold ${textSize} shrink-0`}>
+    <div className={`${size} rounded-full flex items-center justify-center text-white font-bold ${textSize} shrink-0`}
+      style={{ background: "linear-gradient(135deg, #c8956c, #a07050)" }}>
       {name?.charAt(0).toUpperCase()}
     </div>
   );
@@ -48,6 +53,7 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
   const [imagePreview, setImagePreview]       = useState(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [postToDelete, setPostToDelete]       = useState(null);
+  const [sharePost, setSharePost]             = useState(null); // post to share
 
   const feedRef    = useRef(null);
   const loadingRef = useRef(false);
@@ -149,13 +155,6 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
     setPostToDelete(null);
   };
 
-  // Admin-only suspend functionality moved to separate admin app
-  // const handleSuspend = async (postId) => {
-  //   const result = await dispatch(suspendPost(postId));
-  //   if (suspendPost.fulfilled.match(result)) toast.success("Post suspended!");
-  //   else toast.error("Suspend failed!");
-  // };
-
   const handleFollow = async (userId) => {
     const isPending = pendingRequests.includes(userId);
     const result = await dispatch(toggleFollowRequest({ userId, isPending }));
@@ -188,17 +187,21 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
 
               {/* Post Header */}
               <div className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <Avatar src={post.author?.avatar} name={post.author?.name} />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{post.author?.name}</p>
-                    <p className="text-xs text-gray-500 truncate">{post.author?.designation?.trim() || "EroSocial Member"}</p>
-                  </div>
-                </div>
+               <div
+  className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+  onClick={() => navigate(`/user/${post.author?._id}`)}
+>
+  <Avatar src={post.author?.avatar} name={post.author?.name} />
+  <div className="min-w-0">
+    <p className="text-sm font-semibold text-gray-800 truncate hover:underline">{post.author?.name}</p>
+    <p className="text-xs text-gray-500 truncate">{post.author?.designation?.trim() || "EroSocial Member"}</p>
+  </div>
+</div>
                 <div className="flex items-center gap-1 shrink-0">
                   {post.author?._id !== user?._id && (
                     <button onClick={() => handleMessage(post.author?._id)}
-                      className="p-1.5 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition">
+                      title="Send Message"
+                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition">
                       <Send size={15} />
                     </button>
                   )}
@@ -211,10 +214,17 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
                 </div>
               </div>
 
+              {/* Post Image */}
               {post.image && (
                 <img src={post.image} alt="post" className="w-full object-cover" style={{ maxHeight: "500px" }} />
               )}
 
+              {/* Post Video */}
+              {post.video && !post.image && (
+                <video src={post.video} controls className="w-full object-cover" style={{ maxHeight: "500px" }} />
+              )}
+
+              {/* Actions */}
               <div className="px-4 pt-3 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button onClick={() => handleLike(post._id)}
@@ -226,6 +236,13 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
                     className="flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-indigo-500 transition">
                     <MessageCircle size={20} />
                     {post.comments?.length || 0}
+                  </button>
+                  {/* ── SHARE BUTTON ── */}
+                  <button
+                    onClick={() => setSharePost(post)}
+                    title="Share Post"
+                    className="flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-green-500 transition">
+                    <Share2 size={20} />
                   </button>
                 </div>
                 <button onClick={() => handleSave(post._id)}
@@ -303,8 +320,8 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
                     ) : (
                       <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                         style={{
-                          background: ["#f0e8df","#fde8e8","#e8f5e9","#ede7f6","#fff8e1"][i % 5],
-                          color:      ["#6b3f2a","#c0392b","#2e7d32","#6a1b9a","#f57f17"][i % 5],
+                          background: "linear-gradient(135deg, #c8956c, #a07050)",
+                          color: "#ffffff",
                         }}>
                         {s.name?.charAt(0).toUpperCase()}
                       </div>
@@ -316,7 +333,8 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => handleMessage(s._id)}
-                      className="p-1 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 transition">
+                      title="Send Message"
+                      className="p-1 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition">
                       <Send size={13} />
                     </button>
                     <button onClick={() => handleFollow(s._id)}
@@ -387,6 +405,14 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* SHARE POST MODAL */}
+      {sharePost && (
+        <SharePostModal
+          post={sharePost}
+          onClose={() => setSharePost(null)}
+        />
       )}
 
       <DeleteConfirmModal

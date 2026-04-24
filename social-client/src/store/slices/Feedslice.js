@@ -63,11 +63,12 @@ export const fetchSuggestions = createAsyncThunk(
 // ── Create Post ───────────────────────────────────────────
 export const createPost = createAsyncThunk(
   "feed/createPost",
-  async ({ caption, image }, { rejectWithValue }) => {
+  async ({ caption, image, video }, { rejectWithValue }) => {
     try {
       const formData = new FormData();
       if (caption) formData.append("caption", caption);
-      if (image)   formData.append("image", image);
+      if (image)   formData.append("media", image);
+      if (video)   formData.append("media", video); 
       const { data } = await api.post("/posts", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });

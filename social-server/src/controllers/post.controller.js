@@ -32,6 +32,7 @@ let videoUrl = "";
       author: req.user._id,
       caption,
       image: imageUrl,
+      video: videoUrl,
       tags: tags ? tags.split(",").map((t) => t.trim()) : [],
     });
 

@@ -7,6 +7,7 @@ import { useDispatch } from "react-redux";
 import { fetchTotalUnread } from "./store/slices/Messageslice";
 import { Toaster } from 'sonner';
 import Navbar from "./components/Navbar";
+import GlobalCreatePostModal from "./components/GlobalCreatePostModal";
 
 // Pages
 import Login from "./pages/Login";
@@ -72,6 +73,9 @@ export default function App() {
               </Routes>
             </div>
           </div>
+          {showCreatePost && (
+      <GlobalCreatePostModal onClose={() => setShowCreatePost(false)} />
+    )}
         </div>
       ) : (
         <Routes>
