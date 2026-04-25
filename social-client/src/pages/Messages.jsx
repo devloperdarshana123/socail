@@ -531,10 +531,10 @@ socket.emit("typing:start", { conversationId: activeConversation._id });
             <div className="flex flex-col items-center justify-center h-full py-20 text-center px-6">
               <MessageCircle size={36} className="text-gray-200 mb-3" />
               <p className="text-sm font-medium text-gray-500">
-                {followingList.length === 0 ? "Kisi ko follow karo pehle" : "Koi nahi mila"}
+         {followingList.length === 0 ? "Follow someone first" : "No results found"}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                {followingList.length === 0 ? "Jis ko follow karoge woh yahan dikhenge" : ""}
+ {followingList.length === 0 ? "People you follow will appear here" : ""}
               </p>
               {followingList.length === 0 && (
                 <button
@@ -611,8 +611,8 @@ socket.emit("typing:start", { conversationId: activeConversation._id });
             <div className="w-20 h-20 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4">
               <MessageCircle size={36} className="text-indigo-300" />
             </div>
-            <p className="text-base font-semibold text-gray-700 mb-1">Conversation select karo</p>
-            <p className="text-sm text-gray-400">Left side se kisi ka naam click karo</p>
+          <p className="text-base font-semibold text-gray-700 mb-1">Select a conversation</p>
+<p className="text-sm text-gray-400">Click on a name from the left panel</p>
           </div>
         ) : (
           <>

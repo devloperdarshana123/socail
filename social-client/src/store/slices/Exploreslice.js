@@ -28,6 +28,19 @@ export const fetchSuggestedUsers = createAsyncThunk(
   }
 );
 
+// ── Delete Explore Post ───────────────────────────────────
+export const deleteTrendingPost = createAsyncThunk(
+  "explore/deleteTrendingPost",
+  async (postId, { rejectWithValue }) => {
+    try {
+      await api.delete(`/posts/${postId}`);
+      return postId;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Delete failed!");
+    }
+  }
+);
+
 // ── Search Users & Posts ──────────────────────────────────
 export const searchAll = createAsyncThunk(
   "explore/searchAll",
@@ -186,6 +199,14 @@ const exploreSlice = createSlice({
       .addCase(searchAll.fulfilled, (state, action) => { state.searching = false; state.searchResults = action.payload; })
       .addCase(searchAll.rejected,  (state, action) => { state.searching = false; state.error = action.payload; });
 
+
+      // deleteTrendingPost
+builder
+  .addCase(deleteTrendingPost.fulfilled, (state, action) => {
+    state.trendingPosts = state.trendingPosts.filter(
+      (p) => p._id !== action.payload
+    );
+  });
     // likeTrendingPost
     builder
       .addCase(likeTrendingPost.fulfilled, (state, action) => {
