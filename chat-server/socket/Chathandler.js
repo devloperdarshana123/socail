@@ -173,9 +173,18 @@ module.exports = (io, socket) => {
 if (!newMsg.sender) {
   newMsg.sender = { _id: userId, name: "Unknown", avatar: null };
 }
-      await Conversation.findByIdAndUpdate(conversationId, {
-        lastMessage: newMsg._id,
-      });
+      const conv = await Conversation.findById(conversationId);
+
+const unreadUpdate = { lastMessage: newMsg._id };
+conv.participants.forEach((participantId) => {
+  const pid = participantId.toString();
+  if (pid !== userId) {
+    const current = conv.unreadCount?.get(pid) || 0;
+    unreadUpdate[`unreadCount.${pid}`] = current + 1;
+  }
+});
+
+await Conversation.findByIdAndUpdate(conversationId, unreadUpdate);
 
       console.log(`💬 Message in ${conversationId} from ${userId}`);
 

@@ -111,11 +111,6 @@ useEffect(() => {
   return () => document.removeEventListener("mousedown", handleClickOutside);
 }, []);
 
-useEffect(() => {
-  if (Notification.permission === "default") {
-    Notification.requestPermission();
-  }
-}, []);
 
 useEffect(() => {
   if (!user?._id) return;
@@ -127,26 +122,10 @@ useEffect(() => {
   const onUserOffline = (uid) => dispatch(userWentOffline(uid));
   const onConvUpdated = (payload) => dispatch(updateConversationUnread(payload));
 
-  // const onNewMessage = (data) => {
-  //   console.log("📨 Received:", data);
-  //   if (data?.message) dispatch(appendMessage(data.message));
-  // };
-// ✅ Badlo
-const onNewMessage = (data) => {
+ const onNewMessage = (data) => {
   console.log("📨 Received:", data);
   if (!data?.message) return;
-
   dispatch(appendMessage(data.message));
-
-  const isOwnMessage = data.message.sender?._id === user?._id;
-  if (!isOwnMessage && document.hidden) {
-    if (Notification.permission === "granted") {
-      new Notification(data.message.sender?.name || "New Message", {
-        body: data.message.text || "📷 Photo",
-        icon: data.message.sender?.avatar || "/logo.png",
-      });
-    }
-  }
 };
   const onMsgDeleted = (data) => {
     if (data?.messageId) dispatch(removeMessage({ messageId: data.messageId }));
