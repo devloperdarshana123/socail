@@ -56,6 +56,7 @@ const [locationLoading, setLocationLoading] = useState(false);
   const loadingRef = useRef(false);
   const hasNextRef = useRef(false);
   const pageRef    = useRef(1);
+  const scrollRestored = useRef(false);
 
   useEffect(() => { loadingRef.current = loading; }, [loading]);
   useEffect(() => { hasNextRef.current = hasNext; }, [hasNext]);
@@ -70,6 +71,19 @@ const [locationLoading, setLocationLoading] = useState(false);
     dispatch(fetchSentFollowRequests());
   }, [dispatch]);
 
+useEffect(() => {
+  if (loading || posts.length === 0 || scrollRestored.current) return;
+  const saved = sessionStorage.getItem("marketplace_scroll");
+  if (!saved) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo(0, parseInt(saved, 10));
+      scrollRestored.current = true;
+      sessionStorage.removeItem("marketplace_scroll");
+    });
+  });
+}, [loading, posts.length]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("createPost") === "true") {
@@ -78,15 +92,15 @@ const [locationLoading, setLocationLoading] = useState(false);
     }
   }, []);
 
-  useEffect(() => {
-    const el = feedRef.current;
-    if (!el) return;
+useEffect(() => {
     const onScroll = () => {
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200 && hasNextRef.current && !loadingRef.current)
+      sessionStorage.setItem("marketplace_scroll", window.scrollY.toString());
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 200
+          && hasNextRef.current && !loadingRef.current)
         dispatch(fetchFeed({ page: pageRef.current + 1 }));
     };
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
   }, [dispatch]);
 
   const closeModal = () => {

@@ -1,10 +1,9 @@
 
-
-
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import CommentSection from"../components/CommentSectionV2";
 import toast from "react-hot-toast";
 import DeleteConfirmModal from "../components/DeleteConfirmModal";
 import SharePostModal from "../components/Sharepostmodal";
@@ -262,31 +261,12 @@ export default function Feed({ showCreatePost, setShowCreatePost }) {
                 </div>
               )}
 
-              {showComments[post._id] && (
-                <div className="px-4 pb-3 space-y-2 border-t border-gray-50 mt-2 pt-2">
-                  {post.comments?.slice(-3).map((c, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <Avatar src={c.user?.avatar} name={c.user?.name} size="w-6 h-6" textSize="text-xs" />
-                      <div>
-                        <span className="text-xs font-semibold text-gray-800 mr-1">{c.user?.name}</span>
-                        <span className="text-xs text-gray-600">{c.text}</span>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex gap-2 mt-2">
-                    <input type="text"
-                      value={commentInputs[post._id] || ""}
-                      onChange={(e) => setCommentInputs((prev) => ({ ...prev, [post._id]: e.target.value }))}
-                      onKeyDown={(e) => e.key === "Enter" && handleComment(post._id)}
-                      placeholder="Write a comment..."
-                      className="flex-1 text-xs px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    <button onClick={() => handleComment(post._id)}
-                      className="text-xs text-indigo-600 font-medium hover:text-indigo-700 px-2">
-                      Post
-                    </button>
-                  </div>
-                </div>
-              )}
+{showComments[post._id] && (
+  <div style={{background: "red", padding: "10px"}}>
+    <p>TEST</p>
+    <CommentSection post={post} />
+  </div>
+)}
 
               <p className="px-4 pb-3 text-xs text-gray-400">
                 {new Date(post.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}

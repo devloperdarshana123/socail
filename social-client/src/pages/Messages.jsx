@@ -587,7 +587,7 @@ socket.emit("typing:start", { conversationId: activeConversation._id });
 
         {!activeConversation ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-            <div className="w-20 h-20 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4">
+            <div className="w-20 h-20 rounded-2xl  flex items-center justify-center mb-4">
               <MessageCircle size={36} className="text-indigo-300" />
             </div>
           <p className="text-base font-semibold text-gray-700 mb-1">Select a conversation</p>

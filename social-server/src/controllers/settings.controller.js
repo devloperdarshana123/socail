@@ -1,3 +1,4 @@
+
 // import SocialUser from "../models/User.model.js";
 // import Post from "../models/Post.model.js";
 // import cloudinary from "../config/cloudinary.js";
@@ -5,7 +6,8 @@
 // // ── Update Profile ────────────────────────────────────────────────────────────
 // export const updateProfile = async (req, res) => {
 //   try {
-//     const { name, email, designation, bio, country, state, businessCategory,  interests  } = req.body;
+//     // ✅ city add kiya — pehle missing tha (ReferenceError deta tha)
+//     const { name, email, designation, bio, city, country, state, businessCategory, interests } = req.body;
 
 //     if (!name?.trim() || !email?.trim()) {
 //       return res.status(400).json({ message: "Name and email are mandatory!" });
@@ -18,16 +20,16 @@
 
 //     const user = await SocialUser.findByIdAndUpdate(
 //       req.user._id,
-//       { 
-//   name, email, 
-//   designation: designation?.trim() ?? "", 
-//   bio: bio?.trim() ?? "",
-//      "location.city": city ?? "",       
-//   "location.country": country ?? "",
-//   "location.state": state ?? "",
-//   businessCategory: businessCategory ?? "other",
-//   interests: interests ?? [],          // ← add
-// },
+//       {
+//         name, email,
+//         designation: designation?.trim() ?? "",
+//         bio: bio?.trim() ?? "",
+//         "location.city":    city    ?? "",
+//         "location.country": country ?? "",
+//         "location.state":   state   ?? "",
+//         businessCategory: businessCategory ?? "other",
+//         interests: interests ?? [],
+//       },
 //       { new: true, runValidators: true }
 //     ).select("-password");
 
@@ -67,12 +69,12 @@
 // // ── Deactivate Account ────────────────────────────────────────────────────────
 // export const deactivateAccount = async (req, res) => {
 //   try {
-//    await Post.deleteMany({ author: req.user._id });
-// await SocialUser.updateMany(
-//   { $or: [{ followers: req.user._id }, { following: req.user._id }] },
-//   { $pull: { followers: req.user._id, following: req.user._id } }
-// );
-// await SocialUser.findByIdAndDelete(req.user._id);
+//     await Post.deleteMany({ author: req.user._id });
+//     await SocialUser.updateMany(
+//       { $or: [{ followers: req.user._id }, { following: req.user._id }] },
+//       { $pull: { followers: req.user._id, following: req.user._id } }
+//     );
+//     await SocialUser.findByIdAndDelete(req.user._id);
 
 //     res.json({ message: "Account deactivated!" });
 //   } catch (err) {
@@ -97,13 +99,13 @@
 //       folder: "erosocial/avatars",
 //     });
 
-//     const updatedUser = await SocialUser.findByIdAndUpdate(  // ← updatedUser
+//     const updatedUser = await SocialUser.findByIdAndUpdate(
 //       req.user._id,
 //       { avatar: result.secure_url },
 //       { new: true }
 //     ).select("-password");
 
-//     res.json({ message: "Avatar updated!", user: updatedUser });  // ← updatedUser
+//     res.json({ message: "Avatar updated!", user: updatedUser });
 //   } catch (err) {
 //     res.status(500).json({ message: "Server error!", error: err.message });
 //   }
@@ -124,8 +126,7 @@
 //   }
 // };
 
-
-// // settings.controller.js ke end mein add karo
+// // ── Upload Cover Photo ────────────────────────────────────────────────────────
 // export const uploadCoverPhoto = async (req, res) => {
 //   try {
 //     if (!req.file) return res.status(400).json({ message: "Image required!" });
@@ -160,7 +161,6 @@ import cloudinary from "../config/cloudinary.js";
 // ── Update Profile ────────────────────────────────────────────────────────────
 export const updateProfile = async (req, res) => {
   try {
-    // ✅ city add kiya — pehle missing tha (ReferenceError deta tha)
     const { name, email, designation, bio, city, country, state, businessCategory, interests } = req.body;
 
     if (!name?.trim() || !email?.trim()) {
@@ -193,7 +193,7 @@ export const updateProfile = async (req, res) => {
   }
 };
 
-// ── Change Password ───────────────────────────────────────────────────────────
+// ── Change Password (normal users) ───────────────────────────────────────────
 export const changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
@@ -215,6 +215,37 @@ export const changePassword = async (req, res) => {
     await user.save();
 
     res.json({ message: "Password changed!" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error!", error: err.message });
+  }
+};
+
+// ── Set Password (Google users — pehli baar set karna) ───────────────────────
+export const setPassword = async (req, res) => {
+  try {
+    const { newPassword, confirmPassword } = req.body;
+
+    if (!newPassword || !confirmPassword) {
+      return res.status(400).json({ message: "Both fields are mandatory!" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Min 6 characters!" });
+    }
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match!" });
+    }
+
+    const user = await SocialUser.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: "User not found!" });
+
+    if (user.password) {
+      return res.status(400).json({ message: "Password already set. Use change password instead!" });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: "Password set successfully!" });
   } catch (err) {
     res.status(500).json({ message: "Server error!", error: err.message });
   }

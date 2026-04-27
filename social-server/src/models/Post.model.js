@@ -13,13 +13,22 @@ const postSchema = new mongoose.Schema(
     tags:    [{ type: String }],
     likes:   [{ type: mongoose.Schema.Types.ObjectId, ref: "SocialUser" }],
     savedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "SocialUser" }],
-    comments: [
+   comments: [
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "SocialUser" },
+    text: { type: String, required: true },
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "SocialUser" }], // ✅ comment like
+    replies: [                                                              // ✅ nested replies
       {
         user: { type: mongoose.Schema.Types.ObjectId, ref: "SocialUser" },
         text: { type: String, required: true },
+        likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "SocialUser" }],
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    createdAt: { type: Date, default: Date.now },
+  },
+],
     views:         { type: Number, default: 0 },
     isSuspended:   { type: Boolean, default: false },
     suspendedBy:   { type: mongoose.Schema.Types.ObjectId, ref: "SocialUser", default: null },

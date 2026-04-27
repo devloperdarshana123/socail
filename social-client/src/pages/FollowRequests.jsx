@@ -105,7 +105,7 @@ export default function FollowRequests() {
           </div>
         ) : requests.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-2xl border border-gray-100">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "#eef2f7" }}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4">
               <UserPlus size={28} style={{ color: "#1e3a5f" }} />
             </div>
             <p className="text-base font-semibold text-gray-700 mb-1">No pending requests</p>

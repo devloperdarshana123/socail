@@ -125,6 +125,7 @@ export const getExplore = async (req, res) => {
         $project: {
           caption: 1,
           image: 1,
+          video: 1,
           tags: 1,
           likes: 1,
           likesCount: 1,
@@ -309,6 +310,86 @@ export const deleteComment = async (req, res) => {
     return res.status(200).json({ success: true, message: "Comment deleted successfully!" });
   } catch (error) {
     console.error("Delete comment error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error!" });
+  }
+};
+
+
+
+// ── Like / Unlike Comment ─────────────────────────────────────────────────────
+export const likeComment = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found!" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found!" });
+
+    const alreadyLiked = comment.likes.includes(req.user._id);
+    if (alreadyLiked) {
+      comment.likes = comment.likes.filter((id) => id.toString() !== req.user._id.toString());
+    } else {
+      comment.likes.push(req.user._id);
+    }
+
+    await post.save();
+    return res.status(200).json({ success: true, isLiked: !alreadyLiked, likes: comment.likes.length });
+  } catch (err) {
+    console.error("likeComment error:", err);
+    return res.status(500).json({ success: false, message: "Internal server error!" });
+  }
+};
+
+// ── Reply to Comment ──────────────────────────────────────────────────────────
+export const replyToComment = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ success: false, message: "Reply cannot be empty!" });
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found!" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found!" });
+
+    comment.replies.push({ user: req.user._id, text, likes: [] });
+    await post.save();
+    await post.populate("comments.replies.user", "name avatar designation");
+
+    const reply = comment.replies[comment.replies.length - 1];
+    return res.status(201).json({ success: true, reply });
+  } catch (err) {
+    console.error("replyToComment error:", err);
+    return res.status(500).json({ success: false, message: "Internal server error!" });
+  }
+};
+
+// ── Like / Unlike Reply ───────────────────────────────────────────────────────
+export const likeReply = async (req, res) => {
+  try {
+    const { postId, commentId, replyId } = req.params;
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found!" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found!" });
+
+    const reply = comment.replies.id(replyId);
+    if (!reply) return res.status(404).json({ success: false, message: "Reply not found!" });
+
+    const alreadyLiked = reply.likes.includes(req.user._id);
+    if (alreadyLiked) {
+      reply.likes = reply.likes.filter((id) => id.toString() !== req.user._id.toString());
+    } else {
+      reply.likes.push(req.user._id);
+    }
+
+    await post.save();
+    return res.status(200).json({ success: true, isLiked: !alreadyLiked, likes: reply.likes.length });
+  } catch (err) {
+    console.error("likeReply error:", err);
     return res.status(500).json({ success: false, message: "Internal server error!" });
   }
 };

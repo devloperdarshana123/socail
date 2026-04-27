@@ -581,8 +581,10 @@ export default function Explore() {
       </div>
 
       {/* RIGHT SIDEBAR */}
-      <div className="hidden xl:block w-64 shrink-0">
-        <div className="space-y-4">
+      {/* <div className="hidden xl:block w-64 shrink-0">
+        <div className="space-y-4"> */}
+<div className="hidden xl:block w-80 shrink-0">
+  <div className="sticky top-20 space-y-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <p className="text-sm font-semibold text-gray-500 mb-4">Suggestions For You</p>
             <div className="space-y-3">

@@ -26,6 +26,7 @@ const formatUser = (user) => ({
   interests: user.interests,
   businessCategory: user.businessCategory,
   isSuspended: user.isSuspended,
+  googleId: user.googleId, 
 });
 
 // ── Register ─────────────────────────────────────────────────────────────────

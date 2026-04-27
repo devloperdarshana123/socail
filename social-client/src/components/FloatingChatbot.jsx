@@ -1,6 +1,4 @@
 
-
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Send, X, Mic, MicOff, RotateCcw, Trash2 } from "lucide-react";

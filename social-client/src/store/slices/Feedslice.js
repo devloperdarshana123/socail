@@ -66,7 +66,7 @@ export const createPost = createAsyncThunk(
   async ({ caption, image, video }, { rejectWithValue }) => {
     try {
       const formData = new FormData();
-      if (caption) formData.append("caption", caption);
+      if (caption) formData.append("caption", caption);``
       if (image)   formData.append("media", image);
       if (video)   formData.append("media", video); 
       const { data } = await api.post("/posts", formData, {
