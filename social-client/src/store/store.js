@@ -6,7 +6,7 @@ import exploreReducer  from "./slices/Exploreslice";
 import profileReducer  from "./slices/Profileslice";
 import savedReducer    from "./slices/Savedslice";
 import followReducer   from "./slices/Followslice";
-
+import notificationReducer from "./slices/Notificationslice";
 import messagesReducer from "./slices/Messageslice";
 import StoryReducer  from "./slices/storySlice";
 
@@ -19,6 +19,7 @@ const store = configureStore({
     profile:  profileReducer,
     saved:    savedReducer,
     follow:   followReducer,
+    notifications: notificationReducer,
     messages: messagesReducer, 
     story:StoryReducer
   },

@@ -241,25 +241,56 @@ export default function UserProfile() {
       {posts.length > 0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)",
           gap:4, marginBottom:12 }}>
-          {posts.map((post) => (
-            <div key={post._id} onClick={() => setSelectedPost(post)}
-              style={{ aspectRatio:"1/1", borderRadius:8, overflow:"hidden",
-                background:"#f5f5f4", cursor:"pointer", position:"relative" }}
-              onMouseEnter={(e) => { const o = e.currentTarget.querySelector(".ov"); if(o) o.style.opacity=1; }}
-              onMouseLeave={(e) => { const o = e.currentTarget.querySelector(".ov"); if(o) o.style.opacity=0; }}>
-              {post.image ? (
-                <img src={post.image} alt="post"
-                  style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-              ) : (
-                <div style={{ width:"100%", height:"100%", display:"flex",
-                  alignItems:"center", justifyContent:"center", padding:8 }}>
-                  <p style={{ fontSize:10, color:"#9ca3af", textAlign:"center",
-                    overflow:"hidden", display:"-webkit-box",
-                    WebkitLineClamp:4, WebkitBoxOrient:"vertical" }}>
-                    {post.caption}
-                  </p>
-                </div>
-              )}
+         {posts.map((post) => (
+  <div key={post._id} onClick={() => setSelectedPost(post)}
+    style={{ aspectRatio:"1/1", borderRadius:8, overflow:"hidden",
+      background:"#f5f5f4", cursor:"pointer", position:"relative" }}
+    onMouseEnter={(e) => {
+      const o = e.currentTarget.querySelector(".ov");
+      const p = e.currentTarget.querySelector(".play-btn");
+      if(o) o.style.opacity=1;
+      if(p) p.style.opacity=0;
+    }}
+    onMouseLeave={(e) => {
+      const o = e.currentTarget.querySelector(".ov");
+      const p = e.currentTarget.querySelector(".play-btn");
+      if(o) o.style.opacity=0;
+      if(p) p.style.opacity=1;
+    }}>
+             {post.image ? (
+  <img src={post.image} alt="post"
+    style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+) : post.video ? (
+  <>
+  <video src={post.video}
+      style={{ width:"100%", height:"100%", objectFit:"cover" }}
+      muted preload="metadata"
+    />
+    <div className="play-btn" style={{
+      position:"absolute", inset:0,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      transition:"opacity 0.2s",
+    }}>
+      <div style={{ width:44, height:44, borderRadius:"50%",
+        background:"rgba(255,255,255,0.88)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        boxShadow:"0 2px 16px rgba(0,0,0,0.35)",
+        fontSize:16, paddingLeft:3, color:"#1c1917" }}>
+        ▶
+      </div>
+    </div>
+    
+  </>
+) : (
+  <div style={{ width:"100%", height:"100%", display:"flex",
+    alignItems:"center", justifyContent:"center", padding:8 }}>
+    <p style={{ fontSize:10, color:"#9ca3af", textAlign:"center",
+      overflow:"hidden", display:"-webkit-box",
+      WebkitLineClamp:4, WebkitBoxOrient:"vertical" }}>
+      {post.caption}
+    </p>
+  </div>
+)}
               <div className="ov" style={{ position:"absolute", inset:0,
                 background:"rgba(0,0,0,0.45)", opacity:0, transition:"opacity 0.2s",
                 display:"flex", alignItems:"center", justifyContent:"center",
@@ -293,10 +324,14 @@ export default function UserProfile() {
               <p style={{ fontSize:12, color:"#78716c", margin:0 }}>{shownPost.caption}</p>
             )}
           </div>
-          {shownPost.image && (
-            <img src={shownPost.image} alt="post"
-              style={{ width:"100%", maxHeight:360, objectFit:"cover" }} />
-          )}
+        {shownPost.image && (
+  <img src={shownPost.image} alt="post"
+    style={{ width:"100%", maxHeight:360, objectFit:"cover" }} />
+)}
+{shownPost.video && (
+  <video src={shownPost.video} controls
+    style={{ width:"100%", maxHeight:360, objectFit:"cover", background:"#000" }} />
+)}
           <div style={{ display:"flex", gap:8, padding:"14px 20px" }}>
             <button onClick={() => setSelectedPost(null)} style={{
               padding:"8px 20px", borderRadius:8, fontSize:13, fontWeight:600,

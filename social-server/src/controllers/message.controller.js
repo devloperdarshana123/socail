@@ -69,33 +69,39 @@ export const getFollowingForMessages = async (req, res) => {
     );
 
     // Following users with conversations
-    const followingList = (currentUser.following || []).map((followedUser) => {
-      const existingConv = conversations.find((conv) =>
-        conv.participants.some((p) => p._id.toString() === followedUser._id.toString())
-      );
-      return {
-        user: followedUser,
-        conversation: existingConv || null,
-        myUnread: existingConv
-          ? existingConv.unreadCount?.get(req.user._id.toString()) || 0
-          : 0,
-      };
-    });
+   const followingList = (currentUser.following || []).map((followedUser) => {
+  const existingConv = conversations.find((conv) =>
+    conv.participants.some((p) => p._id.toString() === followedUser._id.toString())
+  );
+  return {
+    user: followedUser,
+    conversation: existingConv || null,
+    myUnread: existingConv
+      ? existingConv.unreadCount?.get(req.user._id.toString()) || 0
+      : 0,
+  };
+}); 
+
+// Aur neeche alreadyAddedIds mein conversation wale bhi track karo:
+
 
     // Ab conversation wale users jo following mein nahi hain unhe bhi add karo
-    conversations.forEach((conv) => {
-      const otherUser = conv.participants.find(
-        (p) => p._id.toString() !== req.user._id.toString()
-      );
-      if (!otherUser) return;
-      if (!followingIds.has(otherUser._id.toString())) {
-        followingList.push({
-          user: otherUser,
-          conversation: conv,
-          myUnread: conv.unreadCount?.get(req.user._id.toString()) || 0,
-        });
-      }
+const alreadyAddedIds = new Set(followingList.map((f) => f.user._id.toString())); // ✅
+
+conversations.forEach((conv) => {
+  const otherUser = conv.participants.find(
+    (p) => p._id.toString() !== req.user._id.toString()
+  );
+  if (!otherUser) return;
+  if (!alreadyAddedIds.has(otherUser._id.toString())) { // ✅ already added check
+    followingList.push({
+      user: otherUser,
+      conversation: conv,
+      myUnread: conv.unreadCount?.get(req.user._id.toString()) || 0,
     });
+    alreadyAddedIds.add(otherUser._id.toString());
+  }
+});
 
     // Latest conversation wale pehle dikhao
     followingList.sort((a, b) => {

@@ -1,22 +1,20 @@
-
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Search, X, User, Settings, Menu } from "lucide-react";
+import { LogOut, Search, X, User, Settings, Menu, Bell } from "lucide-react";
 import EroviansLogo from "../assets/seller_logo.png";
-import axios from "axios";
-import { fetchTotalUnread, incrementUnread } from "../store/slices/Messageslice"; // ✅ incrementUnread add kiya
-import { fetchFollowRequests } from "../store/slices/Followslice";
-import { chatSocket as socket } from "../services/socket";
+import { fetchTotalUnread, incrementUnread } from "../store/slices/Messageslice";
+import { fetchFollowRequests, clearRequests } from "../store/slices/Followslice";
+import { chatSocket, socialSocket } from "../services/socket";
+import api from "../services/api";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:9001";
 
 export default function Navbar({ onSearch, onCreatePost }) {
   const { user, logout } = useAuth();
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const dispatch  = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const dispatch = useDispatch();
 
   const totalUnread    = useSelector((state) => state.messages.totalUnread);
   const followRequests = useSelector((state) => state.follow.requests);
@@ -29,40 +27,65 @@ export default function Navbar({ onSearch, onCreatePost }) {
   const [searchResults,  setSearchResults]  = useState([]);
   const [searchLoading,  setSearchLoading]  = useState(false);
   const [showResults,    setShowResults]    = useState(false);
+  const [notifCount,     setNotifCount]     = useState(0);
+  const [notifs,         setNotifs]         = useState([]);
+  const [showNotifs,     setShowNotifs]     = useState(false);
 
   const dropdownRef   = useRef(null);
   const searchRef     = useRef(null);
   const debounceTimer = useRef(null);
+  const locationRef   = useRef(location.pathname);
 
-  // ✅ locationRef — stale closure se bachne ke liye
-  const locationRef = useRef(location.pathname);
   useEffect(() => {
     locationRef.current = location.pathname;
   }, [location.pathname]);
 
-  // ── Fetch counts + socket listeners ──────────────────────────────────────
+  // Reset follow request badge when visiting that page
+  useEffect(() => {
+    if (location.pathname === "/follow-requests") {
+      dispatch(clearRequests());
+      dispatch(fetchFollowRequests());
+    }
+  }, [location.pathname]);
+
+  // Fetch counts + socket listeners
   useEffect(() => {
     dispatch(fetchTotalUnread());
     dispatch(fetchFollowRequests());
 
-    // ✅ Naya message aane pe badge instantly update karo
+    const fetchUnreadNotifs = async () => {
+      try {
+        const res = await api.get("/notifications");
+        const unread = res.data.notifications.filter((n) => !n.isRead);
+        setNotifs(unread);
+        setNotifCount(unread.length);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchUnreadNotifs();
+
     const handleNewMessage = () => {
       if (locationRef.current !== "/messages") {
         dispatch(incrementUnread());
       }
     };
 
-    // Naya follow request aane pe badge update karo
     const handleNewFollowRequest = () => {
       dispatch(fetchFollowRequests());
     };
 
-    socket.on("newMessage", handleNewMessage);
-    socket.on("follow_request_received", handleNewFollowRequest);
+    chatSocket.on("newMessage", handleNewMessage);
+    chatSocket.on("new_notification", (data) => {
+      setNotifCount((prev) => prev + 1);
+      setNotifs((prev) => [{ ...data, time: new Date() }, ...prev].slice(0, 20));
+    });
+    socialSocket.on("follow_request_received", handleNewFollowRequest);
 
     return () => {
-socket.off("newMessage", handleNewMessage);
-      socket.off("follow_request_received", handleNewFollowRequest);
+      chatSocket.off("newMessage", handleNewMessage);
+      chatSocket.off("new_notification");
+      socialSocket.off("follow_request_received", handleNewFollowRequest);
     };
   }, [dispatch]);
 
@@ -71,9 +94,9 @@ socket.off("newMessage", handleNewMessage);
       if (dropdownRef.current && !dropdownRef.current.contains(e.target))
         setDropdownOpen(false);
       if (!e.target.closest("nav"))
-  setMobileMenuOpen(false);
-      if (searchRef.current && !searchRef.current.contains(e.target))
-        setShowResults(false);
+        setMobileMenuOpen(false);
+      if (!e.target.closest(".notif-wrapper"))
+        setShowNotifs(false);
       setSearchOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -84,10 +107,7 @@ socket.off("newMessage", handleNewMessage);
     if (!q.trim()) { setSearchResults([]); setShowResults(false); return; }
     setSearchLoading(true);
     try {
-      const token = localStorage.getItem("erosocial_token");
-      const res = await axios.get(`${BASE_URL}/api/follow/search?q=${encodeURIComponent(q)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get(`/api/follow/search?q=${encodeURIComponent(q)}`);
       setSearchResults(res.data.users || []);
       setShowResults(true);
     } catch {
@@ -106,7 +126,8 @@ socket.off("newMessage", handleNewMessage);
   };
 
   const clearSearch = () => {
-    setSearchQuery(""); setSearchResults([]);
+    setSearchQuery("");
+    setSearchResults([]);
     setShowResults(false);
     if (onSearch) onSearch("");
   };
@@ -117,18 +138,18 @@ socket.off("newMessage", handleNewMessage);
   };
 
   const handleUserClick = (userId) => {
-    setShowResults(false); setSearchQuery("");
+    setShowResults(false);
+    setSearchQuery("");
     navigate(`/user/${userId}`);
   };
 
   const handleLogout = () => { setDropdownOpen(false); logout(); };
 
-  // Nav links with dynamic badge counts
   const NAV_LINKS = [
     { label: "Feed",     path: "/" },
     { label: "Explore",  path: "/explore" },
     { label: "Messages", path: "/messages",        badge: totalUnread },
-    { label: "Requests", path: "/follow-requests", badge: requestCount },
+    { label: "Requests", path: "/follow-requests", badge: requestCount, onClickExtra: () => dispatch(clearRequests()) },
     { label: "Saved",    path: "/saved" },
   ];
 
@@ -142,31 +163,80 @@ socket.off("newMessage", handleNewMessage);
       </div>
     );
 
+  // ── Notification Dropdown ────────────────────────────────────────────────
+  const NotifDropdown = () => (
+    <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl shadow-xl border border-gray-100 bg-white overflow-hidden z-9999"
+      style={{ top: "100%" }}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <p className="text-sm font-bold text-gray-800">Notifications</p>
+        <button onClick={() => setShowNotifs(false)} className="text-gray-400 hover:text-gray-600">
+          <X size={14} />
+        </button>
+      </div>
+      {notifs.length === 0 ? (
+        <div className="py-8 text-center text-sm text-gray-400">No notifications yet</div>
+      ) : (
+        <div className="max-h-80 overflow-y-auto">
+          {notifs.map((n, i) => (
+            <div key={i}
+              className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition border-b border-gray-50 last:border-0">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                style={{
+                  background: n.type === "comment" ? "#f0f4ff"
+                    : n.type === "reply" ? "#f0fdf4"
+                    : "#fff0f0",
+                }}>
+                <span className="text-sm">
+                  {n.type === "comment" ? "💬" : n.type === "reply" ? "↩️" : "❤️"}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-700">
+                  <span className="font-semibold">{n.fromName || n.sender?.name || "Someone"}</span>{" "}
+                  {n.type === "like"         && "liked your post"}
+                  {n.type === "comment"      && "commented on your post"}
+                  {n.type === "reply"        && "replied to your comment"}
+                  {n.type === "comment_like" && "liked your comment"}
+                  {n.type === "reply_like"   && "liked your reply"}
+                </p>
+                {n.text && (
+                  <p className="text-[10px] text-gray-400 mt-0.5 truncate">"{n.text}"</p>
+                )}
+                <p className="text-[10px] text-gray-300 mt-0.5">just now</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <nav className="sticky top-0 z-9999 w-full bg-white border-b border-gray-200">
 
       {/* ── MAIN ROW ── */}
-<div className="w-full px-3 sm:px-4 py-2.5 flex items-center justify-between relative">
+      <div className="w-full px-3 sm:px-4 py-2.5 flex items-center justify-between relative">
 
-  {/* LEFT: Hamburger */}
-  <button className="lg:hidden relative p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
-    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-    <Menu size={18} />
-    {(totalUnread > 0 || requestCount > 0) && (
-      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
-    )}
-  </button>
+        {/* LEFT: Hamburger (mobile only) */}
+        <button
+          className="lg:hidden relative p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          <Menu size={18} />
+          {(totalUnread > 0 || requestCount > 0) && (
+            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+          )}
+        </button>
 
-  {/* CENTER: Logo */}
-  <div className="lg:hidden absolute left-1/2 -translate-x-1/2 cursor-pointer" onClick={() => navigate("/")}>
-    <img src={EroviansLogo} alt="Erovians" className="h-8 w-auto object-contain" />
-  </div>
+        {/* CENTER: Logo (mobile) */}
+        <div className="lg:hidden absolute left-1/2 -translate-x-1/2 cursor-pointer" onClick={() => navigate("/")}>
+          <img src={EroviansLogo} alt="Erovians" className="h-8 w-auto object-contain" />
+        </div>
 
-  {/* Desktop Logo */}
-  <div className="hidden lg:flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => navigate("/")}>
-    <img src={EroviansLogo} alt="Erovians" className="h-10 w-auto object-contain" />
-    <div className="w-px h-6 bg-gray-200" />
-  </div>
+        {/* Desktop Logo */}
+        <div className="hidden lg:flex items-center gap-2 shrink-0 cursor-pointer" onClick={() => navigate("/")}>
+          <img src={EroviansLogo} alt="Erovians" className="h-10 w-auto object-contain" />
+          <div className="w-px h-6 bg-gray-200" />
+        </div>
 
         {/* Desktop Search */}
         <div className="hidden md:block flex-1 max-w-xs lg:max-w-sm xl:max-w-md relative" ref={searchRef}>
@@ -192,7 +262,6 @@ socket.off("newMessage", handleNewMessage);
             </button>
           </form>
 
-          {/* Search Dropdown */}
           {showResults && (
             <div className="absolute left-0 right-0 mt-1.5 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 bg-white"
               style={{ top: "100%" }}>
@@ -240,12 +309,13 @@ socket.off("newMessage", handleNewMessage);
           )}
         </div>
 
-        {/* Desktop Nav Links with Badges */}
+        {/* Desktop Nav Links */}
         <div className="hidden lg:flex items-center gap-0.5 ml-1">
-          {NAV_LINKS.map(({ label, path, badge }) => {
+          {NAV_LINKS.map(({ label, path, badge, onClickExtra }) => {
             const active = location.pathname === path;
             return (
-              <button key={path} onClick={() => navigate(path)}
+              <button key={path}
+                onClick={() => { navigate(path); onClickExtra?.(); }}
                 className="relative px-3 py-1.5 text-sm rounded-lg transition hover:bg-stone-100 whitespace-nowrap"
                 style={{
                   color: active ? "#1e3a5f" : "#6b7280",
@@ -254,7 +324,7 @@ socket.off("newMessage", handleNewMessage);
                 }}>
                 {label}
                 {badge > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  <span className="absolute -top-1 -right-1 min-w-4.5 h-4.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
                     {badge > 99 ? "99+" : badge}
                   </span>
                 )}
@@ -263,19 +333,42 @@ socket.off("newMessage", handleNewMessage);
           })}
         </div>
 
-        {/* Spacer */}
         <div className="flex-1" />
 
+        {/* + Post button */}
         <button
           onClick={onCreatePost}
           className="hidden sm:flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-full transition hover:opacity-90 shrink-0"
-          style={{ background: "#1e3a5f" }}
-        >
+          style={{ background: "#1e3a5f" }}>
           + Post
         </button>
 
+        {/* ── BELL ICON ── */}
+        <div className="relative notif-wrapper">
+          <button
+            onClick={async () => {
+              setShowNotifs(true);
+              setNotifCount(0);
+              if (notifCount > 0) {
+                try {
+                  await api.put("/notifications/read-all", {});
+                } catch (err) { console.error(err); }
+              }
+            }}
+            className="relative p-2 rounded-full hover:bg-gray-100 transition text-gray-500">
+            <Bell size={20} />
+            {notifCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {notifCount > 9 ? "9+" : notifCount}
+              </span>
+            )}
+          </button>
+          {showNotifs && <NotifDropdown />}
+        </div>
+
         {/* Mobile Search Icon */}
-        <button className="md:hidden p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
+        <button
+          className="md:hidden p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
           onClick={() => setSearchOpen(!searchOpen)}>
           <Search size={18} />
         </button>
@@ -396,15 +489,15 @@ socket.off("newMessage", handleNewMessage);
         </div>
       )}
 
-      {/* ── MOBILE NAV MENU with Badges ── */}
+      {/* ── MOBILE NAV MENU ── */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-gray-100 px-3 py-2 bg-white">
           <div className="flex flex-col gap-0.5">
-            {NAV_LINKS.map(({ label, path, badge }) => {
+            {NAV_LINKS.map(({ label, path, badge, onClickExtra }) => {
               const active = location.pathname === path;
               return (
                 <button key={path}
-                  onClick={() => { navigate(path); setMobileMenuOpen(false); }}
+                  onClick={() => { navigate(path); setMobileMenuOpen(false); onClickExtra?.(); }}
                   className="w-full flex items-center justify-between px-4 py-2.5 text-sm rounded-xl transition hover:bg-stone-50"
                   style={{
                     color: active ? "#1e3a5f" : "#374151",
@@ -413,7 +506,7 @@ socket.off("newMessage", handleNewMessage);
                   }}>
                   <span>{label}</span>
                   {badge > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5">
+                    <span className="inline-flex items-center justify-center min-w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5">
                       {badge > 99 ? "99+" : badge}
                     </span>
                   )}

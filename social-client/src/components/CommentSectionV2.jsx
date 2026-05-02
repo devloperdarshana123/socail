@@ -1,8 +1,56 @@
-import { useState } from "react";
+
+
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { Heart, Reply, ChevronDown, ChevronUp } from "lucide-react";
+import { Heart, Reply, ChevronDown, ChevronUp, Smile, Trash2, X } from "lucide-react";
 import api from "../services/api";
 import toast from "react-hot-toast";
+
+// ── Common Emojis ─────────────────────────────────────────────────────────────
+const EMOJIS = [
+  "😂","❤️","🔥","👏","😍","🙏","😭","💯","🤣","😊",
+  "✨","🥰","😎","🤩","💪","🙌","😅","👍","💥","🎉",
+  "😢","😱","🤔","😏","💀","🫶","😤","🥹","😋","🤯",
+  "👀","💬","🌟","🫠","😇","🤗","💫","🥳","😬","🙈",
+];
+
+// ── Emoji Picker ──────────────────────────────────────────────────────────────
+function EmojiPicker({ onSelect, onClose }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="absolute bottom-10 left-0 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl p-2 w-64"
+    >
+      <div className="flex items-center justify-between mb-1 px-1">
+        <span className="text-xs font-semibold text-gray-500">Emojis</span>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <X size={12} />
+        </button>
+      </div>
+      <div className="grid grid-cols-10 gap-0.5">
+        {EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            onClick={() => { onSelect(emoji); onClose(); }}
+            className="text-lg hover:bg-gray-100 rounded-lg p-0.5 transition leading-none"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 const Avatar = ({ src, name, size = "w-7 h-7", textSize = "text-xs" }) =>
@@ -30,22 +78,84 @@ const timeAgo = (date) => {
   return `${d}d`;
 };
 
-// ── Normalize: purane comments mein likes/replies nahi hote — crash rokne ke liye ──
 const normalize = (c) => ({
   ...c,
   likes:   Array.isArray(c.likes)   ? c.likes   : [],
   replies: Array.isArray(c.replies) ? c.replies : [],
 });
 
-// ── Compare likes (MongoDB ObjectId ya string dono handle karta hai) ──────────
 const isLikedBy = (arr = [], uid) =>
   arr.some((id) => id?.toString() === uid?.toString());
 
+// ── Comment Input Box (reusable) ──────────────────────────────────────────────
+function CommentInput({ value, onChange, onSubmit, onKeyDown, placeholder, submitting, avatarSrc, avatarName, autoFocus = false }) {
+  const [showEmoji, setShowEmoji] = useState(false);
+  const inputRef = useRef(null);
+
+  const insertEmoji = (emoji) => {
+    const input = inputRef.current;
+    if (!input) { onChange(value + emoji); return; }
+    const start = input.selectionStart;
+    const end   = input.selectionEnd;
+    const newVal = value.slice(0, start) + emoji + value.slice(end);
+    onChange(newVal);
+    setTimeout(() => input.setSelectionRange(start + emoji.length, start + emoji.length), 0);
+  };
+
+  return (
+    <div className="flex items-center gap-2 pt-1 relative">
+      {avatarSrc !== undefined && (
+        <Avatar src={avatarSrc} name={avatarName} size="w-7 h-7" />
+      )}
+      <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-1.5 relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSubmit?.();
+            onKeyDown?.(e);
+          }}
+          placeholder={placeholder || "Add a comment..."}
+          className="flex-1 text-xs bg-transparent outline-none text-gray-700 placeholder-gray-400"
+          autoFocus={autoFocus}
+        />
+
+        {/* Emoji button */}
+        <button
+          type="button"
+          onClick={() => setShowEmoji((p) => !p)}
+          className="text-gray-400 hover:text-yellow-500 transition shrink-0"
+        >
+          <Smile size={14} />
+        </button>
+
+        {/* Post button */}
+        <button
+          onClick={onSubmit}
+          disabled={submitting || !value.trim()}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-40 transition shrink-0"
+        >
+          {submitting ? "..." : "Post"}
+        </button>
+
+        {/* Emoji Picker */}
+        {showEmoji && (
+          <EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmoji(false)} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Single Reply ──────────────────────────────────────────────────────────────
-function ReplyItem({ reply, postId, commentId, currentUserId }) {
-  const safeReply                         = normalize(reply);
-  const [liked, setLiked]                 = useState(isLikedBy(safeReply.likes, currentUserId));
-  const [likeCount, setLikeCount]         = useState(safeReply.likes.length);
+function ReplyItem({ reply, postId, commentId, currentUserId, onDelete }) {
+  const safeReply               = normalize(reply);
+  const [liked, setLiked]       = useState(isLikedBy(safeReply.likes, currentUserId));
+  const [likeCount, setLikeCount] = useState(safeReply.likes.length);
+
+  const isOwner = safeReply.user?._id?.toString() === currentUserId?.toString();
 
   const handleLike = async () => {
     try {
@@ -58,7 +168,7 @@ function ReplyItem({ reply, postId, commentId, currentUserId }) {
   };
 
   return (
-    <div className="flex items-start gap-2 mt-2 ml-9">
+    <div className="flex items-start gap-2 mt-2 ml-9 group">
       <Avatar src={safeReply.user?.avatar} name={safeReply.user?.name} size="w-6 h-6" textSize="text-[10px]" />
       <div className="flex-1 min-w-0">
         <div className="bg-gray-50 rounded-2xl px-3 py-2 inline-block max-w-full">
@@ -67,6 +177,8 @@ function ReplyItem({ reply, postId, commentId, currentUserId }) {
         </div>
         <div className="flex items-center gap-3 mt-1 ml-1">
           <span className="text-[10px] text-gray-400">{timeAgo(safeReply.createdAt)}</span>
+
+          {/* Like reply */}
           <button
             onClick={handleLike}
             className={`flex items-center gap-1 text-[10px] font-semibold transition ${
@@ -77,6 +189,16 @@ function ReplyItem({ reply, postId, commentId, currentUserId }) {
             {liked ? "Liked" : "Like"}
             {likeCount > 0 && <span className="ml-0.5">· {likeCount}</span>}
           </button>
+
+          {/* Delete reply (only owner) */}
+          {isOwner && (
+            <button
+              onClick={() => onDelete(safeReply._id)}
+              className="text-[10px] text-gray-300 hover:text-red-400 transition "
+            >
+              <Trash2 size={10} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -84,7 +206,7 @@ function ReplyItem({ reply, postId, commentId, currentUserId }) {
 }
 
 // ── Single Comment ────────────────────────────────────────────────────────────
-function CommentItem({ comment, postId, currentUserId }) {
+function CommentItem({ comment, postId, currentUserId, onDelete }) {
   const safe                                = normalize(comment);
   const [liked, setLiked]                   = useState(isLikedBy(safe.likes, currentUserId));
   const [likeCount, setLikeCount]           = useState(safe.likes.length);
@@ -93,6 +215,8 @@ function CommentItem({ comment, postId, currentUserId }) {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [localReplies, setLocalReplies]     = useState(safe.replies);
   const [submitting, setSubmitting]         = useState(false);
+
+  const isOwner = safe.user?._id?.toString() === currentUserId?.toString();
 
   const handleLike = async () => {
     try {
@@ -123,8 +247,18 @@ function CommentItem({ comment, postId, currentUserId }) {
     }
   };
 
+  const handleDeleteReply = async (replyId) => {
+    try {
+      await api.delete(`/posts/${postId}/comments/${safe._id}/replies/${replyId}`);
+      setLocalReplies((p) => p.filter((r) => r._id !== replyId));
+      toast.success("Reply deleted!");
+    } catch {
+      toast.error("Delete failed!");
+    }
+  };
+
   return (
-    <div>
+    <div className="group">
       <div className="flex items-start gap-2">
         <Avatar src={safe.user?.avatar} name={safe.user?.name} />
         <div className="flex-1 min-w-0">
@@ -135,11 +269,11 @@ function CommentItem({ comment, postId, currentUserId }) {
             <span className="text-xs text-gray-700 break-words">{safe.text}</span>
           </div>
 
-          {/* Meta row — hamesha visible, koi hover nahi */}
+          {/* Meta row */}
           <div className="flex items-center gap-3 mt-1 ml-1 flex-wrap">
             <span className="text-[10px] text-gray-400">{timeAgo(safe.createdAt)}</span>
 
-            {/* Like button */}
+            {/* Like comment */}
             <button
               onClick={handleLike}
               className={`flex items-center gap-1 text-[10px] font-semibold transition ${
@@ -174,27 +308,29 @@ function CommentItem({ comment, postId, currentUserId }) {
                   : `${localReplies.length} ${localReplies.length === 1 ? "reply" : "replies"}`}
               </button>
             )}
+
+            {/* Delete comment (only owner) */}
+            {isOwner && (
+              <button
+                onClick={() => onDelete(safe._id)}
+                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-red-400 transition"
+              >
+                <Trash2 size={10} />
+              </button>
+            )}
           </div>
 
           {/* Reply input */}
           {showReplyInput && (
-            <div className="flex items-center gap-2 mt-2 ml-1">
-              <input
-                type="text"
+            <div className="mt-2 ml-1">
+              <CommentInput
                 value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleReplySubmit()}
+                onChange={setReplyText}
+                onSubmit={handleReplySubmit}
                 placeholder={`Reply to ${safe.user?.name || "user"}...`}
-                className="flex-1 text-xs px-3 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                submitting={submitting}
                 autoFocus
               />
-              <button
-                onClick={handleReplySubmit}
-                disabled={submitting || !replyText.trim()}
-                className="text-xs text-indigo-600 font-semibold hover:text-indigo-700 disabled:opacity-40 transition"
-              >
-                {submitting ? "..." : "Post"}
-              </button>
             </div>
           )}
 
@@ -207,6 +343,7 @@ function CommentItem({ comment, postId, currentUserId }) {
                 postId={postId}
                 commentId={safe._id}
                 currentUserId={currentUserId}
+                onDelete={handleDeleteReply}
               />
             ))}
         </div>
@@ -218,8 +355,7 @@ function CommentItem({ comment, postId, currentUserId }) {
 // ── Main CommentSection ───────────────────────────────────────────────────────
 export default function CommentSection({ post, onCommentAdded }) {
   const { user } = useAuth();
-  const [commentText, setCommentText] = useState("");
-  // ✅ normalize: purane comments mein likes/replies undefined hote hain
+  const [commentText, setCommentText]   = useState("");
   const [localComments, setLocalComments] = useState(
     (post.comments || []).map(normalize)
   );
@@ -243,10 +379,20 @@ export default function CommentSection({ post, onCommentAdded }) {
     }
   };
 
+  const handleDeleteComment = async (commentId) => {
+    try {
+      await api.delete(`/posts/${post._id}/comment/${commentId}`);
+      setLocalComments((prev) => prev.filter((c) => c._id !== commentId));
+      toast.success("Comment deleted!");
+    } catch {
+      toast.error("Delete failed!");
+    }
+  };
+
   return (
     <div className="px-4 pb-3 border-t border-gray-50 mt-2 pt-3 space-y-3">
 
-      {/* Show more comments */}
+      {/* Show more */}
       {localComments.length > 3 && !showAll && (
         <button
           onClick={() => setShowAll(true)}
@@ -263,30 +409,20 @@ export default function CommentSection({ post, onCommentAdded }) {
           comment={comment}
           postId={post._id}
           currentUserId={user._id}
+          onDelete={handleDeleteComment}
         />
       ))}
 
       {/* Add comment */}
-      <div className="flex items-center gap-2 pt-1">
-        <Avatar src={user?.avatar} name={user?.name} size="w-7 h-7" />
-        <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-1.5">
-          <input
-            type="text"
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddComment()}
-            placeholder="Add a comment..."
-            className="flex-1 text-xs bg-transparent outline-none text-gray-700 placeholder-gray-400"
-          />
-          <button
-            onClick={handleAddComment}
-            disabled={submitting || !commentText.trim()}
-            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 disabled:opacity-40 transition shrink-0"
-          >
-            {submitting ? "..." : "Post"}
-          </button>
-        </div>
-      </div>
+      <CommentInput
+        value={commentText}
+        onChange={setCommentText}
+        onSubmit={handleAddComment}
+        placeholder="Add a comment..."
+        submitting={submitting}
+        avatarSrc={user?.avatar}
+        avatarName={user?.name}
+      />
     </div>
   );
 }

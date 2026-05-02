@@ -16,6 +16,7 @@ import messageRoutes     from "./routes/message.routes.js";
 import storyRoutes from "./routes/story.js";
 import locationRoutes from "./routes/location.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
 
 const app        = express();
 const httpServer = createServer(app);
@@ -43,6 +44,7 @@ app.use("/api/messages",    messageRoutes);
 app.use("/api/marketplace", marketplaceRoutes);
 app.use("/api/stories", storyRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/location", locationRoutes);
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get("/", (_, res) => {

@@ -75,7 +75,11 @@ const followSlice = createSlice({
     loading:         false,
     error:           null,
   },
-  reducers: {},
+  reducers: {
+    clearRequests: (state) => {   // ✅ Yeh add karo
+      state.requests = [];
+    }
+    },
   extraReducers: (builder) => {
 
     // fetchFollowRequests
@@ -109,5 +113,6 @@ const followSlice = createSlice({
       });
   },
 });
+export const { clearRequests } = followSlice.actions; 
 
 export default followSlice.reducer;

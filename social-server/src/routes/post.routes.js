@@ -19,7 +19,7 @@ import {
   getTrendingPosts,
   searchPosts,
   getUserPosts,
-  likeComment, replyToComment, likeReply
+  likeComment, replyToComment, likeReply , deleteReply,
 } from "../controllers/post.controller.js";
 import { protect, superAdminOnly } from "../middleware/auth.middleware.js";
 
@@ -52,6 +52,7 @@ router.delete("/:postId/comment/:commentId", protect, deleteComment);
 router.put("/:postId/comments/:commentId/like", protect, likeComment);
 router.post("/:postId/comments/:commentId/reply", protect, replyToComment);
 router.put("/:postId/comments/:commentId/replies/:replyId/like", protect, likeReply);
+router.delete("/:postId/comments/:commentId/replies/:replyId",         protect, deleteReply); 
 
 // ── Admin Routes ──────────────────────────────────────────────────────────────
 router.put("/:id/suspend",   protect, superAdminOnly, suspendPost);
