@@ -585,6 +585,7 @@ import {
   toggleFollowRequest, fetchFollowRequestCount, fetchSentFollowRequests,
 } from "../store/slices/Exploreslice";
 import robotImg from "../assets/h.png";
+import { motion } from "framer-motion";
 
 const Avatar = ({ src, name, size = "w-10 h-10", text = "text-sm" }) =>
   src ? (
@@ -864,19 +865,25 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
             </button>
           </div>
         ) : (
-          posts.map((post) => {
+          posts.map((post, i) => {
             const isLiked = post.likes?.some(id => id?.toString() === user?._id?.toString());
             const isSaved = savedPostIds.includes(post._id);
             return (
-              <div key={post._id} className="bg-white border border-stone-200 rounded-2xl overflow-hidden mb-3 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between px-4 py-3">
+              <motion.div 
+                key={post._id} 
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: i * 0.1, ease: "easeOut" }}
+                className="bg-white border border-stone-200 rounded-3xl overflow-hidden mb-5 shadow-sm hover:shadow-lg transition-all duration-300"
+              >
+                <div className="flex items-center justify-between px-5 py-4">
                   <div
-                    className="flex items-center gap-3 cursor-pointer"
+                    className="flex items-center gap-3 cursor-pointer group"
                     onClick={() => post.author?._id !== user?._id && navigate(`/user/${post.author?._id}`)}
                   >
                     <Avatar src={post.author?.avatar} name={post.author?.name} />
                     <div>
-                      <p className="text-sm font-semibold text-stone-800 hover:underline">{post.author?.name}</p>
+                      <p className="text-sm font-semibold text-stone-800 group-hover:text-amber-600 transition-colors">{post.author?.name}</p>
                       <p className="text-xs text-stone-400">{post.author?.designation?.trim() || "EroSocial Member"}</p>
                     </div>
                   </div>
@@ -896,11 +903,13 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
                   </div>
                 </div>
 
-                {post.video ? (
-                  <video src={post.video} controls className="w-full object-cover max-h-120" />
-                ) : post.image ? (
-                  <img src={post.image} alt="post" className="w-full object-cover max-h-120" />
-                ) : null}
+                <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.3 }} className="overflow-hidden">
+                  {post.video ? (
+                    <video src={post.video} controls className="w-full object-cover max-h-120" />
+                  ) : post.image ? (
+                    <img src={post.image} alt="post" className="w-full object-cover max-h-120" />
+                  ) : null}
+                </motion.div>
 
                 <div className="flex items-center justify-between px-3 py-2">
                   <div className="flex gap-1">
@@ -932,13 +941,15 @@ export default function Marketplace({ showCreatePost, setShowCreatePost }) {
 
                 {/* ✅ FIXED: CommentSectionV2 — Reply, Like, Emoji sab kaam karega */}
                 {showComments[post._id] && (
-                  <CommentSection post={post} />
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
+                    <CommentSection post={post} />
+                  </motion.div>
                 )}
 
-                <p className="px-4 pb-3 text-xs text-stone-300">
+                <p className="px-5 pb-4 text-[11px] font-medium text-stone-400 uppercase tracking-wide">
                   {new Date(post.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
-              </div>
+              </motion.div>
             );
           })
         )}

@@ -19,6 +19,7 @@ import {
 import { fetchFollowers, fetchFollowing, toggleFollow } from "../store/slices/Profileslice";
 import { uploadAvatar, uploadCoverPhoto } from "../store/slices/settingsSlice";
 import { updateUser as updateUserAction } from "../store/slices/authSlice";
+import { motion } from "framer-motion";
 
 /* ─── Palette ────────────────────────────────────────────────── */
 const C = {
@@ -322,7 +323,13 @@ export default function Profile() {
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 80px" }}>
 
           {/* ── COVER + AVATAR ── */}
-          <div className="section-card anim-in" style={{ marginBottom: 12 }}>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="section-card" 
+            style={{ marginBottom: 12 }}
+          >
 
             {/* Cover */}
             <div style={{ position: "relative", height: "clamp(140px, 25vw, 240px)" }}>
@@ -451,10 +458,15 @@ export default function Profile() {
                 ))}
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* ── MY POSTS ── */}
-          <div className="section-card anim-in">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
+            className="section-card"
+          >
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "14px 20px", borderBottom: `1px solid ${C.border}`,
@@ -556,7 +568,7 @@ export default function Profile() {
               </div>
 
             ) : null}
-          </div>
+          </motion.div>
         </div>
       </div>
 
