@@ -20,7 +20,7 @@ export const fetchUserProfile = createAsyncThunk(
   "profile/fetchUserProfile",
   async (userId, { rejectWithValue }) => {
     try {
-      const { data } = await api.get(`/users/${userId}`);
+      const { data } = await api.get(`/auth/users/${userId}`);
       return data.user || data;
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "User profile load nahi hui!");
@@ -60,10 +60,13 @@ export const fetchFollowers = createAsyncThunk(
   async (userId, { rejectWithValue }) => {
     try {
       const url = userId ? `/follow/${userId}/followers` : "/follow/followers";
+       console.log("fetchFollowers URL:", url); 
       const { data } = await api.get(url);
+       console.log("fetchFollowers response:", data);
       return data.followers || [];
     } catch (err) {
-      return rejectWithValue("Followers load nahi hue!");
+      console.error("fetchFollowers ERROR:", err.response?.data, err.message);
+      return rejectWithValue("Followers Not Loaded!");
     }
   }
 );
@@ -88,16 +91,10 @@ export const fetchFollowing = createAsyncThunk(
 // default          → send follow request
 export const toggleFollow = createAsyncThunk(
   "profile/toggleFollow",
-  async ({ userId, isPending, isUnfollow }, { rejectWithValue }) => {
+  async ({ userId }, { rejectWithValue }) => {
     try {
-      if (isUnfollow) {
-        await api.delete(`/follow/${userId}/unfollow`);
-      } else if (isPending) {
-        await api.delete(`/follow/${userId}/cancel`);
-      } else {
-        await api.post(`/follow/${userId}/send`);
-      }
-      return { userId, isPending, isUnfollow };
+      const { data } = await api.post(`/follow/${userId}/toggle`);
+      return { userId, isFollowing: data.isFollowing };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Follow action failed!");
     }
@@ -155,17 +152,15 @@ const profileSlice = createSlice({
 
     // toggleFollow (send request / cancel / unfollow)
     builder
-      .addCase(toggleFollow.fulfilled, (state, action) => {
-        const { userId, isPending, isUnfollow } = action.payload;
-        if (isUnfollow) {
-          // Remove from following list immediately (optimistic)
-          state.following = state.following.filter((u) => u._id !== userId);
-        } else if (isPending) {
-          state.pendingRequests = state.pendingRequests.filter((id) => id !== userId);
-        } else {
-          state.pendingRequests.push(userId);
-        }
-      });
+     .addCase(toggleFollow.fulfilled, (state, action) => {
+  const { userId, isFollowing } = action.payload;
+  if (isFollowing) {
+    state.pendingRequests.push(userId);
+  } else {
+    state.pendingRequests = state.pendingRequests.filter((id) => id !== userId);
+    state.following = state.following.filter((u) => u._id !== userId);
+  }
+});
   },
 });
 

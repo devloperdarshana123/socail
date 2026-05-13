@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Search, X, User, Settings, Menu, Bell } from "lucide-react";
 import EroviansLogo from "../assets/seller_logo.png";
 import { fetchTotalUnread, incrementUnread } from "../store/slices/Messageslice";
-import { fetchFollowRequests, clearRequests } from "../store/slices/Followslice";
+// Removed follow requests imports
 import { chatSocket, socialSocket } from "../services/socket";
 import api from "../services/api";
 
@@ -17,8 +17,7 @@ export default function Navbar({ onSearch, onCreatePost }) {
   const dispatch = useDispatch();
 
   const totalUnread    = useSelector((state) => state.messages.totalUnread);
-  const followRequests = useSelector((state) => state.follow.requests);
-  const requestCount   = followRequests.length;
+  const requestCount = 0; // Follow requests removed
 
   const [searchQuery,    setSearchQuery]    = useState("");
   const [searchOpen,     setSearchOpen]     = useState(false);
@@ -40,18 +39,11 @@ export default function Navbar({ onSearch, onCreatePost }) {
     locationRef.current = location.pathname;
   }, [location.pathname]);
 
-  // Reset follow request badge when visiting that page
-  useEffect(() => {
-    if (location.pathname === "/follow-requests") {
-      dispatch(clearRequests());
-      dispatch(fetchFollowRequests());
-    }
-  }, [location.pathname]);
+  // Reset removed
 
   // Fetch counts + socket listeners
   useEffect(() => {
     dispatch(fetchTotalUnread());
-    dispatch(fetchFollowRequests());
 
     const fetchUnreadNotifs = async () => {
       try {
@@ -71,21 +63,17 @@ export default function Navbar({ onSearch, onCreatePost }) {
       }
     };
 
-    const handleNewFollowRequest = () => {
-      dispatch(fetchFollowRequests());
-    };
+
 
     chatSocket.on("newMessage", handleNewMessage);
     chatSocket.on("new_notification", (data) => {
       setNotifCount((prev) => prev + 1);
       setNotifs((prev) => [{ ...data, time: new Date() }, ...prev].slice(0, 20));
     });
-    socialSocket.on("follow_request_received", handleNewFollowRequest);
 
     return () => {
       chatSocket.off("newMessage", handleNewMessage);
       chatSocket.off("new_notification");
-      socialSocket.off("follow_request_received", handleNewFollowRequest);
     };
   }, [dispatch]);
 
@@ -107,7 +95,7 @@ export default function Navbar({ onSearch, onCreatePost }) {
     if (!q.trim()) { setSearchResults([]); setShowResults(false); return; }
     setSearchLoading(true);
     try {
-      const res = await api.get(`/api/follow/search?q=${encodeURIComponent(q)}`);
+      const res = await api.get(`/auth/search?q=${encodeURIComponent(q)}`);
       setSearchResults(res.data.users || []);
       setShowResults(true);
     } catch {
@@ -149,13 +137,12 @@ export default function Navbar({ onSearch, onCreatePost }) {
     { label: "Feed",     path: "/" },
     { label: "Explore",  path: "/explore" },
     { label: "Messages", path: "/messages",        badge: totalUnread },
-    { label: "Requests", path: "/follow-requests", badge: requestCount, onClickExtra: () => dispatch(clearRequests()) },
     { label: "Saved",    path: "/saved" },
   ];
 
   const UserAvatar = ({ size = "w-9 h-9", text = "text-sm" }) =>
-    user?.avatar ? (
-      <img src={user.avatar} alt="avatar" className={`${size} rounded-full object-cover shrink-0`} />
+    (user?.avatar?.url || user?.avatar) ? (
+    <img src={user?.avatar?.url || user?.avatar} alt="avatar" className={`${size} rounded-full object-cover shrink-0`} />
     ) : (
       <div className={`${size} ${text} rounded-full flex items-center justify-center font-bold shrink-0`}
         style={{ background: "#f0e8df", color: "#6b3f2a" }}>
@@ -280,8 +267,8 @@ export default function Navbar({ onSearch, onCreatePost }) {
                   {searchResults.map((u) => (
                     <button key={u._id} onClick={() => handleUserClick(u._id)}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left">
-                      {u.avatar ? (
-                        <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                     {(u.avatar?.url || u.avatar) ? (
+  <img src={u.avatar?.url || u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
                       ) : (
                         <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                           style={{ background: "#f0e8df", color: "#6b3f2a" }}>

@@ -12,8 +12,7 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (!user?._id) return;
 
-    // Social socket — userId pass karo
-    socialSocket.auth = { userId: user._id };
+    // Social socket — token ab auth callback se jayega
     socialSocket.connect();
 
     // Chat socket — token already set hai auth callback mein

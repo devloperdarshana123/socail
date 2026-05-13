@@ -20,8 +20,8 @@ export const fetchSuggestedUsers = createAsyncThunk(
   "explore/fetchSuggestedUsers",
   async (_, { rejectWithValue }) => {
     try {
-      const { data } = await api.get("/auth/users/suggestions");
-      return data.users || [];
+     const { data } = await api.get("/follow/suggestions");
+return data.suggestions || [];
     } catch (err) {
       return rejectWithValue("Suggested users load nahi hue!");
     }
@@ -47,8 +47,8 @@ export const searchAll = createAsyncThunk(
   async (query, { rejectWithValue }) => {
     try {
       const [usersRes, postsRes] = await Promise.allSettled([
-        api.get(`/users/search?q=${encodeURIComponent(query)}`),
-        api.get(`/posts/search?q=${encodeURIComponent(query)}`),
+      api.get(`/auth/search?q=${encodeURIComponent(query)}`),
+api.get(`/posts/search?q=${encodeURIComponent(query)}`),
       ]);
       return {
         users: usersRes.status === "fulfilled"
@@ -91,14 +91,10 @@ export const commentTrendingPost = createAsyncThunk(
 // ── Send / Cancel Follow Request ──────────────────────────
 export const toggleFollowRequest = createAsyncThunk(
   "explore/toggleFollowRequest",
-  async ({ userId, isPending }, { rejectWithValue }) => {
+  async ({ userId }, { rejectWithValue }) => {
     try {
-      if (isPending) {
-        await api.delete(`/follow/${userId}/cancel`);
-      } else {
-        await api.post(`/follow/${userId}/send`);
-      }
-      return { userId, isPending };
+      const { data } = await api.post(`/follow/${userId}/toggle`);
+      return { userId, isFollowing: data.isFollowing };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Request failed!");
     }
@@ -230,12 +226,12 @@ builder
     // toggleFollowRequest
     builder
       .addCase(toggleFollowRequest.fulfilled, (state, action) => {
-        const { userId, isPending } = action.payload;
-        if (isPending) {
-          state.pendingRequests = state.pendingRequests.filter((id) => id !== userId);
-        } else {
-          state.pendingRequests.push(userId);
-        }
+        const { userId, isFollowing } = action.payload;
+if (isFollowing) {
+  state.pendingRequests.push(userId);
+} else {
+  state.pendingRequests = state.pendingRequests.filter((id) => id !== userId);
+}
       });
       // fetchSentFollowRequests
 

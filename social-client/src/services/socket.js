@@ -10,10 +10,13 @@ const SOCIAL_URL = import.meta.env.VITE_SERVER?.replace("/api", "")
 const CHAT_URL = import.meta.env.VITE_CHAT_URL 
   || "http://localhost:5001";
 
-// Social socket — userId se connect hota hai
+// Social socket — JWT token se connect hota hai
 export const socialSocket = io(SOCIAL_URL, {
   autoConnect: false,
   withCredentials: true,
+  auth: (cb) => {
+    cb({ token: localStorage.getItem("erosocial_token") || null });
+  },
 });
 
 // Chat socket — JWT token se connect hota hai

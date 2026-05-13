@@ -118,10 +118,11 @@ export default function Profile() {
   }, [dispatch]);
 
   /* ── social modal helpers ── */
-  const openSocialModal = useCallback((tab) => {
-    setActiveTab(tab); setSearchQuery(""); setShowSocialModal(true);
-    dispatch(tab === "followers" ? fetchFollowers() : fetchFollowing());
-  }, [dispatch]);
+const openSocialModal = useCallback((tab) => {
+  console.log("Modal open:", tab); // ← ADD
+  setActiveTab(tab); setSearchQuery(""); setShowSocialModal(true);
+  dispatch(tab === "followers" ? fetchFollowers() : fetchFollowing());
+}, [dispatch]);
 
   const handleTabSwitch = useCallback((tab) => {
     setActiveTab(tab); setSearchQuery("");
@@ -137,7 +138,7 @@ export default function Profile() {
   /* ── handlers ── */
   const handleUnfollow = async (userId) => {
     setUnfollowingId(userId);
-    const res = await dispatch(toggleFollow({ userId, isPending: false, isUnfollow: true }));
+    const res = await dispatch(toggleFollow({ userId }));
     if (toggleFollow.fulfilled.match(res)) {
       toast.success("Unfollowed!");
       dispatch(fetchFollowing()); dispatch(fetchStats());
@@ -334,7 +335,7 @@ export default function Profile() {
             {/* Cover */}
             <div style={{ position: "relative", height: "clamp(140px, 25vw, 240px)" }}>
               {user?.coverPhoto ? (
-                <img src={user.coverPhoto} alt="cover"
+                <img src={user.coverPhoto?.url || user.coverPhoto} alt="cover"
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               ) : (
                 <div style={{
@@ -373,7 +374,7 @@ export default function Profile() {
                   background: C.white, boxShadow: `0 0 0 2px ${C.border}`,
                   position: "relative", marginTop: -44, flexShrink: 0,
                 }}>
-                  <Avatar src={user?.avatar} name={user?.name} size={isMobile ? 64 : 92} />
+                  <Avatar src={user?.avatar?.url || user?.avatar} name={user?.name} size={isMobile ? 64 : 92} />
                   <label style={{
                     position: "absolute", bottom: 2, right: 2,
                     width: 26, height: 26, borderRadius: "50%",
@@ -585,7 +586,7 @@ export default function Profile() {
               padding: "14px 18px", borderBottom: `1px solid ${C.border}`,
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Avatar src={user?.avatar} name={user?.name} size={36} />
+                <Avatar src={user?.avatar?.url || user?.avatar} name={user?.name} size={36} />
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: 0 }}>{user?.name}</p>
                   <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{user?.designation?.trim() || "EroSocial Member"}</p>
@@ -734,7 +735,7 @@ export default function Profile() {
                   padding: "12px 20px", borderBottom: `1px solid ${C.grayLt}`,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <Avatar src={u.avatar} name={u.name} size={42} />
+                    <Avatar src={u.avatar?.url || u.avatar} name={u.name} size={42} />
                     <div>
                       <p style={{ fontSize: 13, fontWeight: 700, color: C.ink, margin: "0 0 1px" }}>{u.name}</p>
                       <p style={{ fontSize: 11, color: C.gray, margin: 0 }}>{u.designation?.trim() || "EroSocial Member"}</p>

@@ -1,287 +1,277 @@
 
 
 import SocialUser from "../models/User.model.js";
+import Notification from "../models/Notification.model.js";
 import { emitToUser } from "../socket.js";
-// ── Send Follow Request ──────────────────────────────────────────────────────
-export const sendFollowRequest = async (req, res) => {
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Follow / Unfollow (Public follow system — no requests)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const toggleFollow = async (req, res) => {
   try {
-    const { userId } = req.params;
     const currentUserId = req.user._id;
+    const { userId }    = req.params;
 
-    if (userId === currentUserId.toString()) {
-      return res.status(400).json({ message: "You cannot follow yourself!" });
+    if (currentUserId.toString() === userId) {
+      return res.status(400).json({ message: "Apne aap ko follow nahi kar sakte" });
     }
 
-    const targetUser = await SocialUser.findById(userId);
-    if (!targetUser) {
-      return res.status(404).json({ message: "User not found!" });
+    const [currentUser, targetUser] = await Promise.all([
+      SocialUser.findById(currentUserId).select("following blockedUsers"),
+      SocialUser.findById(userId).select("followers blockedUsers isDeleted isSuspended"),
+    ]);
+
+    if (!targetUser || targetUser.isDeleted || targetUser.isSuspended) {
+      return res.status(404).json({ message: "User nahi mila" });
     }
 
-    const currentUser = await SocialUser.findById(currentUserId);
-
-    if (currentUser.following.includes(userId)) {
-      return res.status(400).json({ message: "You are already following this user!" });
+    // Block check
+    if (
+      targetUser.blockedUsers?.some((id) => id.toString() === currentUserId.toString()) ||
+      currentUser.blockedUsers?.some((id) => id.toString() === userId)
+    ) {
+      return res.status(403).json({ message: "Follow nahi kar sakte" });
     }
 
-    if (targetUser.followRequests?.includes(currentUserId)) {
-      return res.status(400).json({ message: "Follow request already sent!" });
+    const isFollowing = currentUser.following.some((id) => id.toString() === userId);
+
+    if (isFollowing) {
+      // Unfollow — atomic
+      await Promise.all([
+        SocialUser.findByIdAndUpdate(currentUserId, { $pull: { following: userId } }),
+        SocialUser.findByIdAndUpdate(userId, { $pull: { followers: currentUserId } }),
+      ]);
+
+      return res.json({ message: "Unfollow ho gaya", isFollowing: false });
+    } else {
+      // Follow — atomic
+      await Promise.all([
+        SocialUser.findByIdAndUpdate(currentUserId, { $addToSet: { following: userId } }),
+        SocialUser.findByIdAndUpdate(userId, { $addToSet: { followers: currentUserId } }),
+      ]);
+
+      // Notification
+      const notif = await Notification.createUnique({
+        recipient: userId,
+        sender:    currentUserId,
+        type:      "follow",
+      });
+
+      if (notif) {
+        emitToUser(userId, "notification", notif);
+      }
+
+      return res.json({ message: "Follow ho gaya", isFollowing: true });
     }
-
-    targetUser.followRequests = targetUser.followRequests || [];
-    targetUser.followRequests.push(currentUserId);
-    await targetUser.save();
-    // Chat server ko notify karo
-emitToUser(userId, "follow_request_received", {
-  from: { _id: currentUser._id, name: currentUser.name, avatar: currentUser.avatar }
-});
-
-    res.json({ 
-      success: true, 
-      message: "Follow request sent successfully!",
-      isPending: true 
-    });
   } catch (err) {
-    console.error("sendFollowRequest ERROR:", err);``
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("toggleFollow error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Accept Follow Request ────────────────────────────────────────────────────
-export const acceptFollowRequest = async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Remove Follower (apne followers mein se hatao)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const removeFollower = async (req, res) => {
   try {
-    const { requesterId } = req.params;
     const currentUserId = req.user._id;
+    const { userId }    = req.params;
 
-    const requester = await SocialUser.findById(requesterId);
-    if (!requester) {
-      return res.status(404).json({ message: "User not found!" });
-    }
+    await Promise.all([
+      SocialUser.findByIdAndUpdate(currentUserId, { $pull: { followers: userId } }),
+      SocialUser.findByIdAndUpdate(userId, { $pull: { following: currentUserId } }),
+    ]);
 
-    const currentUser = await SocialUser.findById(currentUserId);
-
-    if (!currentUser.followRequests?.includes(requesterId)) {
-      return res.status(400).json({ message: "No follow request found!" });
-    }
-
-    currentUser.followRequests = currentUser.followRequests.filter(
-      (id) => id.toString() !== requesterId
-    );
-
-    currentUser.followers = currentUser.followers || [];
-    currentUser.followers.push(requesterId);
-
-    requester.following = requester.following || [];
-    requester.following.push(currentUserId);
-
-    await currentUser.save();
-    await requester.save();
-    // Follow accept notification
-emitToUser(requesterId.toString(), "follow_request_accepted", {
-  by: { _id: currentUser._id, name: currentUser.name, avatar: currentUser.avatar }
-});
-
-    res.json({ 
-      success: true, 
-      message: "Follow request accepted!",
-      isFollowing: true 
-    });
+    return res.json({ message: "Follower hata diya" });
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("removeFollower error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Reject Follow Request ────────────────────────────────────────────────────
-export const rejectFollowRequest = async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Block / Unblock
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const toggleBlock = async (req, res) => {
   try {
-    const { requesterId } = req.params;
     const currentUserId = req.user._id;
+    const { userId }    = req.params;
 
-    const currentUser = await SocialUser.findById(currentUserId);
-
-    if (!currentUser.followRequests?.includes(requesterId)) {
-      return res.status(400).json({ message: "No follow request found!" });
+    if (currentUserId.toString() === userId) {
+      return res.status(400).json({ message: "Apne aap ko block nahi kar sakte" });
     }
 
-    currentUser.followRequests = currentUser.followRequests.filter(
-      (id) => id.toString() !== requesterId
-    );
+    const currentUser = await SocialUser.findById(currentUserId).select("blockedUsers");
+    const isBlocked   = currentUser.blockedUsers.some((id) => id.toString() === userId);
 
-    await currentUser.save();
+    if (isBlocked) {
+      await SocialUser.findByIdAndUpdate(currentUserId, { $pull: { blockedUsers: userId } });
+      return res.json({ message: "Unblock ho gaya", isBlocked: false });
+    } else {
+      // Block karte waqt follow bhi hatao dono taraf se
+      await Promise.all([
+        SocialUser.findByIdAndUpdate(currentUserId, {
+          $addToSet: { blockedUsers: userId },
+          $pull:     { following: userId, followers: userId },
+        }),
+        SocialUser.findByIdAndUpdate(userId, {
+          $pull: { following: currentUserId, followers: currentUserId },
+        }),
+      ]);
 
-    res.json({ 
-      success: true, 
-      message: "Follow request rejected!",
-      isRejected: true 
-    });
+      return res.json({ message: "Block ho gaya", isBlocked: true });
+    }
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("toggleBlock error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Unfollow User ────────────────────────────────────────────────────────────
-export const unfollowUser = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const currentUserId = req.user._id;
+// ─────────────────────────────────────────────────────────────────────────────
+// Get Followers List
+// ─────────────────────────────────────────────────────────────────────────────
 
-    if (userId === currentUserId.toString()) {
-      return res.status(400).json({ message: "You cannot unfollow yourself!" });
-    }
-
-    const targetUser = await SocialUser.findById(userId);
-    if (!targetUser) {
-      return res.status(404).json({ message: "User not found!" });
-    }
-
-    const currentUser = await SocialUser.findById(currentUserId);
-
-    if (!currentUser.following.includes(userId)) {
-      return res.status(400).json({ message: "You are not following this user!" });
-    }
-
-    currentUser.following = currentUser.following.filter(
-      (id) => id.toString() !== userId
-    );
-    targetUser.followers = targetUser.followers.filter(
-      (id) => id.toString() !== currentUserId.toString()
-    );
-
-    await currentUser.save();
-    await targetUser.save();
-
-    res.json({ 
-      success: true, 
-      message: "Unfollowed successfully!",
-      isFollowing: false 
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Get Follow Requests (Pending) ────────────────────────────────────────────
-export const getFollowRequests = async (req, res) => {
-  try {
-    const currentUser = await SocialUser.findById(req.user._id)
-      .populate("followRequests", "name avatar role designation followers following");
-
-    res.json({ 
-      success: true, 
-      requests: currentUser.followRequests || [] 
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Get Followers List ───────────────────────────────────────────────────────
 export const getFollowers = async (req, res) => {
   try {
-    const user = await SocialUser.findById(req.params.userId || req.user._id)
-      .populate("followers", "name avatar role designation followers following");
-
-    res.json({ 
-      success: true, 
-      followers: user.followers || [] 
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Get Following List ───────────────────────────────────────────────────────
-export const getFollowing = async (req, res) => {
-  try {
-    const user = await SocialUser.findById(req.params.userId || req.user._id)
-      .populate("following", "name avatar role designation followers following");
-
-    res.json({ 
-      success: true, 
-      following: user.following || [] 
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Cancel Follow Request ─────────────────────────────────────────────────────
-export const cancelFollowRequest = async (req, res) => {
-  try {
     const { userId } = req.params;
-    const currentUserId = req.user._id;
+    const { page = 1, limit = 20 } = req.query;
 
-    const targetUser = await SocialUser.findById(userId);
-    if (!targetUser) {
-      return res.status(404).json({ message: "User not found!" });
-    }
+    console.log("getFollowers userId:", userId); // ← sahi jagah
 
-    if (!targetUser.followRequests?.includes(currentUserId)) {
-      return res.status(400).json({ message: "No pending follow request found!" });
-    }
+    const user = await SocialUser.findById(userId)
+      .select("followers")
+      .populate({
+        path: "followers",
+        select: "name username avatar designation followers",
+        match: { isDeleted: { $ne: true } },
+      });
 
-    targetUser.followRequests = targetUser.followRequests.filter(
-      (id) => id.toString() !== currentUserId.toString()
-    );
+    console.log("DB followers count:", user?.followers?.length); // ← populate ke baad
 
-    await targetUser.save();
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
 
-    res.json({ 
-      success: true, 
-      message: "Follow request cancelled!",
-      isPending: false 
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
+    const start = (parseInt(page) - 1) * parseInt(limit);
+    const paginatedFollowers = user.followers.slice(start, start + parseInt(limit));
 
+    const currentUser  = await SocialUser.findById(req.user._id).select("following");
+    const followingSet = new Set(currentUser.following.map(String));
 
-// ── Get Sent (Pending) Follow Requests ───────────────────────────────────────
-export const getSentFollowRequests = async (req, res) => {
-  try {
-    const currentUserId = req.user._id;
-
-    // Woh users jinke followRequests mein current user ka ID hai
-    const usersWithMyRequest = await SocialUser.find({
-      followRequests: { $in: [currentUserId] }
-    }).select("_id");
-
-    const sentUserIds = usersWithMyRequest.map((u) => u._id.toString());
-
-    res.json({ success: true, sentRequests: sentUserIds });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-
-
-export const searchUsers = async (req, res) => {
-  try {
-    const { q } = req.query;
-    const currentUserId = req.user._id;
-    if (!q?.trim()) return res.json({ success: true, users: [] });
-
-    const users = await SocialUser.find({
-      _id: { $ne: currentUserId },
-      name: { $regex: q.trim(), $options: "i" },
-      isSuspended: false,
-    }).select("_id name avatar designation followers followRequests").limit(8);
-
-    const currentUser = await SocialUser.findById(currentUserId).select("following");
-
-    const usersWithStatus = users.map((u) => ({
-      _id: u._id,
-      name: u.name,
-      avatar: u.avatar,
-      designation: u.designation,
-      followersCount: u.followers.length,
-      isFollowing: currentUser.following.map(String).includes(String(u._id)),
-      isPending: u.followRequests.map(String).includes(String(currentUserId)),
+    const followers = paginatedFollowers.map((f) => ({
+      ...f.toObject(),
+      avatar: f.avatar?.url || f.avatar || "",
+      isFollowing: followingSet.has(f._id.toString()),
+      followersCount: f.followers?.length || 0,
     }));
 
-    res.json({ success: true, users: usersWithStatus });
+    return res.json({ followers, page: parseInt(page) });
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("getFollowers error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Get Following List
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getFollowing = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+
+    const user = await SocialUser.findById(userId)
+      .select("following")
+      .populate({
+        path: "following",
+        select: "name username avatar designation followers",
+        match: { isDeleted: { $ne: true } },
+        // ← options HATAO
+      });
+
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
+
+    // Manual pagination
+    const start = (parseInt(page) - 1) * parseInt(limit);
+    const paginatedFollowing = user.following.slice(start, start + parseInt(limit)); // ← ADD
+
+    const currentUser  = await SocialUser.findById(req.user._id).select("following");
+    const followingSet = new Set(currentUser.following.map(String));
+
+    const following = paginatedFollowing.map((f) => ({ // ← paginatedFollowing use karo
+      ...f.toObject(),
+      avatar: f.avatar?.url || f.avatar || "",
+      isFollowing: followingSet.has(f._id.toString()),
+      followersCount: f.followers?.length || 0,
+    }));
+
+    return res.json({ following, page: parseInt(page) });
+  } catch (err) {
+    console.error("getFollowing error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suggestions — "People you may know"
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getSuggestions = async (req, res) => {
+  try {
+    const currentUserId = req.user._id;
+    const currentUser   = await SocialUser.findById(currentUserId).select("following blockedUsers");
+
+    const excludeIds = [
+      currentUserId,
+      ...currentUser.following,
+      ...currentUser.blockedUsers,
+    ];
+
+    // Following ke following — 2nd degree connections
+    const followingUsers = await SocialUser.find({
+      _id: { $in: currentUser.following },
+    }).select("following");
+
+    const secondDegreeIds = [
+      ...new Set(
+        followingUsers
+          .flatMap((u) => u.following.map(String))
+          .filter((id) => !excludeIds.map(String).includes(id))
+      ),
+    ];
+
+    let suggestions = [];
+
+    if (secondDegreeIds.length >= 5) {
+      // 2nd degree connections prefer karo
+      suggestions = await SocialUser.find({
+        _id:         { $in: secondDegreeIds },
+        isDeleted:   false,
+        isSuspended: false,
+      })
+        .select("name username avatar designation followersCount businessCategory")
+        .limit(20)
+        .lean();
+    }
+
+    // Agar kam hain toh random fill karo
+    if (suggestions.length < 10) {
+      const more = await SocialUser.find({
+        _id:         { $nin: [...excludeIds, ...suggestions.map((s) => s._id)] },
+        isDeleted:   false,
+        isSuspended: false,
+      })
+        .select("name username avatar designation followersCount businessCategory")
+        .limit(20 - suggestions.length)
+        .lean();
+      suggestions = [...suggestions, ...more];
+    }
+
+    return res.json({ suggestions });
+  } catch (err) {
+    console.error("getSuggestions error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };

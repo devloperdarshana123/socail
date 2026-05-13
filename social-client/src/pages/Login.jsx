@@ -64,40 +64,36 @@ const Login = () => {
   };
 
   // ✅ Google Login Handler — signInWithGooglePopup use karo (fixed)
-  const handleGoogleLogin = async () => {
-    setGoogleLoading(true);
-    try {
-      // signInWithGooglePopup: popup try karta hai, blocked hone pe redirect karta hai
-      const result = await signInWithGooglePopup();
+ const handleGoogleLogin = async () => {
+  setGoogleLoading(true);
+  try {
+    const result = await signInWithGooglePopup();
+    if (!result) { setGoogleLoading(false); return; }
 
-      // Agar null mila — ya toh user ne popup band kiya ya redirect chal raha hai
-      if (!result) {
-        // Redirect case: page reload hoga, useEffect handle karega
-        // User-closed case: silently return
-        setGoogleLoading(false);
-        return;
-      }
+    // ✅ idToken ki jagah yeh bhejo — backend yehi expect karta hai
+    const res = await fetch(`${import.meta.env.VITE_SERVER}/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        googleId: result.googleId,
+        email:    result.user.email,
+        name:     result.user.name,
+        avatar:   result.user.picture,
+      }),
+    });
 
-      const { idToken } = result;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Google login failed");
 
-      const res = await fetch(`${import.meta.env.VITE_SERVER}/auth/google`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Google login failed");
-
-      dispatch(setCredentials(data));
-      toast.success("Logged in with Google! 🎉");
-      navigate("/");
-    } catch (err) {
-      toast.error(err.message || "Google login failed");
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
+    dispatch(setCredentials(data));
+    toast.success("Logged in with Google! 🎉");
+    navigate("/");
+  } catch (err) {
+    toast.error(err.message || "Google login failed");
+  } finally {
+    setGoogleLoading(false);
+  }
+};
 
   return (
     <div className="bg-gray-50 min-h-screen">

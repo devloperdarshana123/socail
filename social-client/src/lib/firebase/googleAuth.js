@@ -5,59 +5,31 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 
-// ══════════════════════════════════════════════════════════════════════════════
-// GOOGLE AUTH HELPER
-//
-// Strategy:
-//   1. Popup try karo — fast, no page reload
-//   2. Popup blocked by browser → redirect fallback
-//   3. Page load pe getRedirectResult check karo
-//
-// Yeh file sirf Firebase se idToken nikaalti hai.
-// idToken ko backend pe bhejne ka kaam authSlice.js ka hai.
-// ══════════════════════════════════════════════════════════════════════════════
-
-// ── Sign in with Popup → fallback to Redirect ─────────────────────────────────
-// Returns: { idToken, user: { email, name, picture } }
 // Throws: Error if both popup and redirect fail
 export const signInWithGooglePopup = async () => {
   try {
-    // ── Try popup first ───────────────────────────────────────────────────
     const result = await signInWithPopup(auth, googleProvider);
     const idToken = await result.user.getIdToken();
 
-    console.log("signinwithgogoglepopup me idtoken", idToken, result);
-
     return {
       idToken,
+      // ✅ Yeh add karo
+      googleId: result.user.uid,
       user: {
-        email: result.user.email,
-        name: result.user.displayName,
+        email:   result.user.email,
+        name:    result.user.displayName,
         picture: result.user.photoURL,
       },
     };
   } catch (error) {
-    // ── Popup blocked → fallback to redirect ──────────────────────────────
-    // Firebase error codes for blocked popup:
-    // auth/popup-blocked        → browser ne block kiya
-    // auth/popup-closed-by-user → user ne popup band kiya (don't redirect)
-    // auth/cancelled-popup-request → multiple popups (don't redirect)
     if (error.code === "auth/popup-blocked") {
-      // Redirect — page reload hoga, getRedirectResult page load pe handle karega
       await signInWithRedirect(auth, googleProvider);
-      // Yahan return nahi hota — page reload ho jaata hai
       return null;
     }
-
-    // User ne khud popup band kiya — silently handle karo, error mat throw karo
     if (
       error.code === "auth/popup-closed-by-user" ||
       error.code === "auth/cancelled-popup-request"
-    ) {
-      return null;
-    }
-
-    // Koi aur error — throw karo
+    ) return null;
     throw error;
   }
 };

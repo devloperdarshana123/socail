@@ -2,60 +2,77 @@
 
 import express from "express";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
+
 import {
   createPost,
-  getFeed,
-  getExplore,
   getPost,
-  likePost,
+  getFeed,
+  explorePosts,
+  getUserPosts,
+  deletePost,
+  toggleLike,
+  toggleSave,
+  getSavedPosts,
   addComment,
   deleteComment,
-  savePost,
-  getSavedPosts,
-  deletePost,
+  addReply,
+  toggleCommentLike,
+  searchByTag,
   suspendPost,
-  unsuspendPost,
-  getMyPosts,
-  getTrendingPosts,
-  searchPosts,
-  getUserPosts,
-  likeComment, replyToComment, likeReply , deleteReply,
+    getMyPosts,
 } from "../controllers/post.controller.js";
-import { protect, superAdminOnly } from "../middleware/auth.middleware.js";
+
+import { protect, adminOnly } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage() });   // buffer — Cloudinary ke liye
 
-// ── Special Routes (MUST be before /:id) ─────────────────────────────────────
-router.get("/feed",     protect, getFeed);
-router.get("/explore",  protect, getExplore);
-router.get("/my",       protect, getMyPosts);
-router.get("/user/:userId", protect, getUserPosts);
-router.get("/trending", protect, getTrendingPosts);
-router.get("/search",   protect, searchPosts);
-router.get("/saved",    protect, getSavedPosts);
+const postLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max:      20,
+  message:  { success: false, message: "Too many post requests. Slow down." },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
-// ── Single Post ───────────────────────────────────────────────────────────────
-router.get("/:id", protect, getPost);
+// ─────────────────────────────────────────────────────────────────────────────
+// Special Routes — MUST be before /:postId
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/my",            protect, getMyPosts); 
+router.get("/feed",          protect, getFeed);
+router.get("/explore",       protect, explorePosts);
+router.get("/saved",         protect, getSavedPosts);
+router.get("/search",        protect, searchByTag);           // ?tag=marble
+router.get("/user/:userId",  protect, getUserPosts);
 
-// ── Post CRUD ─────────────────────────────────────────────────────────────────
-router.post("/",          protect, upload.single("media"), createPost);
-router.delete("/:id",     protect, deletePost);
+// ─────────────────────────────────────────────────────────────────────────────
+// Post CRUD
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── Like, Save, Comment ───────────────────────────────────────────────────────
-router.put("/:id/like",                      protect, likePost);
-router.put("/:id/save",                      protect, savePost);
-router.post("/:id/comment",                  protect, addComment);
-router.delete("/:postId/comment/:commentId", protect, deleteComment);
+router.post("/",          protect, postLimiter, upload.array("media", 10), createPost);
+router.get ("/:postId",   protect, getPost);
+router.delete("/:postId", protect, deletePost);
 
-// Comment like/reply routes
-router.put("/:postId/comments/:commentId/like", protect, likeComment);
-router.post("/:postId/comments/:commentId/reply", protect, replyToComment);
-router.put("/:postId/comments/:commentId/replies/:replyId/like", protect, likeReply);
-router.delete("/:postId/comments/:commentId/replies/:replyId",         protect, deleteReply); 
+// ─────────────────────────────────────────────────────────────────────────────
+// Engagement
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── Admin Routes ──────────────────────────────────────────────────────────────
-router.put("/:id/suspend",   protect, superAdminOnly, suspendPost);
-router.put("/:id/unsuspend", protect, superAdminOnly, unsuspendPost);
+router.put("/:postId/like", protect, toggleLike);
+router.put("/:postId/save", protect, toggleSave);
+
+// Comments
+router.post  ("/:postId/comments",                          protect, addComment);
+router.delete("/:postId/comments/:commentId",               protect, deleteComment);
+router.put   ("/:postId/comments/:commentId/like",          protect, toggleCommentLike);
+
+// Replies
+router.post  ("/:postId/comments/:commentId/replies",       protect, addReply);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.put("/:postId/suspend", protect, adminOnly, suspendPost);
 
 export default router;

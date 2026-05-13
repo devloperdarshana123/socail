@@ -1,21 +1,15 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
-
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:9001";
-
-const getToken = () => localStorage.getItem("erosocial_token");
+import api from "../../services/api"
 
 // ── Fetch notifications ──
 export const fetchNotifications = createAsyncThunk(
   "notifications/fetchAll",
   async (_, { rejectWithValue }) => {
     try {
-      const res = await axios.get(`${BASE_URL}/api/notifications`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      return res.data.notifications;
+      const { data } = await api.get("/notifications");
+      return data.notifications;
     } catch (err) {
-      return rejectWithValue(err.message);
+      return rejectWithValue(err.response?.data?.message || "Failed to fetch notifications!");
     }
   }
 );
@@ -25,11 +19,9 @@ export const markAllRead = createAsyncThunk(
   "notifications/markAllRead",
   async (_, { rejectWithValue }) => {
     try {
-      await axios.put(`${BASE_URL}/api/notifications/read-all`, {}, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      await api.put("/notifications/read-all");
     } catch (err) {
-      return rejectWithValue(err.message);
+      return rejectWithValue(err.response?.data?.message || "Failed to mark notifications as read!");
     }
   }
 );

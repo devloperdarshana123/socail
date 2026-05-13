@@ -1,311 +1,480 @@
 
-
-
-import jwt from "jsonwebtoken";
 import SocialUser from "../models/User.model.js";
-import Post from "../models/Post.model.js";
-import { verifyGoogleToken } from "../config/firebase.js"
+import jwt from "jsonwebtoken";
+import { sendEmail } from "../utils/email.js";
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const generateTokens = (userId) => {
+  const accessToken = jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_ACCESS_EXPIRES || "15m" }
+  );
+  const refreshToken = jwt.sign(
+    { id: userId },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRES || "7d" }
+  );
+  return { accessToken, refreshToken };
+};
+
+const setRefreshCookie = (res, token) => {
+  res.cookie("refreshToken", token, {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge:   7 * 24 * 60 * 60 * 1000, // 7 days
   });
 };
 
-// ── ✅ Helper — har jagah ek jaisa user object return hoga ────────────────────
-const formatUser = (user) => ({
-  _id: user._id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  avatar: user.avatar,
-  coverPhoto: user.coverPhoto,
-  bio: user.bio,
-  designation: user.designation,
-  location: user.location,          // { city, state, country, coordinates }
-  interests: user.interests,
-  businessCategory: user.businessCategory,
-  isSuspended: user.isSuspended,
-  googleId: user.googleId, 
+const sanitizeUser = (user) => ({
+  _id:             user._id,
+  name:            user.name,
+  username:        user.username,
+  email:           user.email,
+  avatar:          user.avatar,
+  role:            user.role,
+  isEmailVerified: user.isEmailVerified,
+  designation:     user.designation,
+  bio:             user.bio,
+  businessCategory:user.businessCategory,
 });
 
-// ── Register ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Register
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, username, email, password } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "All fields are required!" });
+    if (!name || !username || !email || !password) {
+      return res.status(400).json({ message: "Saare fields bharo" });
     }
 
-    const existingUser = await SocialUser.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "This email is already registered!" });
-    }
-
-    const user = await SocialUser.create({
-      name,
-      email,
-      password,
-      role: "user",
+    // Duplicate check
+    const existing = await SocialUser.findOne({
+      $or: [
+        { email:    email.toLowerCase().trim() },
+        { username: username.toLowerCase().trim() },
+      ],
     });
 
-    const token = generateToken(user._id);
+    if (existing) {
+      const field = existing.email === email.toLowerCase() ? "Email" : "Username";
+      return res.status(409).json({ message: `${field} pehle se registered hai` });
+    }
 
-    res.status(201).json({ token, user: formatUser(user) }); // ✅
+    const user = await SocialUser.create({ name, username, email, password });
+
+    // OTP bhejo
+    const otp = await user.generateOtp("email_verify");
+    await sendEmail({
+      to:      user.email,
+      subject: "Email verify karo",
+      text:    `Tera OTP hai: ${otp}. 10 minute mein expire ho jayega.`,
+    });
+
+    return res.status(201).json({
+      message: "Account ban gaya! Email pe OTP bheja hai.",
+      userId:  user._id,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
+      return res.status(409).json({ message: `${field} pehle se liya hua hai` });
+    }
+    if (err.name === "ValidationError") {
+      const msg = Object.values(err.errors)[0].message;
+      return res.status(400).json({ message: msg });
+    }
+    console.error("register error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Login ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Verify Email OTP
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const { userId, otp } = req.body;
+    if (!userId || !otp) return res.status(400).json({ message: "userId aur OTP zaroori hai" });
+
+    const user = await SocialUser.findById(userId).select("+otp");
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
+    if (user.isEmailVerified) return res.status(400).json({ message: "Email pehle se verified hai" });
+
+    const result = await user.verifyOtp(otp, "email_verify");
+    if (!result.ok) return res.status(400).json({ message: result.reason });
+
+    user.isEmailVerified = true;
+    await user.save({ validateBeforeSave: false });
+
+    const { accessToken, refreshToken } = generateTokens(user._id);
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+
+    setRefreshCookie(res, refreshToken);
+
+    return res.json({
+      message:     "Email verified!",
+      accessToken,
+      user:        sanitizeUser(user),
+    });
+  } catch (err) {
+    console.error("verifyEmail error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Login
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: "Email aur password do" });
 
-    const user = await SocialUser.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: "Invalid email or password!" });
-    }
+    const user = await SocialUser.findByEmailWithPassword(email);
+    if (!user) return res.status(401).json({ message: "Email ya password galat hai" });
 
-    if (!user.password && user.googleId) {
-      return res.status(401).json({
-        message: "This account uses Google login. Please sign in with Google.",
+    // Suspension check
+    if (user.isSuspended && user.isSuspensionActive) {
+      const until = user.suspendUntil
+        ? `${user.suspendUntil.toLocaleDateString()} tak`
+        : "permanently";
+      return res.status(403).json({
+        message: `Account suspend hai (${until}). Reason: ${user.suspendReason}`,
       });
     }
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid email or password!" });
-    }
+    if (!isMatch) return res.status(401).json({ message: "Email ya password galat hai" });
 
-    if (user.isSuspended) {
+    if (!user.isEmailVerified) {
+      const otp = await user.generateOtp("email_verify");
+      await sendEmail({
+        to:      user.email,
+        subject: "Email verify karo",
+        text:    `Tera OTP: ${otp}`,
+      });
       return res.status(403).json({
-        message: "Your account has been suspended. Please contact the admin.",
+        message: "Email verify nahi hua. Naya OTP bheja gaya.",
+        userId:  user._id,
+        requiresVerification: true,
       });
     }
 
-    const token = generateToken(user._id);
+    const { accessToken, refreshToken } = generateTokens(user._id);
+    user.refreshToken = refreshToken;
+    user.lastSeen     = new Date();
+    await user.save({ validateBeforeSave: false });
 
-    res.json({ token, user: formatUser(user) }); // ✅
+    setRefreshCookie(res, refreshToken);
+
+    return res.json({
+      message:     "Login successful",
+      accessToken,
+      user:        sanitizeUser(user),
+    });
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("login error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Google Auth ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Google OAuth
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const googleAuth = async (req, res) => {
   try {
-    const { idToken } = req.body;
+    const { googleId, email, name, avatar } = req.body;
+    if (!googleId || !email) return res.status(400).json({ message: "Google data incomplete hai" });
 
-    if (!idToken) {
-      return res.status(400).json({ message: "idToken is required" });
+    const user = await SocialUser.findOrCreateGoogleUser({ googleId, email, name, avatar });
+
+    if (user.isSuspended && user.isSuspensionActive) {
+      return res.status(403).json({ message: "Account suspend hai" });
     }
 
-    let googleUser;
+    const { accessToken, refreshToken } = generateTokens(user._id);
+    user.refreshToken = refreshToken;
+    user.lastSeen     = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    setRefreshCookie(res, refreshToken);
+
+    return res.json({
+      message:     "Google login successful",
+      accessToken,
+      user:        sanitizeUser(user),
+    });
+  } catch (err) {
+    console.error("googleAuth error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refresh Token
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const refreshAccessToken = async (req, res) => {
+  try {
+    const token = req.cookies?.refreshToken;
+    if (!token) return res.status(401).json({ message: "Refresh token nahi mila" });
+
+    let decoded;
     try {
-      googleUser = await verifyGoogleToken(idToken);
-    } catch (firebaseError) {
-      return res.status(401).json({ message: firebaseError.message });
+      decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    } catch {
+      return res.status(401).json({ message: "Refresh token invalid ya expire ho gaya" });
     }
 
-    const { googleId, email, name, picture } = googleUser;
-
-    if (!email) {
-      return res.status(400).json({ message: "Google account mein email nahi mili" });
+    const user = await SocialUser.findById(decoded.id).select("+refreshToken");
+    if (!user || user.refreshToken !== token) {
+      return res.status(401).json({ message: "Token mismatch — dobara login karo" });
     }
 
-    let user = await SocialUser.findOne({ email });
+    const { accessToken, refreshToken: newRefresh } = generateTokens(user._id);
+    user.refreshToken = newRefresh;
+    await user.save({ validateBeforeSave: false });
 
+    setRefreshCookie(res, newRefresh);
+
+    return res.json({ accessToken });
+  } catch (err) {
+    console.error("refreshAccessToken error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Logout
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const logout = async (req, res) => {
+  try {
+    const token = req.cookies?.refreshToken;
+
+    if (token) {
+      // DB se refresh token hata do
+      await SocialUser.findOneAndUpdate(
+        { refreshToken: token },
+        { $unset: { refreshToken: 1 } }
+      );
+    }
+
+    res.clearCookie("refreshToken");
+    return res.json({ message: "Logout successful" });
+  } catch (err) {
+    console.error("logout error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Forgot Password
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email do" });
+
+    // Always same response — enumeration prevent karo
+    const user = await SocialUser.findOne({ email: email.toLowerCase(), isDeleted: false });
     if (user) {
-      if (!user.googleId) {
-        user.googleId = googleId;
-        if (!user.avatar && picture) user.avatar = picture;
-        await user.save();
-      }
-
-      if (user.isSuspended) {
-        return res.status(403).json({
-          message: "Your account has been suspended. Please contact the admin.",
-        });
-      }
-    } else {
-      user = await SocialUser.create({
-        name: name || email.split("@")[0],
-        email,
-        googleId,
-        avatar: picture || "",
-        role: "user",
+      const otp = await user.generateOtp("password_reset");
+      await sendEmail({
+        to:      user.email,
+        subject: "Password reset OTP",
+        text:    `Password reset karne ka OTP: ${otp}. 10 minute mein expire hoga.`,
       });
     }
 
-    const token = generateToken(user._id);
-
-    res.json({ token, user: formatUser(user) }); // ✅
+    return res.json({ message: "Agar email registered hai toh OTP bheja gaya hai" });
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("forgotPassword error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Get Me ───────────────────────────────────────────────────────────────────
-export const getMe = async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Reset Password
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const resetPassword = async (req, res) => {
   try {
-    const user = await SocialUser.findById(req.user._id).select("-password");
-    res.json({ user });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Get User Stats ────────────────────────────────────────────────────────────
-export const getUserStats = async (req, res) => {
-  try {
-    const user = await SocialUser.findById(req.user._id).select("-password");
-    const postCount = await Post.countDocuments({ author: req.user._id });
-
-    res.json({
-      posts: postCount,
-      followers: user.followers?.length || 0,
-      following: user.following?.length || 0,
-      followRequests: user.followRequests?.length || 0,
-    });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Get Suggested Users ───────────────────────────────────────────────────────
-export const getSuggestions = async (req, res) => {
-  try {
-    const currentUser = await SocialUser.findById(req.user._id).select("following");
-
-    const excludeIds = [
-      req.user._id,
-      ...(currentUser.following || []),
-    ];
-
-    const users = await SocialUser.find({
-      _id: { $nin: excludeIds },
-      isSuspended: false,
-    })
-      .select("name role avatar followers following designation")
-      .limit(20);
-
-    const shuffled = users.sort(() => Math.random() - 0.5).slice(0, 8);
-    res.json({ success: true, users: shuffled });
-
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Search Users ──────────────────────────────────────────────────────────────
-export const searchUsers = async (req, res) => {
-  try {
-    const q = req.query.q?.trim();
-    if (!q) {
-      return res.status(400).json({ message: "Search query is required!" });
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: "Email, OTP aur naya password zaroori hai" });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: "Password kam se kam 8 characters ka hona chahiye" });
     }
 
-    const users = await SocialUser.find({
-      name: { $regex: q, $options: "i" },
-      isSuspended: false,
-      _id: { $ne: req.user._id },
-    })
-      .select("name role avatar followers following designation")
-      .limit(10);
+    const user = await SocialUser.findByEmailWithPassword(email);
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
 
-    res.json({ success: true, users });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
+    const result = await user.verifyOtp(otp, "password_reset");
+    if (!result.ok) return res.status(400).json({ message: result.reason });
 
-// ── [SUPER ADMIN] Get All Users ───────────────────────────────────────────────
-export const getAllUsers = async (req, res) => {
-  try {
-    const users = await SocialUser.find({ role: { $ne: "super_admin" } })
-      .select("-password")
-      .sort({ createdAt: -1 });
-
-    res.json({ users });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── [SUPER ADMIN] Suspend User ────────────────────────────────────────────────
-export const suspendUser = async (req, res) => {
-  try {
-    const user = await SocialUser.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found!" });
-    if (user.role === "super_admin") {
-      return res.status(403).json({ message: "You are not allowed to suspend a super admin!" });
-    }
-
-    user.isSuspended = !user.isSuspended;
+    user.password = newPassword;
     await user.save();
 
-    res.json({
-      message: user.isSuspended ? "User has been suspended!" : "User has been unsuspended!",
-      user,
-    });
+    // Sab jagah se logout karo
+    user.refreshToken = undefined;
+    await user.save({ validateBeforeSave: false });
+    res.clearCookie("refreshToken");
+
+    return res.json({ message: "Password reset ho gaya! Dobara login karo." });
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("resetPassword error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── [SUPER ADMIN] Delete User ─────────────────────────────────────────────────
-export const deleteUser = async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Resend OTP
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const resendOtp = async (req, res) => {
   try {
-    const user = await SocialUser.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found!" });
-    if (user.role === "super_admin") {
-      return res.status(403).json({ message: "Super admin cannot be deleted!" });
+    const { userId, purpose } = req.body;
+    if (!userId || !purpose) return res.status(400).json({ message: "userId aur purpose do" });
+
+    const validPurposes = ["email_verify", "password_reset", "login"];
+    if (!validPurposes.includes(purpose)) {
+      return res.status(400).json({ message: "Invalid purpose" });
     }
 
-    await Post.deleteMany({ author: req.params.id });
-    await SocialUser.updateMany(
-      { $or: [{ followers: req.params.id }, { following: req.params.id }] },
-      { $pull: { followers: req.params.id, following: req.params.id } }
-    );
+    const user = await SocialUser.findById(userId).select("+otp");
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
 
-    await SocialUser.findByIdAndDelete(req.params.id);
-
-    res.json({ message: "User and all associated data has been deleted!" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-// ── Logout ────────────────────────────────────────────────────────────────────
-export const logout = async (req, res) => {
-  try {
-    res.json({ message: "Logged out successfully!" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
-  }
-};
-
-
-// ── Get Public User Profile ───────────────────────────────────────────────────
-export const getUserProfile = async (req, res) => {
-  try {
-    const user = await SocialUser.findById(req.params.userId).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found!" });
-
-    const postCount = await Post.countDocuments({ author: req.params.userId });
-
-    res.json({
-      success: true,
-      user,
-      stats: {
-        posts: postCount,
-        followers: user.followers?.length || 0,
-        following: user.following?.length || 0,
-      },
+    const otp = await user.generateOtp(purpose);
+    await sendEmail({
+      to:      user.email,
+      subject: "Naya OTP",
+      text:    `Tera naya OTP: ${otp}`,
     });
+
+    return res.json({ message: "Naya OTP bheja gaya" });
   } catch (err) {
-    res.status(500).json({ message: "Server error!", error: err.message });
+    console.error("resendOtp error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Get Current User (me)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getMe = async (req, res) => {
+  try {
+    const user = await SocialUser.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
+    return res.json({ user: sanitizeUser(user) });
+  } catch (err) {
+    console.error("getMe error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Search Users
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const searchUsers = async (req, res) => {
+  try {
+    const { q, page = 1, limit = 20 } = req.query;
+    if (!q || q.trim().length < 1) {
+      return res.status(400).json({ message: "Search query do" });
+    }
+
+    const regex = new RegExp(q.trim(), "i");
+    const skip  = (parseInt(page) - 1) * parseInt(limit);
+
+    const users = await SocialUser.find({
+      isDeleted:   false,
+      isSuspended: false,
+      $or: [{ name: regex }, { username: regex }],
+    })
+      .select("name username avatar designation businessCategory followersCount")
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    return res.json({ users, page: parseInt(page) });
+  } catch (err) {
+    console.error("searchUsers error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin — Suspend / Unsuspend / Warn
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const suspendUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason, days } = req.body;
+
+    if (!reason) return res.status(400).json({ message: "Reason do" });
+
+    const user = await SocialUser.findById(userId);
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
+    if (user.role === "super_admin") {
+      return res.status(403).json({ message: "Super admin ko suspend nahi kar sakte" });
+    }
+
+    await user.suspend({ reason, by: req.user._id, days: days || null });
+
+    return res.json({ message: `User suspend ho gaya${days ? ` (${days} din ke liye)` : " (permanent)"}` });
+  } catch (err) {
+    console.error("suspendUser error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const unsuspendUser = async (req, res) => {
+  try {
+    const user = await SocialUser.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
+
+    await user.unsuspend(req.user._id);
+    return res.json({ message: "User unsuspend ho gaya" });
+  } catch (err) {
+    console.error("unsuspendUser error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const warnUser = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ message: "Warning reason do" });
+
+    const user = await SocialUser.findById(req.params.userId);
+    if (!user) return res.status(404).json({ message: "User nahi mila" });
+
+    await user.addWarning(reason, req.user._id);
+
+    const msg = user.warningCount >= 3
+      ? "3 warnings ho gayi — user auto-suspend ho gaya"
+      : `Warning di gayi (${user.warningCount}/3)`;
+
+    return res.json({ message: msg, warningCount: user.warningCount });
+  } catch (err) {
+    console.error("warnUser error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };

@@ -56,7 +56,8 @@ const res = await fetch(`${import.meta.env.VITE_SERVER}/auth/google`, {
 
     const result = await dispatch(registerUser({ name: form.name, email: form.email, password: form.password }));
     if (registerUser.fulfilled.match(result)) {
-      toast.success("Account created successfully! 🎉");
+       toast.success("OTP sent to your email! Please verify. 📧");
+  navigate("/verify-email", { state: { email: form.email } });
       navigate("/");
     } else {
       toast.error(result.payload || "Registration failed!");

@@ -270,10 +270,10 @@ export default function StoryRow() {
         </div>
 
         {/* Story Groups */}
-        {loading && groups.length === 0 ? (
+        {loading && (groups ?? []).length === 0 ? (
           <div className="flex items-center text-xs text-stone-300 px-2">Loading...</div>
         ) : (
-          groups.map((group) => {
+          (groups ?? []).map((group)  => {
             const isMe = group.user._id === user?._id;
             return (
               <div key={group.user._id} onClick={() => setViewingGroup(group)}

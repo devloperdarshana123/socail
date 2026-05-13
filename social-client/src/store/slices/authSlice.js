@@ -8,7 +8,7 @@ export const registerUser = createAsyncThunk(
   async (formData, { rejectWithValue }) => {
     try {
       const { data } = await api.post("/auth/register", formData);
-      localStorage.setItem("erosocial_token", data.token);
+    localStorage.setItem("erosocial_token", data.accessToken);
       localStorage.setItem("erosocial_user", JSON.stringify(data.user));
       return data;
     } catch (err) {
@@ -17,12 +17,26 @@ export const registerUser = createAsyncThunk(
   }
 );
 
+
+export const googleLogin = createAsyncThunk(
+  "auth/googleLogin",
+  async ({ idToken }, { rejectWithValue }) => {
+    try {
+      const { data } = await api.post("/auth/google", { idToken }); // ← field name must match backend
+      localStorage.setItem("erosocial_token", data.accessToken);
+      localStorage.setItem("erosocial_user", JSON.stringify(data.user));
+      return data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Google login failed!");
+    }
+  }
+);
 export const loginUser = createAsyncThunk(
   "auth/login",
   async (formData, { rejectWithValue }) => {
     try {
       const { data } = await api.post("/auth/login", formData);
-      localStorage.setItem("erosocial_token", data.token);
+      localStorage.setItem("erosocial_token", data.accessToken);
       localStorage.setItem("erosocial_user", JSON.stringify(data.user));
       return data;
     } catch (err) {
@@ -40,6 +54,11 @@ const initialState = {
   token: localStorage.getItem("erosocial_token") || null,
   loading: false,
   error: null,
+  post:[],
+  singlePost:null,
+  message:null,
+  success:false,
+  
 };
 
 // ── Slice ─────────────────────────────────────────────────
@@ -60,8 +79,9 @@ updateUser: (state, action) => {
     // ✅ Yeh naya add kiya
     setCredentials: (state, action) => {
       state.user  = action.payload.user;
-      state.token = action.payload.token;
-      localStorage.setItem("erosocial_token", action.payload.token);
+      state.token = action.payload.accessToken;
+      localStorage.setItem("erosocial_token", action.payload.accessToken);
+      
       localStorage.setItem("erosocial_user", JSON.stringify(action.payload.user));
     },
    logout: (state) => {          // ← YAHAN andar daalo
@@ -79,20 +99,31 @@ updateUser: (state, action) => {
       .addCase(registerUser.fulfilled, (state, action) => {
         state.loading = false;
         state.user  = action.payload.user;
-        state.token = action.payload.token;
+        state.token = action.payload.accessToken;
       })
       .addCase(registerUser.rejected,  (state, action) => {
         state.loading = false;
         state.error   = action.payload;
       });
 
+      builder
+  .addCase(googleLogin.pending,   (state) => { state.loading = true; state.error = null; })
+  .addCase(googleLogin.fulfilled, (state, action) => {
+    state.loading = false;
+    state.user  = action.payload.user;
+    state.token = action.payload.accessToken;
+  })
+  .addCase(googleLogin.rejected,  (state, action) => {
+    state.loading = false;
+    state.error   = action.payload;
+  });
     // Login
     builder
       .addCase(loginUser.pending,   (state) => { state.loading = true;  state.error = null; })
       .addCase(loginUser.fulfilled, (state, action) => {
         state.loading = false;
         state.user  = action.payload.user;
-        state.token = action.payload.token;
+        state.token = action.payload.accessToken;
       })
       .addCase(loginUser.rejected,  (state, action) => {
         state.loading = false;

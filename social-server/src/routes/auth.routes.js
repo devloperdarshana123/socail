@@ -1,42 +1,76 @@
 
-
 import express from "express";
+import rateLimit from "express-rate-limit";
+
 import {
   register,
+  verifyEmail,
+  resendOtp,
   login,
-  getMe,
-  logout,
-  getUserStats,
-  getAllUsers,
-  suspendUser,
-  deleteUser,
-  getSuggestions,
-  searchUsers,
   googleAuth,
-  getUserProfile, 
+  refreshAccessToken,
+  logout,
+  forgotPassword,
+  resetPassword,
+  getMe,
+  searchUsers,
+  suspendUser,
+  unsuspendUser,
+  warnUser,
 } from "../controllers/auth.controller.js";
-import { protect, superAdminOnly } from "../middleware/auth.middleware.js";
+
+import { protect, adminOnly, superAdminOnly } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// ── Public Routes ─────────────────────────────────────────────────────────────
-router.post("/register", register);
-router.post("/login",    login);
+// ─────────────────────────────────────────────────────────────────────────────
+// Rate Limiters
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── Protected Routes (logged in user) ────────────────────────────────────────
-router.get("/me",              protect, getMe);
-router.get("/stats",           protect, getUserStats);
-router.post("/logout", protect, logout); 
-router.post("/google",   googleAuth); 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      10,
+  message:  { success: false, message: "Too many attempts. Try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
-// ── Users — Suggestions & Search ─────────────────────────────────────────────
-router.get("/users/suggestions", protect, getSuggestions);
-router.get("/users/search",      protect, searchUsers);
-router.get("/users/:userId",     protect, getUserProfile);
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max:      30,
+  message:  { success: false, message: "Too many requests. Slow down." },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
-// ── Super Admin Only Routes ───────────────────────────────────────────────────
-router.get("/admin/users",              protect, superAdminOnly, getAllUsers);
-router.put("/admin/users/:id/suspend",  protect, superAdminOnly, suspendUser);
-router.delete("/admin/users/:id",       protect, superAdminOnly, deleteUser);
+// ─────────────────────────────────────────────────────────────────────────────
+// Public Routes
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post("/register",        authLimiter, register);
+router.post("/verify-email",    authLimiter, verifyEmail);
+router.post("/resend-otp",      authLimiter, resendOtp);
+router.post("/login",           authLimiter, login);
+router.post("/google",          authLimiter, googleAuth);
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/reset-password",  authLimiter, resetPassword);
+router.post("/refresh",         refreshAccessToken);   // cookie se — public
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Protected Routes
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post("/logout", protect, logout);
+router.get("/me",      protect, getMe);
+
+router.get("/users/search", protect, searchLimiter, searchUsers);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Routes
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.put(   "/admin/users/:userId/suspend",   protect, adminOnly,      suspendUser);
+router.put(   "/admin/users/:userId/unsuspend", protect, adminOnly,      unsuspendUser);
+router.put(   "/admin/users/:userId/warn",      protect, adminOnly,      warnUser);
 
 export default router;

@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #1e3a5f;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #162d4a;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* DatePicker custom theme */
+.react-datepicker {
+  font-family: inherit;
+  border: 1.5px solid #e8d5be;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.react-datepicker__header {
+  background: #f5ece0;
+  border-bottom: 1px solid #e8d5be;
+}
+.react-datepicker__day--selected {
+  background: #5a3e2b !important;
+  border-radius: 8px;
+}
+.react-datepicker__day:hover {
+  background: #f5ece0;
+  border-radius: 8px;
+}
+.react-datepicker__input-container input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e8d5be;
+  border-radius: 12px;
+  background: #fdf9f5;
+  color: #2d1f0f;
+  font-size: 14px;
+  outline: none;
+}
+.react-datepicker__input-container input:focus {
+  border-color: #c09a6e;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b6343' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px !important;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: none;
+}
+
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

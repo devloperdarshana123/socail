@@ -1,606 +1,588 @@
 
-
 import Post from "../models/Post.model.js";
 import SocialUser from "../models/User.model.js";
+import Notification from "../models/Notification.model.js";
 import cloudinary from "../config/cloudinary.js";
-import { sendNotification } from "../utils/notify.js";
+import { emitToUser } from "../socket.js";
 
-// ── Create Post ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Buffer se Cloudinary pe upload */
+const uploadBuffer = (buffer, options = {}) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (err, result) => {
+      if (err) reject(err);
+      else resolve(result);
+    });
+    stream.end(buffer);
+  });
+
+/** Cloudinary se file delete */
+const deleteFromCloudinary = async (publicId, resourceType = "image") => {
+  if (!publicId) return;
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+  } catch (err) {
+    console.error("Cloudinary delete error:", err.message);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Create Post
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const createPost = async (req, res) => {
   try {
-    const { caption, tags } = req.body;
-    let imageUrl = "";
-    let videoUrl = "";
+    const { caption, tags, visibility } = req.body;
+    const files = req.files || [];
 
-    if (!caption && !req.file) {
-      return res.status(400).json({ success: false, message: "Caption or image is required!" });
-    }
-    if (req.file && req.file.mimetype.startsWith('video/')) {
-      const result = await cloudinary.uploader.upload(
-        `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`,
-        { resource_type: "video", folder: "erosocial/posts" }
-      );
-      videoUrl = result.secure_url;
-    } else if (req.file) {
-      const result = await cloudinary.uploader.upload(
-        `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`,
-        { folder: "erosocial/posts" }
-      );
-      imageUrl = result.secure_url;
+    // Validation
+    if (!caption?.trim() && files.length === 0) {
+      return res.status(400).json({ message: "Caption ya koi media zaroori hai" });
     }
 
-    const post = await Post.create({
-      author: req.user._id,
-      caption,
-      image: imageUrl,
-      video: videoUrl,
-      tags: tags ? tags.split(",").map((t) => t.trim()) : [],
-    });
+    // Media upload
+    const media = [];
+    for (const file of files) {
+      const isVideo     = file.mimetype.startsWith("video/");
+      const resourceType = isVideo ? "video" : "image";
 
-    await post.populate("author", "name avatar role designation");
+      const result = await uploadBuffer(file.buffer, {
+        folder:        "social/posts",
+        resource_type: resourceType,
+        quality:       "auto",
+        fetch_format:  "auto",
+      });
 
-    return res.status(201).json({ success: true, message: "Post created successfully!", post });
-  } catch (error) {
-    console.error("Create post error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Get Feed ─────────────────────────────────────────────────────────────────
-export const getFeed = async (req, res) => {
-  try {
-    const page  = parseInt(req.query.page)  || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip  = (page - 1) * limit;
-
-    const currentUser = await SocialUser.findById(req.user._id).select("following");
-    const followingIds = currentUser.following;
-
-    const posts = await Post.find({
-      isSuspended: false,
-      author: { $in: [...followingIds, req.user._id] },
-    })
-      .populate("author", "name avatar role designation")
-      .populate("comments.user", "name avatar designation")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Post.countDocuments({
-      isSuspended: false,
-      author: { $in: [...followingIds, req.user._id] },
-    });
-
-    return res.status(200).json({
-      success: true,
-      posts,
-      pagination: {
-        total,
-        page,
-        totalPages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    console.error("Get feed error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Get Explore ───────────────────────────────────────────────────────────────
-export const getExplore = async (req, res) => {
-  try {
-    const page  = parseInt(req.query.page)  || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip  = (page - 1) * limit;
-
-    const posts = await Post.aggregate([
-      { $match: { isSuspended: false } },
-      { $addFields: { likesCount: { $size: "$likes" } } },
-      { $sort: { likesCount: -1, createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $lookup: {
-          from: "socialusers",
-          localField: "author",
-          foreignField: "_id",
-          as: "author",
-        },
-      },
-      { $unwind: "$author" },
-      {
-        $project: {
-          caption: 1, image: 1, video: 1, tags: 1, likes: 1, likesCount: 1,
-          comments: 1, views: 1, savedBy: 1, createdAt: 1,
-          "author._id": 1, "author.name": 1, "author.avatar": 1,
-          "author.role": 1, "author.designation": 1,
-        },
-      },
-    ]);
-
-    const total = await Post.countDocuments({ isSuspended: false });
-    return res.status(200).json({
-      success: true,
-      posts,
-      pagination: {
-        total, page,
-        totalPages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    console.error("Get explore error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Get Trending Posts ────────────────────────────────────────────────────────
-export const getTrendingPosts = async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10;
-    const posts = await Post.find({ isSuspended: false })
-      .populate("author", "name avatar role designation")
-      .populate("comments.user", "name avatar designation")
-      .sort({ likesCount: -1, createdAt: -1 })
-      .limit(limit);
-    return res.status(200).json({ success: true, posts });
-  } catch (error) {
-    console.error("Get trending posts error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Search Posts ──────────────────────────────────────────────────────────────
-export const searchPosts = async (req, res) => {
-  try {
-    const q = req.query.q?.trim();
-    if (!q) {
-      return res.status(400).json({ success: false, message: "Search query is required!" });
-    }
-    const posts = await Post.find({
-      isSuspended: false,
-      caption: { $regex: q, $options: "i" },
-    })
-      .populate("author", "name avatar role designation")
-      .populate("comments.user", "name avatar designation")
-      .sort({ createdAt: -1 })
-      .limit(20);
-    return res.status(200).json({ success: true, posts });
-  } catch (error) {
-    console.error("Search posts error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Get Single Post ───────────────────────────────────────────────────────────
-export const getPost = async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id)
-      .populate("author", "name avatar role designation")
-      .populate("comments.user", "name avatar designation");
-
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
-
-    await Post.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
-    return res.status(200).json({ success: true, post });
-  } catch (error) {
-    console.error("Get post error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Like / Unlike Post ────────────────────────────────────────────────────────
-
-// ── Add Comment ───────────────────────────────────────────────────────────────
-export const addComment = async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text) {
-      return res.status(400).json({ success: false, message: "Comment cannot be empty!" });
-    }
-
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
-
-    post.comments.push({ user: req.user._id, text });
-    await post.save();
-
-    // ✅ DB se user fetch karo taaki naam mile
-    const commenter = await SocialUser.findById(req.user._id).select("name avatar");
-
-    if (post.author.toString() !== req.user._id.toString()) {
-      await sendNotification({
-        to: post.author.toString(),
-        from: req.user._id.toString(),
-        fromName: commenter.name,
-        fromAvatar: commenter.avatar,
-        postId: post._id.toString(),
-        type: "comment",
-        text: text.substring(0, 50),
+      media.push({
+        url:       result.secure_url,
+        publicId:  result.public_id,
+        mediaType: isVideo ? "video" : "image",
       });
     }
 
-    await post.populate("comments.user", "name avatar designation");
+    // postType determine karo
+    let postType = "text";
+    if (media.length > 0) {
+      const hasVideo = media.some((m) => m.mediaType === "video");
+      const hasImage = media.some((m) => m.mediaType === "image");
+      if (hasVideo && hasImage) postType = "mixed";
+      else if (hasVideo) postType = "video";
+      else postType = "image";
+    }
 
-    return res.status(201).json({
-      success: true,
-      message: "Comment added successfully!",
-      comment: post.comments[post.comments.length - 1],
+    // Tags normalize karo
+    const normalizedTags = tags
+      ? (Array.isArray(tags) ? tags : tags.split(","))
+          .map((t) => t.trim().toLowerCase().replace(/^#/, ""))
+          .filter(Boolean)
+          .slice(0, 30)
+      : [];
+
+    const post = await Post.create({
+      author:     req.user._id,
+      caption:    caption?.trim() || "",
+      media,
+      postType,
+      tags:       normalizedTags,
+      visibility: visibility || "public",
     });
-  } catch (error) {
-    console.error("Add comment error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
+
+    await post.populate("author", "name username avatar");
+
+    return res.status(201).json({ message: "Post ban gayi!", post });
+  } catch (err) {
+    console.error("createPost error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Delete Comment ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Get Single Post
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getPost = async (req, res) => {
+  try {
+    const post = await Post.findOne({
+      _id:       req.params.postId,
+      isDeleted: false,
+    })
+      .populate("author", "name username avatar")
+      .populate("comments.user", "name username avatar")
+      .populate("comments.replies.user", "name username avatar");
+
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
+
+    // Visibility check
+    if (post.visibility === "only_me" && post.author._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Ye post private hai" });
+    }
+
+    // View count increment (non-blocking)
+    Post.findByIdAndUpdate(post._id, { $inc: { views: 1 } }).exec();
+
+    return res.json({ post });
+  } catch (err) {
+    console.error("getPost error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Feed
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getFeed = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const currentUser = await SocialUser.findById(req.user._id).select("following");
+
+    // Apni posts + following ki posts
+    const authorIds = [req.user._id, ...currentUser.following];
+
+    const posts = await Post.getFeed(authorIds, {
+      page:  parseInt(page),
+      limit: parseInt(limit),
+    });
+
+    const normalizedPosts = posts.map((p) => ({
+  ...p,
+  image: p.media?.find((m) => m.mediaType === "image")?.url || "",
+  video: p.media?.find((m) => m.mediaType === "video")?.url || "",
+}));
+return res.json({ posts: normalizedPosts, page: parseInt(page) });
+  } catch (err) {
+    console.error("getFeed error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Explore (public posts, random/trending)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const explorePosts = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Blocked users ki posts exclude karo
+    const currentUser = await SocialUser.findById(req.user._id).select("blockedUsers following");
+    const exclude     = [...(currentUser.blockedUsers || [])];
+
+    const posts = await Post.find({
+      isDeleted:   false,
+      isSuspended: false,
+      visibility:  "public",
+      author:      { $nin: exclude },
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate("author", "name username avatar")
+      .lean();
+
+   const normalizedPosts = posts.map((p) => ({
+  ...p,
+  image: p.media?.find((m) => m.mediaType === "image")?.url || "",
+  video: p.media?.find((m) => m.mediaType === "video")?.url || "",
+}));
+return res.json({ posts: normalizedPosts, page: parseInt(page) });
+  } catch (err) {
+    console.error("explorePosts error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// User ke Posts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getUserPosts = async (req, res) => {
+  try {
+    const { userId }           = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const isSelf = req.user._id.toString() === userId;
+
+    const visibilityFilter = isSelf
+      ? {}
+      : { visibility: { $in: ["public", "followers"] } };
+
+    const posts = await Post.find({
+      author:      userId,
+      isDeleted:   false,
+      isSuspended: false,
+      ...visibilityFilter,
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate("author", "name username avatar")
+      .lean();
+
+    const normalizedPosts = posts.map((p) => ({
+  ...p,
+  image: p.media?.find((m) => m.mediaType === "image")?.url || "",
+  video: p.media?.find((m) => m.mediaType === "video")?.url || "",
+}));
+return res.json({ posts: normalizedPosts, page: parseInt(page) });
+  } catch (err) {
+    console.error("getUserPosts error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delete Post
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const deletePost = async (req, res) => {
+  try {
+    const post = await Post.findOne({ _id: req.params.postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
+
+    const isOwner = post.author.toString() === req.user._id.toString();
+    const isAdmin = ["admin", "super_admin"].includes(req.user.role);
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: "Is post ko delete karne ka permission nahi" });
+    }
+
+    // Cloudinary se media delete karo (background mein)
+    Promise.all(
+      post.media.map((m) => deleteFromCloudinary(m.publicId, m.mediaType === "video" ? "video" : "image"))
+    ).catch(console.error);
+
+    await post.softDelete();
+
+    return res.json({ message: "Post delete ho gayi" });
+  } catch (err) {
+    console.error("deletePost error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Like / Unlike
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const toggleLike = async (req, res) => {
+  try {
+    const post = await Post.findOne({ _id: req.params.postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
+
+    const liked = await post.toggleLike(req.user._id);
+
+    // Notification sirf like karte waqt
+    if (liked && post.author.toString() !== req.user._id.toString()) {
+      const notif = await Notification.createUnique({
+        recipient: post.author,
+        sender:    req.user._id,
+        type:      "like",
+        post:      post._id,
+      });
+      if (notif) emitToUser(post.author.toString(), "notification", notif);
+    }
+
+    return res.json({ liked, likesCount: post.likes.length });
+  } catch (err) {
+    console.error("toggleLike error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Save / Unsave Post
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const toggleSave = async (req, res) => {
+  try {
+    const post    = await Post.findOne({ _id: req.params.postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
+
+    const userId  = req.user._id;
+    const isSaved = post.savedBy.some((id) => id.toString() === userId.toString());
+
+    if (isSaved) {
+      post.savedBy.pull(userId);
+    } else {
+      post.savedBy.addToSet(userId);
+    }
+
+    await post.save({ validateBeforeSave: false });
+
+    return res.json({ saved: !isSaved });
+  } catch (err) {
+    console.error("toggleSave error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saved Posts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getSavedPosts = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const posts = await Post.find({
+      savedBy:     req.user._id,
+      isDeleted:   false,
+      isSuspended: false,
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate("author", "name username avatar")
+      .lean();
+
+ const normalizedPosts = posts.map((p) => ({
+  ...p,
+  image: p.media?.find((m) => m.mediaType === "image")?.url || "",
+  video: p.media?.find((m) => m.mediaType === "video")?.url || "",
+}));
+return res.json({ posts: normalizedPosts, page: parseInt(page) });
+  } catch (err) {
+    console.error("getSavedPosts error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Comment
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const addComment = async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ message: "Comment text do" });
+
+    const post = await Post.findOne({ _id: req.params.postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
+
+    const comment = await post.addComment(req.user._id, text.trim());
+
+    // Notification
+    if (post.author.toString() !== req.user._id.toString()) {
+      const notif = await Notification.createUnique({
+        recipient: post.author,
+        sender:    req.user._id,
+        type:      "comment",
+        post:      post._id,
+        comment:   comment._id,
+        text:      text.slice(0, 100),
+      });
+      if (notif) emitToUser(post.author.toString(), "notification", notif);
+    }
+
+    await post.populate("comments.user", "name username avatar");
+    const populatedComment = post.comments.id(comment._id);
+
+    return res.status(201).json({ message: "Comment add ho gaya", comment: populatedComment });
+  } catch (err) {
+    console.error("addComment error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delete Comment
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const deleteComment = async (req, res) => {
   try {
     const { postId, commentId } = req.params;
 
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
+    const post = await Post.findOne({ _id: postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
 
     const comment = post.comments.id(commentId);
-    if (!comment) {
-      return res.status(404).json({ success: false, message: "Comment not found!" });
+    if (!comment || comment.isDeleted) {
+      return res.status(404).json({ message: "Comment nahi mila" });
     }
 
-    if (
-      comment.user.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin" &&
-      req.user.role !== "super_admin"
-    ) {
-      return res.status(403).json({ success: false, message: "You are not authorized to delete this comment!" });
+    const isOwner     = comment.user.toString() === req.user._id.toString();
+    const isPostOwner = post.author.toString() === req.user._id.toString();
+    const isAdmin     = ["admin", "super_admin"].includes(req.user.role);
+
+    if (!isOwner && !isPostOwner && !isAdmin) {
+      return res.status(403).json({ message: "Delete karne ka permission nahi" });
     }
 
-    comment.deleteOne();
-    await post.save();
-    return res.status(200).json({ success: true, message: "Comment deleted successfully!" });
-  } catch (error) {
-    console.error("Delete comment error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
+    await post.deleteComment(commentId, isOwner ? req.user._id : comment.user);
 
-// ── Like / Unlike Comment ─────────────────────────────────────────────────────
-export const likeComment = async (req, res) => {
-  try {
-    const { postId, commentId } = req.params;
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ success: false, message: "Post not found!" });
-
-    const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ success: false, message: "Comment not found!" });
-
-    const alreadyLiked = comment.likes.includes(req.user._id);
-    if (alreadyLiked) {
-      comment.likes = comment.likes.filter((id) => id.toString() !== req.user._id.toString());
-    } else {
-      comment.likes.push(req.user._id);
-    }
-
-    await post.save();
-
-    // ✅ DB se user fetch karo
-    if (!alreadyLiked && comment.user.toString() !== req.user._id.toString()) {
-      const liker = await SocialUser.findById(req.user._id).select("name avatar");
-      await sendNotification({
-        to: comment.user.toString(),
-        from: req.user._id.toString(),
-        fromName: liker.name,
-        fromAvatar: liker.avatar,
-        postId: post._id.toString(),
-        type: "comment_like",
-        text: "liked your comment",
-      });
-    }
-
-    return res.status(200).json({ success: true, isLiked: !alreadyLiked, likes: comment.likes.length });
+    return res.json({ message: "Comment delete ho gaya" });
   } catch (err) {
-    console.error("likeComment error:", err);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
+    console.error("deleteComment error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Reply to Comment ──────────────────────────────────────────────────────────
-export const replyToComment = async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Reply
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const addReply = async (req, res) => {
   try {
     const { postId, commentId } = req.params;
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ success: false, message: "Reply cannot be empty!" });
+    const { text }              = req.body;
 
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ success: false, message: "Post not found!" });
+    if (!text?.trim()) return res.status(400).json({ message: "Reply text do" });
+
+    const post = await Post.findOne({ _id: postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
 
     const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ success: false, message: "Comment not found!" });
+    if (!comment || comment.isDeleted) {
+      return res.status(404).json({ message: "Comment nahi mila" });
+    }
 
-    comment.replies.push({ user: req.user._id, text, likes: [] });
-    await post.save();
+    comment.replies.push({ user: req.user._id, text: text.trim() });
+    await post.save({ validateBeforeSave: false });
 
-    // ✅ DB se user fetch karo
+    const newReply = comment.replies[comment.replies.length - 1];
+
+    // Notification to comment owner
     if (comment.user.toString() !== req.user._id.toString()) {
-      const replier = await SocialUser.findById(req.user._id).select("name avatar");
-      await sendNotification({
-        to: comment.user.toString(),
-        from: req.user._id.toString(),
-        fromName: replier.name,
-        fromAvatar: replier.avatar,
-        postId: post._id.toString(),
-        type: "reply",
-        text: "replied to your comment",
+      const notif = await Notification.createUnique({
+        recipient: comment.user,
+        sender:    req.user._id,
+        type:      "reply",
+        post:      post._id,
+        comment:   comment._id,
+        text:      text.slice(0, 100),
       });
+      if (notif) emitToUser(comment.user.toString(), "notification", notif);
     }
 
-    await post.populate("comments.replies.user", "name avatar designation");
-
-    const updatedComment = post.comments.id(commentId);
-    const reply = updatedComment.replies[updatedComment.replies.length - 1];
-
-    return res.status(201).json({ success: true, reply });
+    return res.status(201).json({ message: "Reply add ho gayi", reply: newReply });
   } catch (err) {
-    console.error("replyToComment error:", err);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
+    console.error("addReply error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// ── Like / Unlike Reply ───────────────────────────────────────────────────────
-export const likeReply = async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Like Comment
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const toggleCommentLike = async (req, res) => {
   try {
-    const { postId, commentId, replyId } = req.params;
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ success: false, message: "Post not found!" });
+    const { postId, commentId } = req.params;
+
+    const post = await Post.findOne({ _id: postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
 
     const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ success: false, message: "Comment not found!" });
+    if (!comment || comment.isDeleted) {
+      return res.status(404).json({ message: "Comment nahi mila" });
+    }
 
-    const reply = comment.replies.id(replyId);
-    if (!reply) return res.status(404).json({ success: false, message: "Reply not found!" });
+    const userId  = req.user._id;
+    const liked   = comment.likes.some((id) => id.toString() === userId.toString());
 
-    const alreadyLiked = reply.likes.includes(req.user._id);
-    if (alreadyLiked) {
-      reply.likes = reply.likes.filter((id) => id.toString() !== req.user._id.toString());
+    if (liked) {
+      comment.likes.pull(userId);
     } else {
-      reply.likes.push(req.user._id);
-    }
+      comment.likes.addToSet(userId);
 
-    await post.save();
-
-    // ✅ DB se user fetch karo
-    if (!alreadyLiked && reply.user.toString() !== req.user._id.toString()) {
-      const liker = await SocialUser.findById(req.user._id).select("name avatar");
-      await sendNotification({
-        to: reply.user.toString(),
-        from: req.user._id.toString(),
-        fromName: liker.name,
-        fromAvatar: liker.avatar,
-        postId: post._id.toString(),
-        type: "reply_like",
-        text: "liked your reply",
-      });
-    }
-
-    return res.status(200).json({ success: true, isLiked: !alreadyLiked, likes: reply.likes.length });
-  } catch (err) {
-    console.error("likeReply error:", err);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Save / Unsave Post ────────────────────────────────────────────────────────
-export const savePost = async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
-
-    const alreadySaved = post.savedBy.includes(req.user._id);
-    if (alreadySaved) {
-      post.savedBy = post.savedBy.filter((id) => id.toString() !== req.user._id.toString());
-    } else {
-      post.savedBy.push(req.user._id);
-    }
-
-    await post.save();
-    return res.status(200).json({
-      success: true,
-      message: alreadySaved ? "Post unsaved!" : "Post saved!",
-      isSaved: !alreadySaved,
-    });
-  } catch (error) {
-    console.error("Save post error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Get Saved Posts ───────────────────────────────────────────────────────────
-export const getSavedPosts = async (req, res) => {
-  try {
-    const posts = await Post.find({ savedBy: req.user._id, isSuspended: false })
-      .populate("author", "name avatar role designation")
-      .populate("comments.user", "name avatar designation")
-      .sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, posts });
-  } catch (error) {
-    console.error("Get saved posts error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Delete Post ───────────────────────────────────────────────────────────────
-export const deletePost = async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
-
-    if (
-      post.author.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin" &&
-      req.user.role !== "super_admin"
-    ) {
-      return res.status(403).json({ success: false, message: "You are not authorized to delete this post!" });
-    }
-
-    if (post.image) {
-      const publicId = post.image.split("/").pop().split(".")[0];
-      await cloudinary.uploader.destroy(`erosocial/posts/${publicId}`);
-    }
-
-    await post.deleteOne();
-    return res.status(200).json({ success: true, message: "Post deleted successfully!" });
-  } catch (error) {
-    console.error("Delete post error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Suspend Post ──────────────────────────────────────────────────────────────
-export const suspendPost = async (req, res) => {
-  try {
-    const { reason } = req.body;
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
-
-    post.isSuspended   = true;
-    post.suspendedBy   = req.user._id;
-    post.suspendReason = reason || "Suspended by admin";
-    await post.save();
-    return res.status(200).json({ success: true, message: "Post suspended successfully!" });
-  } catch (error) {
-    console.error("Suspend post error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Unsuspend Post ────────────────────────────────────────────────────────────
-export const unsuspendPost = async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
-
-    post.isSuspended   = false;
-    post.suspendedBy   = null;
-    post.suspendReason = "";
-    await post.save();
-    return res.status(200).json({ success: true, message: "Post unsuspended successfully!" });
-  } catch (error) {
-    console.error("Unsuspend post error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Get My Posts ──────────────────────────────────────────────────────────────
-export const getMyPosts = async (req, res) => {
-  try {
-    const posts = await Post.find({ author: req.user._id })
-      .populate("author", "name avatar role designation")
-      .populate("comments.user", "name avatar designation")
-      .sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, posts });
-  } catch (error) {
-    console.error("Get my posts error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Get User Posts ────────────────────────────────────────────────────────────
-export const getUserPosts = async (req, res) => {
-  try {
-    const posts = await Post.find({ author: req.params.userId, isSuspended: false })
-      .populate("author", "name avatar role designation")
-      .populate("comments.user", "name avatar designation")
-      .sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, posts });
-  } catch (error) {
-    console.error("Get user posts error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Delete Reply ──────────────────────────────────────────────────────────────
-export const deleteReply = async (req, res) => {
-  try {
-    const { postId, commentId, replyId } = req.params;
-
-    const post = await Post.findById(postId);
-    if (!post) return res.status(404).json({ success: false, message: "Post not found!" });
-
-    const comment = post.comments.id(commentId);
-    if (!comment) return res.status(404).json({ success: false, message: "Comment not found!" });
-
-    const reply = comment.replies.id(replyId);
-    if (!reply) return res.status(404).json({ success: false, message: "Reply not found!" });
-
-    if (
-      reply.user.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin" &&
-      req.user.role !== "super_admin"
-    ) {
-      return res.status(403).json({ success: false, message: "Not authorized!" });
-    }
-
-    reply.deleteOne();
-    await post.save();
-    return res.status(200).json({ success: true, message: "Reply deleted!" });
-  } catch (err) {
-    console.error("deleteReply error:", err);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
-  }
-};
-
-// ── Like / Unlike Post ────────────────────────────────────────────────────────
-export const likePost = async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return res.status(404).json({ success: false, message: "Post not found!" });
-    }
-
-    const alreadyLiked = post.likes.includes(req.user._id);
-    if (alreadyLiked) {
-      post.likes = post.likes.filter((id) => id.toString() !== req.user._id.toString());
-    } else {
-      post.likes.push(req.user._id);
-
-      // ✅ Apne aap ko like karne pe notification nahi
-      if (post.author.toString() !== req.user._id.toString()) {
-        const liker = await SocialUser.findById(req.user._id).select("name avatar");
-        await sendNotification({
-          to: post.author.toString(),
-          from: req.user._id.toString(),
-          fromName: liker.name,
-          fromAvatar: liker.avatar,
-          postId: post._id.toString(),
-          type: "like",
-          text: "liked your post",
+      if (comment.user.toString() !== userId.toString()) {
+        const notif = await Notification.createUnique({
+          recipient: comment.user,
+          sender:    userId,
+          type:      "comment_like",
+          post:      post._id,
+          comment:   comment._id,
         });
+        if (notif) emitToUser(comment.user.toString(), "notification", notif);
       }
     }
 
-    await post.save();
-    return res.status(200).json({
-      success: true,
-      message: alreadyLiked ? "Post unliked!" : "Post liked!",
-      likes: post.likes.length,
-      isLiked: !alreadyLiked,
+    await post.save({ validateBeforeSave: false });
+
+    return res.json({ liked: !liked, likesCount: comment.likes.length });
+  } catch (err) {
+    console.error("toggleCommentLike error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Search Posts by Tag
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const searchByTag = async (req, res) => {
+  try {
+    const { tag, page = 1, limit = 20 } = req.query;
+    if (!tag) return res.status(400).json({ message: "Tag do" });
+
+    const posts = await Post.findByTag(tag.toLowerCase().replace(/^#/, ""), {
+      page:  parseInt(page),
+      limit: parseInt(limit),
     });
-  } catch (error) {
-    console.error("Like post error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error!" });
+
+    return res.json({ posts, page: parseInt(page) });
+  } catch (err) {
+    console.error("searchByTag error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin — Suspend Post
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const suspendPost = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ message: "Reason do" });
+
+    const post = await Post.findOne({ _id: req.params.postId, isDeleted: false });
+    if (!post) return res.status(404).json({ message: "Post nahi mili" });
+
+    await post.suspendPost(req.user._id, reason);
+
+    return res.json({ message: "Post suspend ho gayi" });
+  } catch (err) {
+    console.error("suspendPost error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// My Posts (Logged-in user ke apne posts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getMyPosts = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const posts = await Post.find({
+      author:      req.user._id,
+      isDeleted:   false,
+      isSuspended: false,
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate("author", "name username avatar")
+      .lean();
+
+   const normalizedPosts = posts.map((p) => ({
+  ...p,
+  image: p.media?.find((m) => m.mediaType === "image")?.url || "",
+  video: p.media?.find((m) => m.mediaType === "video")?.url || "",
+}));
+return res.json({ posts: normalizedPosts, page: parseInt(page) });
+  } catch (err) {
+    console.error("getMyPosts error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };

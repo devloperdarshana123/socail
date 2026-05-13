@@ -26,20 +26,23 @@ import {
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const Avatar = ({ src, name, size = "w-10 h-10", textSize = "text-sm", online = false }) => (
-  <div className="relative shrink-0">
-    {src ? (
-      <img src={src} alt={name} className={`${size} rounded-full object-cover`} />
-    ) : (
-      <div className={`${size} rounded-full bg-linear-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold ${textSize}`}>
-        {name?.charAt(0).toUpperCase()}
-      </div>
-    )}
-    {online && (
-      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
-    )}
-  </div>
-);
+const Avatar = ({ src, name, size = "w-10 h-10", textSize = "text-sm", online = false }) => {
+  const imgSrc = src?.url || (typeof src === "string" && src.trim() ? src : null);
+  return (
+    <div className="relative shrink-0">
+      {imgSrc ? (
+        <img src={imgSrc} alt={name} className={`${size} rounded-full object-cover`} />
+      ) : (
+        <div className={`${size} rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold ${textSize}`}>
+          {name?.charAt(0).toUpperCase()}
+        </div>
+      )}
+      {online && (
+        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white" />
+      )}
+    </div>
+  );
+};
 
 const formatTime = (date) => {
   if (!date) return "";

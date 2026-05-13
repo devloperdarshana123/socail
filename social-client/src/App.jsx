@@ -9,7 +9,8 @@ import { chatSocket, socialSocket } from "./services/socket";
 import { Toaster } from 'sonner';
 import Navbar from "./components/Navbar";
 import GlobalCreatePostModal from "./components/GlobalCreatePostModal";
-
+// Top pe import karo
+import VerifyEmail from "./pages/VerifyEmail";
 // Pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -20,8 +21,8 @@ import Explore from "./pages/Explore";
 import SavedPosts from "./pages/Savedposts";
 import FollowRequests from "./pages/FollowRequests";
 import Messages from "./pages/Messages";
-import Marketplace from "./pages/Marketplace";
 import UserProfile from "./pages/Userprofile";
+import Home from "./pages/Home";
 import FloatingChatbot from "./components/FloatingChatbot";
 
 const ProtectedRoute = ({ children }) => {
@@ -106,7 +107,7 @@ export default function App() {
           <div className="flex-1 overflow-hidden flex px-4 py-6 items-start">
             <div className="flex-1 min-w-0 h-full overflow-y-auto">
               <Routes>
-                <Route path="/" element={<ProtectedRoute><Marketplace showCreatePost={showCreatePost} setShowCreatePost={setShowCreatePost} /></ProtectedRoute>} />
+                <Route path="/" element={<ProtectedRoute><Home showCreatePost={showCreatePost} setShowCreatePost={setShowCreatePost} /></ProtectedRoute>} />
                 <Route path="/profile"          element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/settings"         element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 <Route path="/explore"          element={<ProtectedRoute><Explore /></ProtectedRoute>} />
@@ -128,6 +129,7 @@ export default function App() {
         <Routes>
           <Route path="/login"    element={<AuthRoute><Login /></AuthRoute>} />
           <Route path="/register" element={<AuthRoute><Register /></AuthRoute>} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="*"         element={<Navigate to="/login" />} />
         </Routes>
       )}

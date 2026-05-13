@@ -35,11 +35,11 @@ export const fetchStats = createAsyncThunk(
   "feed/fetchStats",
   async (_, { rejectWithValue }) => {
     try {
-      const { data } = await api.get("/auth/stats");
+      const { data } = await api.get("/settings/profile");
       return {
-        posts:     data?.posts     ?? data?.stats?.posts     ?? 0,
-        followers: data?.followers ?? data?.stats?.followers ?? 0,
-        following: data?.following ?? data?.stats?.following ?? 0,
+        posts:     data?.user?.postsCount        ?? 0,
+        followers: data?.user?.followers?.length  ?? 0,
+        following: data?.user?.following?.length  ?? 0,
       };
     } catch (err) {
       return rejectWithValue("Stats load nahi hue!");
@@ -52,13 +52,15 @@ export const fetchSuggestions = createAsyncThunk(
   "feed/fetchSuggestions",
   async (_, { rejectWithValue }) => {
     try {
-      const { data } = await api.get("/auth/users/suggestions");
-      return data.users || [];
+      const { data } = await api.get("/follow/suggestions");
+      return data.suggestions || [];
     } catch (err) {
       return rejectWithValue("Suggestions load nahi hue!");
     }
   }
 );
+
+
 
 // ── Create Post ───────────────────────────────────────────
 export const createPost = createAsyncThunk(
@@ -66,7 +68,8 @@ export const createPost = createAsyncThunk(
   async ({ caption, image, video }, { rejectWithValue }) => {
     try {
       const formData = new FormData();
-      if (caption) formData.append("caption", caption);``
+      if (caption) formData.append("caption", caption);
+      if (location) formData.append("location", location);
       if (image)   formData.append("media", image);
       if (video)   formData.append("media", video); 
       const { data } = await api.post("/posts", formData, {

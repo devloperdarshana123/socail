@@ -32,7 +32,7 @@ export const rejectFollowRequest = createAsyncThunk(
   "follow/rejectFollowRequest",
   async (userId, { rejectWithValue }) => {
     try {
-      await api.delete(`/follow/${userId}/reject`);
+      await api.post(`/follow/${userId}/reject`);
       return userId;
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Reject failed!");

@@ -1,35 +1,64 @@
 
 import express from "express";
+import rateLimit from "express-rate-limit";
+
 import {
-  sendFollowRequest,
-  acceptFollowRequest,
-  rejectFollowRequest,
-  unfollowUser,
-  getFollowRequests,
+  toggleFollow,
+  removeFollower,
+  toggleBlock,
   getFollowers,
   getFollowing,
-  cancelFollowRequest,
-  getSentFollowRequests,
+  getSuggestions,
 } from "../controllers/follow.controller.js";
+
 import { protect } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// ── My Own Followers / Following (no userId param) ───────────────────────────
-router.get("/followers",               protect, getFollowers);           // My followers
-router.get("/following",               protect, getFollowing);           // My following
+const followLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max:      30,
+  message:  { success: false, message: "Too many follow actions. Slow down." },
+  standardHeaders: true,
+  legacyHeaders:   false,
+});
 
-// ── Follow Request Actions ───────────────────────────────────────────────────
-router.get("/requests",                protect, getFollowRequests);
-router.get("/sent",                    protect, getSentFollowRequests);
-router.post("/:userId/send",           protect, sendFollowRequest);      // Send request
-router.post("/:requesterId/accept",    protect, acceptFollowRequest);    // Accept request
-router.post("/:requesterId/reject",    protect, rejectFollowRequest);    // Reject request
-router.delete("/:userId/cancel",       protect, cancelFollowRequest);    // Cancel sent request
-router.delete("/:userId/unfollow",     protect, unfollowUser);           // Unfollow
+// ─────────────────────────────────────────────────────────────────────────────
+// Suggestions
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ── Other User's Followers / Following ──────────────────────────────────────
-router.get("/:userId/followers",       protect, getFollowers);           // User's followers
-router.get("/:userId/following",       protect, getFollowing);           // User's following
+router.get("/suggestions", protect, getSuggestions);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// My own followers / following
+// ─────────────────────────────────────────────────────────────────────────────
+
+// follow.routes.js mein
+router.get("/followers", protect, (req, res, next) => {
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  req.params.userId = req.user._id.toString();
+  next();
+}, getFollowers);
+
+router.get("/following", protect, (req, res, next) => {
+  res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  req.params.userId = req.user._id.toString();
+  next();
+}, getFollowing);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Actions on other users
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post(   "/:userId/toggle",          protect, followLimiter, toggleFollow);    // follow / unfollow
+router.delete( "/:userId/remove-follower", protect, removeFollower);                 // follower hatao
+router.post(   "/:userId/block",           protect, toggleBlock);                    // block / unblock
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Other user's followers / following
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/:userId/followers", protect, getFollowers);
+router.get("/:userId/following", protect, getFollowing);
 
 export default router;

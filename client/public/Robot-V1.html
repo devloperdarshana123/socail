@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Robot marbre 3D rond</title>
+  <style>
+    :root {
+      --bg-1: #eef3f6;
+      --bg-2: #d9e1e7;
+      --text: #14202c;
+      --muted: #5b6772;
+      --glass: rgba(255,255,255,0.58);
+      --line: rgba(255,255,255,0.92);
+      --shadow: rgba(18,24,30,0.16);
+    }
+
+    * { box-sizing: border-box; }
+
+  html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.01)),
+        repeating-linear-gradient(180deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 7px);
+      mix-blend-mode: soft-light;
+      opacity: 0.45;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      isolation: isolate;
+    }
+
+    #bgGlow,
+    #floorGlow {
+      position: absolute;
+      left: 50%;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(28px);
+    }
+
+    #bgGlow {
+      top: 42%;
+      width: min(48vw, 620px);
+      height: min(48vw, 620px);
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.96), rgba(255,255,255,0.08) 56%, transparent 74%);
+      opacity: 0.92;
+    }
+
+    #floorGlow {
+      bottom: 11%;
+      width: 520px;
+      height: 120px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(129,145,160,0.24), rgba(129,145,160,0.04) 60%, transparent 76%);
+      opacity: 0.84;
+    }
+
+    #threeRoot {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    canvas:active { cursor: grabbing; }
+
+    .hud {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div id="bgGlow"></div>
+    <div id="floorGlow"></div>
+    <div id="threeRoot"></div>
+
+    <div class="hud">
+    
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://esm.sh/three@0.162.0';
+    import { OrbitControls } from 'https://esm.sh/three@0.162.0/examples/jsm/controls/OrbitControls.js';
+
+    const threeRoot = document.getElementById('threeRoot');
+    const bgGlow = document.getElementById('bgGlow');
+    const floorGlow = document.getElementById('floorGlow');
+    
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.22;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    threeRoot.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0xe8eef3, 8, 16);
+
+    const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 3.6, 8.5);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+   controls.minDistance = 7.0;
+controls.maxDistance = 10.0;
+    controls.minPolarAngle = Math.PI * 0.3;
+    controls.maxPolarAngle = Math.PI * 0.61;
+controls.target.set(0, 2.0, 0);
+
+    const marbleTexture = createMarbleTexture();
+    marbleTexture.wrapS = THREE.RepeatWrapping;
+    marbleTexture.wrapT = THREE.RepeatWrapping;
+    marbleTexture.repeat.set(1.12, 1.12);
+
+    const marbleMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf8f8f6,
+      map: marbleTexture,
+      roughness: 0.18,
+      metalness: 0.02,
+      clearcoat: 0.92,
+      clearcoatRoughness: 0.14,
+      reflectivity: 0.7,
+      envMapIntensity: 1.15
+    });
+
+    const marbleMatSoft = marbleMat.clone();
+    marbleMatSoft.roughness = 0.22;
+    marbleMatSoft.clearcoat = 0.78;
+    marbleMatSoft.clearcoatRoughness = 0.16;
+
+    const marbleMatGloss = marbleMat.clone();
+    marbleMatGloss.roughness = 0.14;
+    marbleMatGloss.clearcoat = 1;
+    marbleMatGloss.clearcoatRoughness = 0.08;
+
+    const darkEyeMat = new THREE.MeshPhysicalMaterial({
+      color: 0x030508,
+      roughness: 0.03,
+      metalness: 0.02,
+      clearcoat: 1,
+      clearcoatRoughness: 0.015,
+      envMapIntensity: 2.2
+    });
+
+    const lineMat = new THREE.MeshPhysicalMaterial({
+      color: 0xd9d9d6,
+      roughness: 0.34,
+      metalness: 0.02,
+      clearcoat: 0.18
+    });
+
+    const glossMat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.04,
+      transparent: true,
+      opacity: 0.94,
+      roughness: 0.01,
+      clearcoat: 1
+    });
+
+    const robot = new THREE.Group();
+    scene.add(robot);
+
+    const bodyBob = new THREE.Group();
+    robot.add(bodyBob);
+    bodyBob.position.y = 0.12;
+
+    const headPivot = new THREE.Group();
+    headPivot.position.set(0, 2.38, 0.14);
+    bodyBob.add(headPivot);
+
+    const torsoPivot = new THREE.Group();
+    torsoPivot.position.set(0, 1.0, 0);
+    bodyBob.add(torsoPivot);
+
+    const leftArmPivot = new THREE.Group();
+    leftArmPivot.position.set(-0.98, 1.36, 0.08);
+    bodyBob.add(leftArmPivot);
+
+    const rightArmPivot = new THREE.Group();
+    rightArmPivot.position.set(0.98, 1.36, 0.08);
+    bodyBob.add(rightArmPivot);
+
+    const leftLegPivot = new THREE.Group();
+    leftLegPivot.position.set(-0.38, 0.28, 0.05);
+    bodyBob.add(leftLegPivot);
+
+    const rightLegPivot = new THREE.Group();
+    rightLegPivot.position.set(0.38, 0.28, 0.05);
+    bodyBob.add(rightLegPivot);
+
+    const headGroup = new THREE.Group();
+    headPivot.add(headGroup);
+
+    const headBase = new THREE.Mesh(new THREE.SphereGeometry(1.34, 82, 82), marbleMatGloss);
+    headBase.scale.set(1.16, 0.94, 1.08);
+    headBase.castShadow = true;
+    headBase.receiveShadow = true;
+    headGroup.add(headBase);
+
+    const headChin = new THREE.Mesh(new THREE.SphereGeometry(1.12, 72, 72), marbleMatSoft);
+    headChin.scale.set(1.08, 0.34, 1.0);
+    headChin.position.y = -0.6;
+    headChin.castShadow = true;
+    headGroup.add(headChin);
+
+    const headTrim = new THREE.Mesh(new THREE.TorusGeometry(1.11, 0.032, 20, 100), lineMat);
+    headTrim.rotation.x = Math.PI / 2;
+    headTrim.position.y = 0.12;
+    headGroup.add(headTrim);
+
+    const headTrim2 = new THREE.Mesh(new THREE.TorusGeometry(1.06, 0.025, 20, 100), lineMat);
+    headTrim2.rotation.x = Math.PI / 2;
+    headTrim2.position.y = -0.12;
+    headGroup.add(headTrim2);
+
+    const antennaStem = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.34, 10, 24), marbleMatSoft);
+    antennaStem.position.set(-0.7, 1.12, -0.14);
+    antennaStem.rotation.z = -0.05;
+    antennaStem.castShadow = true;
+    headGroup.add(antennaStem);
+
+    const antennaCap = new THREE.Mesh(new THREE.SphereGeometry(0.085, 28, 28), marbleMatSoft);
+    antennaCap.position.set(-0.7, 1.34, -0.14);
+    antennaCap.castShadow = true;
+    headGroup.add(antennaCap);
+
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.48, 64, 64), darkEyeMat);
+    eyeL.scale.set(1.06, 1.06, 0.72);
+    eyeL.position.set(-0.56, 0.02, 0.99);
+    eyeL.castShadow = true;
+    headGroup.add(eyeL);
+
+    const eyeR = eyeL.clone();
+    eyeR.position.x = 0.56;
+    headGroup.add(eyeR);
+
+    const eyeGlossL = new THREE.Mesh(new THREE.SphereGeometry(0.105, 28, 28), glossMat);
+    eyeGlossL.position.set(-0.66, 0.24, 1.18);
+    headGroup.add(eyeGlossL);
+
+    const eyeGlossR = eyeGlossL.clone();
+    eyeGlossR.position.x = 0.46;
+    headGroup.add(eyeGlossR);
+
+    const neck = new THREE.Mesh(new THREE.SphereGeometry(0.28, 36, 36), marbleMatSoft);
+    neck.scale.set(2.0, 0.32, 1.0);
+    neck.position.set(0, 1.88, 0);
+    neck.castShadow = true;
+    bodyBob.add(neck);
+
+    const torso = new THREE.Mesh(new THREE.SphereGeometry(0.88, 72, 72), marbleMatGloss);
+    torso.scale.set(1.08, 0.96, 0.9);
+    torso.castShadow = true;
+    torso.receiveShadow = true;
+    torsoPivot.add(torso);
+
+    const belly = new THREE.Mesh(new THREE.SphereGeometry(0.68, 56, 56), marbleMatSoft);
+    belly.scale.set(0.96, 0.82, 0.66);
+    belly.position.set(0, -0.02, 0.24);
+    belly.castShadow = true;
+    torsoPivot.add(belly);
+
+    const bellyTrim = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.026, 18, 90), lineMat);
+    bellyTrim.position.set(0, -0.01, 0.67);
+    torsoPivot.add(bellyTrim);
+
+    const bellyInner = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.016, 18, 72), lineMat);
+    bellyInner.position.set(0, -0.01, 0.695);
+    torsoPivot.add(bellyInner);
+
+    const logoShape = new THREE.Shape();
+    logoShape.moveTo(-0.18, 0.24);
+    logoShape.lineTo(0.18, 0.24);
+    logoShape.quadraticCurveTo(0.22, 0.24, 0.22, 0.20);
+    logoShape.lineTo(0.22, 0.15);
+    logoShape.quadraticCurveTo(0.22, 0.11, 0.18, 0.11);
+    logoShape.lineTo(-0.02, 0.11);
+    logoShape.lineTo(-0.02, 0.04);
+    logoShape.lineTo(0.13, 0.04);
+    logoShape.quadraticCurveTo(0.17, 0.04, 0.17, 0.00);
+    logoShape.lineTo(0.17, -0.04);
+    logoShape.quadraticCurveTo(0.17, -0.08, 0.13, -0.08);
+    logoShape.lineTo(-0.02, -0.08);
+    logoShape.lineTo(-0.02, -0.15);
+    logoShape.lineTo(0.19, -0.15);
+    logoShape.quadraticCurveTo(0.23, -0.15, 0.23, -0.19);
+    logoShape.lineTo(0.23, -0.24);
+    logoShape.quadraticCurveTo(0.23, -0.28, 0.19, -0.28);
+    logoShape.lineTo(-0.18, -0.28);
+    logoShape.quadraticCurveTo(-0.24, -0.28, -0.24, -0.22);
+    logoShape.lineTo(-0.24, 0.18);
+    logoShape.quadraticCurveTo(-0.24, 0.24, -0.18, 0.24);
+
+    const logoGeometry = new THREE.ExtrudeGeometry(logoShape, {
+      depth: 0.018,
+      bevelEnabled: true,
+      bevelThickness: 0.006,
+      bevelSize: 0.008,
+      bevelSegments: 3
+    });
+    logoGeometry.center();
+
+    const logoMat = new THREE.MeshPhysicalMaterial({
+      color: 0x020202,
+      roughness: 0.22,
+      metalness: 0.18,
+      clearcoat: 1,
+      clearcoatRoughness: 0.08,
+      envMapIntensity: 1.4
+    });
+
+    const logoE = new THREE.Mesh(logoGeometry, logoMat);
+    logoE.position.set(0, -0.01, 0.78);
+    logoE.rotation.x = 0;
+    logoE.renderOrder = 50;
+    logoE.scale.set(1.05, 1.05, 1.05);
+    logoE.castShadow = true;
+    logoE.renderOrder = 20;
+    torsoPivot.add(logoE);
+
+    const armGeom = new THREE.SphereGeometry(0.18, 36, 36);
+    const handGeom = new THREE.SphereGeometry(0.26, 40, 40);
+
+    const leftArm = new THREE.Mesh(armGeom, marbleMatSoft);
+    leftArm.scale.set(1.15, 1.15, 0.95);
+    leftArm.position.set(0, -0.18, 0.03);
+    leftArm.castShadow = true;
+    leftArmPivot.add(leftArm);
+
+    const leftHand = new THREE.Mesh(handGeom, marbleMatGloss);
+    leftHand.scale.set(1.25, 1.25, 1.0);
+    leftHand.position.set(0, -0.46, 0.08);
+    leftHand.castShadow = true;
+    leftArmPivot.add(leftHand);
+
+    const rightArm = leftArm.clone();
+    rightArmPivot.add(rightArm);
+
+    const rightHand = leftHand.clone();
+    rightArmPivot.add(rightHand);
+
+    let leftHandLag = 0;
+    let rightHandLag = 0;
+
+    const leftLeg = new THREE.Mesh(new THREE.SphereGeometry(0.24, 30, 30), marbleMatSoft);
+    leftLeg.scale.set(1.0, 1.1, 0.95);
+    leftLeg.position.set(0, -0.02, 0);
+    leftLeg.castShadow = true;
+    leftLegPivot.add(leftLeg);
+
+    const leftFoot = new THREE.Mesh(new THREE.SphereGeometry(0.38, 42, 42), marbleMatGloss);
+    leftFoot.scale.set(1.16, 0.72, 1.22);
+    leftFoot.position.set(0, -0.34, 0.12);
+    leftFoot.castShadow = true;
+    leftLegPivot.add(leftFoot);
+
+    const rightLeg = leftLeg.clone();
+    rightLegPivot.add(rightLeg);
+
+    const rightFoot = leftFoot.clone();
+    rightLegPivot.add(rightFoot);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xd3dde5, 1.65));
+
+    const key = new THREE.DirectionalLight(0xffffff, 2.45);
+    key.position.set(4.2, 6.1, 5.4);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near = 0.5;
+    key.shadow.camera.far = 20;
+    key.shadow.camera.left = -6;
+    key.shadow.camera.right = 6;
+    key.shadow.camera.top = 6;
+    key.shadow.camera.bottom = -6;
+    scene.add(key);
+
+    const fill = new THREE.PointLight(0xffffff, 1.3, 20, 2);
+    fill.position.set(-4.3, 2.9, 3.7);
+    scene.add(fill);
+
+    const rim = new THREE.PointLight(0xf6fdff, 1.5, 20, 2);
+    rim.position.set(0, 3.4, -4.9);
+    scene.add(rim);
+
+    const accent = new THREE.PointLight(0xd7f5ff, 0.9, 12, 2);
+    accent.position.set(0, 1.1, 3.2);
+    scene.add(accent);
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2(0, 0);
+    const lookTarget = new THREE.Vector2(0, 0);
+    const lookCurrent = new THREE.Vector2(0, 0);
+
+    let lastTime = performance.now();
+    let waving = 0;
+    let clickedPulse = 0;
+
+    const interactiveMeshes = [headBase, headChin, torso, belly, eyeL, eyeR];
+
+    function triggerWave() {
+      waving = 1.05;
+      clickedPulse = 1;
+    }
+
+    renderer.domElement.addEventListener('pointermove', (event) => {
+      const x = (event.clientX / window.innerWidth) * 2 - 1;
+      const y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      mouse.set(x, y);
+      lookTarget.set(x, y);
+
+      bgGlow.style.transform = `translate(calc(-50% + ${x * 24}px), calc(-50% + ${-y * 18}px))`;
+      floorGlow.style.transform = `translateX(calc(-50% + ${x * 15}px)) scale(${1 + Math.abs(x) * 0.03})`;
+    });
+
+    renderer.domElement.addEventListener('click', (event) => {
+      const x = (event.clientX / window.innerWidth) * 2 - 1;
+      const y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      mouse.set(x, y);
+      raycaster.setFromCamera(mouse, camera);
+
+      const hits = raycaster.intersectObjects(interactiveMeshes, false);
+      if (hits.length) triggerWave();
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+
+    const baseScale = new THREE.Vector3(1, 1, 1);
+
+    function animate(now) {
+      const t = now * 0.001;
+      const dt = Math.min((now - lastTime) * 0.001, 0.033);
+      lastTime = now;
+
+      lookCurrent.lerp(lookTarget, 0.08);
+
+      const dist = Math.min(1, Math.hypot(lookCurrent.x, lookCurrent.y));
+      const curiosity = THREE.MathUtils.smoothstep(dist, 0.05, 0.5);
+      const excitement = THREE.MathUtils.smoothstep(dist, 0.5, 1.0);
+
+      const hover = Math.sin(t * 1.9) * 0.05;
+      const squash = 1 + Math.sin(t * 2.2) * 0.015;
+
+      bodyBob.position.y = 0.12 + hover;
+
+      robot.scale.set(1 - squash * 0.02, 1 + squash * 0.04, 1 - squash * 0.02);
+
+      const sway = Math.sin(t * 1.1) * 0.02;
+      bodyBob.rotation.z = sway * (1 - curiosity * 0.4);
+
+      const headTilt = Math.sin(t * 1.6) * 0.08 * curiosity;
+
+      headPivot.rotation.y = THREE.MathUtils.lerp(headPivot.rotation.y, lookCurrent.x * (0.42 + excitement * 0.1), 0.1);
+      headPivot.rotation.x = THREE.MathUtils.lerp(headPivot.rotation.x, -lookCurrent.y * 0.28 + headTilt, 0.1);
+      torsoPivot.rotation.y = THREE.MathUtils.lerp(torsoPivot.rotation.y, lookCurrent.x * 0.1, 0.06);
+
+      const eyeMoveX = lookCurrent.x * (0.06 + excitement * 0.02);
+      const eyeMoveY = lookCurrent.y * (0.05 + excitement * 0.02);
+
+      eyeL.position.x = -0.56 + eyeMoveX;
+      eyeL.position.y = 0.02 - eyeMoveY;
+      eyeR.position.x = 0.56 + eyeMoveX;
+      eyeR.position.y = 0.02 - eyeMoveY;
+
+      const blink = Math.abs(Math.sin(t * 0.8)) > 0.985 ? 0.08 : 1;
+      eyeL.scale.y = THREE.MathUtils.lerp(eyeL.scale.y, blink, 0.35);
+      eyeR.scale.y = THREE.MathUtils.lerp(eyeR.scale.y, blink, 0.35);
+
+      const pupil = 1 + curiosity * 0.2 + excitement * 0.1;
+      eyeL.scale.z = THREE.MathUtils.lerp(eyeL.scale.z, 0.72 * pupil, 0.2);
+      eyeR.scale.z = THREE.MathUtils.lerp(eyeR.scale.z, 0.72 * pupil, 0.2);
+
+      eyeGlossL.position.x = -0.66 + lookCurrent.x * 0.03;
+      eyeGlossL.position.y = 0.24 - lookCurrent.y * 0.03;
+      eyeGlossR.position.x = 0.46 + lookCurrent.x * 0.03;
+      eyeGlossR.position.y = 0.24 - lookCurrent.y * 0.03;
+
+      const idle = Math.sin(t * 1.6) * 0.035;
+      leftArmPivot.rotation.z = idle;
+      rightArmPivot.rotation.z = Math.sin(t * 1.6 + 1.2) * 0.035;
+
+      const anticipate = Math.sin(t * 3.2) * 0.015;
+      leftArmPivot.rotation.x += anticipate;
+      rightArmPivot.rotation.x += anticipate;
+
+      const curZ = THREE.MathUtils.lerp(0, -0.25, curiosity);
+      const curX = THREE.MathUtils.lerp(0, -0.12, curiosity);
+
+      leftArmPivot.rotation.z += curZ;
+      rightArmPivot.rotation.z -= curZ;
+      leftArmPivot.rotation.x = THREE.MathUtils.lerp(leftArmPivot.rotation.x, curX, 0.2);
+      rightArmPivot.rotation.x = THREE.MathUtils.lerp(rightArmPivot.rotation.x, curX, 0.2);
+
+      const ex = Math.sin(t * 7.0) * 0.16 * excitement;
+      leftArmPivot.rotation.z += ex;
+      rightArmPivot.rotation.z -= ex;
+      leftArmPivot.rotation.x *= 0.98;
+      rightArmPivot.rotation.x *= 0.98;
+
+      if (waving > 0) {
+        waving = Math.max(0, waving - dt);
+        const waveStrength = Math.sin((1.05 - waving) * 26) * waving;
+        if (waving > 0.92) {
+          rightArmPivot.rotation.z = -0.04;
+        } else {
+          rightArmPivot.rotation.z = -0.28 + waveStrength * 1.4;
+        }
+        rightArmPivot.rotation.x = -0.14 + Math.abs(waveStrength) * 0.25;
+      }
+
+      leftHandLag = THREE.MathUtils.lerp(leftHandLag, leftArmPivot.rotation.z, 0.1);
+      rightHandLag = THREE.MathUtils.lerp(rightHandLag, rightArmPivot.rotation.z, 0.1);
+      leftHand.rotation.z = leftHandLag * 0.7;
+      rightHand.rotation.z = rightHandLag * 0.7;
+
+      leftLegPivot.rotation.x = Math.sin(t * 2) * 0.02;
+      rightLegPivot.rotation.x = -Math.sin(t * 2) * 0.02;
+
+      if (clickedPulse > 0) clickedPulse = Math.max(0, clickedPulse - dt * 1.7);
+
+      const pulse = 1 + clickedPulse * 0.03;
+      robot.scale.set(baseScale.x * pulse, baseScale.y * pulse, baseScale.z * pulse);
+
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    function createMarbleTexture() {
+      const size = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fafaf8';
+      ctx.fillRect(0, 0, size, size);
+      const grad = ctx.createRadialGradient(size*0.32, size*0.22, size*0.08, size*0.32, size*0.22, size*0.86);
+      grad.addColorStop(0, 'rgba(255,255,255,0.99)');
+      grad.addColorStop(0.45, 'rgba(246,246,244,0.96)');
+      grad.addColorStop(1, 'rgba(232,232,229,0.97)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 18; i++) drawVein(ctx, size, 'rgba(150,150,150,0.12)', 0.9 + Math.random() * 1.8);
+      for (let i = 0; i < 10; i++) drawVein(ctx, size, 'rgba(190,190,190,0.08)', 0.6 + Math.random() * 1.0);
+      for (let i = 0; i < 4600; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`;
+        ctx.fillRect(x, y, 1.1, 1.1);
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function drawVein(ctx, size, color, width) {
+      let x = Math.random() * size;
+      let y = Math.random() * size;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      const steps = 7 + Math.floor(Math.random() * 8);
+      for (let i = 0; i < steps; i++) {
+        x += (Math.random() - 0.5) * size * 0.14;
+        y += (Math.random() - 0.5) * size * 0.14;
+        const cpx = x + (Math.random() - 0.5) * 42;
+        const cpy = y + (Math.random() - 0.5) * 42;
+        ctx.quadraticCurveTo(cpx, cpy, x, y);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+
+    function assert(condition, label) {
+      if (!condition) throw new Error(`Test échoué: ${label}`);
+      console.log(`✓ ${label}`);
+    }
+
+    function runTests() {
+      assert(typeof THREE.WebGLRenderer === 'function', 'Three.js est chargé');
+      assert(typeof OrbitControls === 'function', 'OrbitControls est chargé');
+      assert(renderer.domElement instanceof HTMLCanvasElement, 'Le canvas WebGL est créé');
+      assert(interactiveMeshes.length === 6, 'Les meshes du robot sont présents');
+      assert(headBase.geometry.parameters.radius === 1.34, 'La tête dominante est valide');
+      assert(eyeL.geometry.parameters.radius === 0.48, 'Les grands yeux sont valides');
+      assert(torso.geometry.parameters.radius === 0.88, 'Le corps compact est valide');
+      assert(logoE instanceof THREE.Mesh, 'Le logo E 3D est ajouté');
+    
+    }
+
+    try {
+      runTests();
+      requestAnimationFrame(animate);
+    } catch (error) {
+      console.error(error);
+      testBadge.textContent = 'Tests: erreur';
+    }
+  </script>
+</body>
+</html>
