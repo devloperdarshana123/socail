@@ -566,7 +566,10 @@ function DeactivateTab() {
 export default function Settings() {
   const dispatch   = useDispatch();
   const { user }   = useSelector((s) => s.auth);
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(() => {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return ["profile", "password", "deactivate"].includes(tab) ? tab : "profile";
+});
 
   const handleLogout = () => {
     dispatch(logoutUser());
@@ -616,7 +619,11 @@ export default function Settings() {
                 const active   = activeTab === id;
                 const isDanger = id === "deactivate";
                 return (
-                  <button key={id} onClick={() => setActiveTab(id)}
+                  <button key={id}
+                   onClick={() => {
+  setActiveTab(id);
+  window.history.pushState({}, "", `?tab=${id}`);
+}}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left"
                     style={{
                       background: active ? (isDanger ? "#fef2f2" : T.brownLt) : "transparent",

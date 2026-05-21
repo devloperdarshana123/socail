@@ -128,6 +128,57 @@ export const setUsername = createAsyncThunk(
   },
 );
 
+
+export const forgotPassword = createAsyncThunk(
+  "auth/forgotPassword",
+  async (email, { rejectWithValue }) => {
+    try {
+      const res = await api.post("/auth/forgot-password", { email });
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed");
+    }
+  }
+);
+
+export const resetPassword = createAsyncThunk(
+  "auth/resetPassword",
+  async ({ newPassword }, { rejectWithValue }) => {
+    try {
+      const res = await api.post("/auth/reset-password", { newPassword });
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed");
+    }
+  }
+);
+
+
+export const followUser = createAsyncThunk(
+  "auth/followUser",
+  async (userId, { rejectWithValue }) => {
+    try {
+      const res = await api.post(`/follow/${userId}`);
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed");
+    }
+  }
+);
+
+export const unfollowUser = createAsyncThunk(
+  "auth/unfollowUser",
+  async (userId, { rejectWithValue }) => {
+    try {
+      const res = await api.delete(`/follow/${userId}`);
+      return res.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed");
+    }
+  }
+);
+
+
 // ─────────────────────────────────────────────
 //  Initial State
 // ─────────────────────────────────────────────
@@ -218,6 +269,10 @@ updateUserAvatar(state, action) {
 updateUserCoverPhoto(state, action) {
   if (state.user) state.user.coverPhoto = action.payload;
 },
+setPending(state, action) {
+  state.pendingUserId = action.payload.userId;
+  state.pendingPurpose = action.payload.purpose;
+},
 
   },
 
@@ -260,7 +315,6 @@ updateUserCoverPhoto(state, action) {
         state.pendingPurpose = null;
         // localStorage sync
         if (action.payload.accessToken) {
-          localStorage.setItem("accessToken", action.payload.accessToken);
         }
       })
       .addCase(verifyOtp.rejected, (state, action) => {
@@ -289,7 +343,8 @@ updateUserCoverPhoto(state, action) {
         state.user = null;
         state.isAuthenticated = false;
         // Token invalid — localStorage bhi clear karo
-        localStorage.removeItem("accessToken");
+       
+        
       });
 
     // ── Login ──
@@ -309,7 +364,6 @@ updateUserCoverPhoto(state, action) {
         // localStorage sync — null/undefined guard
         const token = action.payload.accessToken;
         if (token && token !== "null" && token !== "undefined") {
-          localStorage.setItem("accessToken", token);
         } else {
           localStorage.removeItem("accessToken");
         }
@@ -399,19 +453,38 @@ updateUserCoverPhoto(state, action) {
         state.nextRoute = action.payload.nextRoute || "/feed";
         // localStorage sync
         if (action.payload.accessToken) {
-          localStorage.setItem("accessToken", action.payload.accessToken);
+          
         }
       })
       .addCase(setUsername.rejected, (state, action) => {
         state.onboarding.setLoading = false;
         state.onboarding.error = action.payload;
       });
+
+
+      // ── Follow User ──
+builder
+  .addCase(followUser.fulfilled, (state) => {
+    if (state.user) {
+      state.user.followingCount = (state.user.followingCount || 0) + 1;
+    }
+  });
+
+// ── Unfollow User ──
+builder
+  .addCase(unfollowUser.fulfilled, (state) => {
+    if (state.user) {
+      state.user.followingCount = Math.max(0, (state.user.followingCount || 0) - 1);
+    }
+  });
+
   },
 });
 
 export const {
   setAccessToken,
   setUser,
+  setPending,  
   clearRegisterState,
   clearLoginState,
   clearOtpState,

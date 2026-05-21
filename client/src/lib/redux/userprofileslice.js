@@ -70,33 +70,62 @@ export const removeCoverPhoto = createAsyncThunk(
 const userProfileSlice = createSlice({
   name: "userProfile",
   initialState: {
+    avatar: null,      // ✅ add karo
+    coverPhoto: null,  // ✅ add karo
     avatarLoading: false,
     coverLoading: false,
     error: null,
   },
   reducers: {
+    // ✅ yeh block missing tha!
     clearError(state) {
       state.error = null;
     },
     resetProfile(state) {
-    state.avatarLoading = false;
-    state.coverLoading = false;
-    state.error = null;
-  },
+      state.avatar = null;
+      state.coverPhoto = null;
+      state.avatarLoading = false;
+      state.coverLoading = false;
+      state.error = null;
+    },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(uploadAvatar.pending, (state) => { state.avatarLoading = true; state.error = null; })
-      .addCase(uploadAvatar.fulfilled, (state) => { state.avatarLoading = false; })
-      .addCase(uploadAvatar.rejected, (state, action) => { state.avatarLoading = false; state.error = action.payload; });
+      .addCase(uploadAvatar.pending, (state) => { 
+        state.avatarLoading = true; 
+        state.error = null; 
+      })
+      .addCase(uploadAvatar.fulfilled, (state, action) => { 
+        state.avatarLoading = false;
+        state.avatar = action.payload; // ✅ state update karo
+      })
+      .addCase(uploadAvatar.rejected, (state, action) => { 
+        state.avatarLoading = false; 
+        state.error = action.payload; 
+      });
 
     builder
-      .addCase(uploadCoverPhoto.pending, (state) => { state.coverLoading = true; state.error = null; })
-      .addCase(uploadCoverPhoto.fulfilled, (state) => { state.coverLoading = false; })
-      .addCase(uploadCoverPhoto.rejected, (state, action) => { state.coverLoading = false; state.error = action.payload; });
+      .addCase(uploadCoverPhoto.pending, (state) => { 
+        state.coverLoading = true; 
+        state.error = null; 
+      })
+      .addCase(uploadCoverPhoto.fulfilled, (state, action) => { 
+        state.coverLoading = false;
+        state.coverPhoto = action.payload; // ✅ state update karo
+      })
+      .addCase(uploadCoverPhoto.rejected, (state, action) => { 
+        state.coverLoading = false; 
+        state.error = action.payload; 
+      });
 
-    builder.addCase(removeAvatar.fulfilled, (state) => { state.avatarLoading = false; });
-    builder.addCase(removeCoverPhoto.fulfilled, (state) => { state.coverLoading = false; });
+    builder.addCase(removeAvatar.fulfilled, (state) => { 
+      state.avatarLoading = false;
+      state.avatar = null; // ✅
+    });
+    builder.addCase(removeCoverPhoto.fulfilled, (state) => { 
+      state.coverLoading = false;
+      state.coverPhoto = null; // ✅
+    });
   },
 });
 

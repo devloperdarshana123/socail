@@ -8,15 +8,20 @@ import {
   removeCoverPhoto,
   updateProfile,
   getMapSellers, 
+  blockUser,      // ← ADD
+  unblockUser,    // ← ADD
+  getBlockedUsers ,
+  getBlockStatus ,
+  submitReport
 } from "../../controllers/auth/user.controller.js";
 
 const userRouter = express.Router();
 
-userRouter.get("/map-sellers", getMapSellers);
+
 
 // ── All routes require authentication ──
 userRouter.use(isAuthenticated, isActive);
-
+userRouter.get("/map-sellers", getMapSellers);
 // ─────────────────────────────────────────────
 //  Avatar Routes
 // ─────────────────────────────────────────────
@@ -36,6 +41,16 @@ userRouter
   .route("/cover-photo")
   .patch(uploadSingle("coverPhoto"), updateCoverPhoto)  // upload/replace
   .delete(removeCoverPhoto);                             // remove
+userRouter
+  .route("/block/:userId")
+  .post(blockUser)    // block karo
+  .delete(unblockUser); // unblock karo
+
+
+
+userRouter.get("/blocked", getBlockedUsers); // blocked list
+userRouter.get("/block-status/:userId", getBlockStatus);
+userRouter.post("/report/:userId", submitReport);
 
 // ─────────────────────────────────────────────
 //  Map Sellers Route

@@ -1,6 +1,8 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import User from "../../models/user.model.js";
+import Follow from "../../models/follow.model.js";
+import Report from "../../models/report.model.js";
 import {
   uploadToCloudinary,
   deleteFromCloudinary,
@@ -25,6 +27,9 @@ export const updateAvatar = asyncHandler(async (req, res, next) => {
   if (!req.file) {
     return next(new AppError("Please upload an image file.", 400));
   }
+  if (req.file.size > 5 * 1024 * 1024) {
+  return next(new AppError("Avatar image cannot exceed 5MB.", 400));
+}
 
   const user = await User.findById(req.user._id);
   if (!user) return next(new AppError("User not found.", 404));
@@ -66,6 +71,9 @@ export const updateCoverPhoto = asyncHandler(async (req, res, next) => {
     return next(new AppError("Please upload an image file.", 400));
   }
 
+  if (req.file.size > 10 * 1024 * 1024) {
+  return next(new AppError("Cover photo cannot exceed 10MB.", 400));
+}
   const user = await User.findById(req.user._id);
   if (!user) return next(new AppError("User not found.", 404));
 
@@ -148,8 +156,20 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
   const { fullName, bio, designation, dateOfBirth, gender, website, businessCategory, location  } = req.body;
 
   const updateFields = {};
-  if (fullName    !== undefined) updateFields.fullName    = fullName;
-  if (bio         !== undefined) updateFields.bio         = bio;
+
+
+if (fullName !== undefined) {
+  if (fullName.trim().length < 2 || fullName.trim().length > 50) {
+    return next(new AppError("Full name must be between 2 and 50 characters.", 400));
+  }
+  updateFields.fullName = fullName.trim();
+}
+if (bio !== undefined) {
+  if (bio.length > 300) {
+    return next(new AppError("Bio cannot exceed 300 characters.", 400));
+  }
+  updateFields.bio = bio;
+}
   if (designation !== undefined) updateFields.designation = designation;
   if (dateOfBirth !== undefined) updateFields.dateOfBirth = dateOfBirth || null;
   if (gender      !== undefined) updateFields.gender      = gender || null;
@@ -205,34 +225,170 @@ if (location?.city || location?.state) {
 // ─────────────────────────────────────────────
 export const getMapSellers = asyncHandler(async (req, res) => {
   const { q, category } = req.query;
+  const currentUserId = req.user?._id;
 
-const filter = {
-  accountStatus: "active",
-  $or: [
-    { "location.coordinates.coordinates": { $exists: true, $size: 2 } },
-    { "location.city": { $exists: true, $ne: null } },
-  ],
-};
+  // ── Build filter ──────────────────────────────────────────
+  const filter = {
+    accountStatus: "active",
+    $or: [
+      { "location.coordinates.coordinates": { $exists: true, $size: 2 } },
+      { "location.city": { $exists: true, $ne: null } },
+    ],
+  };
 
   if (category && category !== "all") {
     filter.businessCategory = category;
   }
 
-  if (q) {
-    filter.$or = [
-      { fullName:         { $regex: q, $options: "i" } },
-      { designation:      { $regex: q, $options: "i" } },
-      { "location.city":  { $regex: q, $options: "i" } },
-      { businessCategory: { $regex: q, $options: "i" } },
-    ];
+if (q) {
+  if (q.length > 100) {
+    return res.status(400).json({ success: false, message: "Search query too long." });
   }
+  const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  filter.$or = [
+    { fullName:         { $regex: safeQ, $options: "i" } },
+    { designation:      { $regex: safeQ, $options: "i" } },
+    { "location.city":  { $regex: safeQ, $options: "i" } },
+    { businessCategory: { $regex: safeQ, $options: "i" } },
+  ];
+}
 
-  const users = await User.find(filter)
-    .select("fullName username avatar designation businessCategory location followersCount isVerifiedBadge isPrivate")
-    .limit(200);
+  // ── Fetch users + follow status parallel ─────────────────
+  const [users, followingIds] = await Promise.all([
+    User.find(filter)
+      .select("fullName username avatar designation businessCategory location followersCount isVerifiedBadge isPrivate")
+      .limit(200)
+      .lean(), // ✅ lean() — plain JS object, faster
+    currentUserId
+      ? Follow.find({ follower: currentUserId, status: "accepted" }).distinct("following")
+      : Promise.resolve([]),
+  ]);
+
+  // ── isFollowing set banao O(1) lookup ke liye ────────────
+  const followingSet = new Set(followingIds.map((id) => id.toString()));
+
+  // ── Response ──────────────────────────────────────────────
+  const usersWithFollowStatus = users.map((u) => ({
+    ...u,
+    isFollowing: followingSet.has(u._id.toString()),
+  }));
 
   return res.status(200).json({
     success: true,
-    users,
+    users: usersWithFollowStatus,
+  });
+});
+
+// ─────────────────────────────────────────────
+//  POST /api/v2/user/block/:userId
+//  Block a user
+// ─────────────────────────────────────────────
+export const blockUser = asyncHandler(async (req, res, next) => {
+  const { userId } = req.params;
+  const currentUserId = req.user._id;
+
+  if (userId === currentUserId.toString()) {
+    return next(new AppError("You cannot block yourself.", 400));
+  }
+
+  const targetUser = await User.findById(userId);
+  if (!targetUser) return next(new AppError("User not found.", 404));
+
+  await User.findByIdAndUpdate(currentUserId, {
+    $addToSet: { blockedUsers: userId }, // duplicate nahi aayega
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "User blocked successfully.",
+  });
+});
+
+// ─────────────────────────────────────────────
+//  DELETE /api/v2/user/block/:userId
+//  Unblock a user
+// ─────────────────────────────────────────────
+export const unblockUser = asyncHandler(async (req, res, next) => {
+  const { userId } = req.params;
+  const currentUserId = req.user._id;
+
+  await User.findByIdAndUpdate(currentUserId, {
+    $pull: { blockedUsers: userId },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "User unblocked successfully.",
+  });
+});
+
+// ─────────────────────────────────────────────
+//  GET /api/v2/user/blocked
+//  Get my blocked users list
+// ─────────────────────────────────────────────
+export const getBlockedUsers = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.user._id)
+    .populate("blockedUsers", "username fullName avatar isVerifiedBadge");
+
+  res.status(200).json({
+    success: true,
+    data: user.blockedUsers || [],
+  });
+});
+
+// ─────────────────────────────────────────────
+//  GET /api/v2/user/block-status/:userId
+//  Check if blocked (either direction)
+// ─────────────────────────────────────────────
+export const getBlockStatus = asyncHandler(async (req, res, next) => {
+  const { userId } = req.params;
+  const currentUserId = req.user._id;
+
+  const [me, them] = await Promise.all([
+    User.findById(currentUserId).select("blockedUsers").lean(),
+    User.findById(userId).select("blockedUsers").lean(),
+  ]);
+
+  if (!them) return next(new AppError("User not found.", 404));
+
+  const iBlockedThem = me?.blockedUsers?.map(String).includes(String(userId)) ?? false;
+  const theyBlockedMe = them?.blockedUsers?.map(String).includes(String(currentUserId)) ?? false;
+
+  res.status(200).json({
+    success: true,
+    data: {
+      blocked: iBlockedThem || theyBlockedMe,
+      iBlockedThem,
+      theyBlockedMe,
+    },
+  });
+});
+
+
+export const submitReport = asyncHandler(async (req, res, next) => {
+  const { userId }     = req.params;
+  const { reason, description } = req.body;
+  const reporterId     = req.user._id;
+
+  if (String(userId) === String(reporterId))
+    return next(new AppError("You cannot report yourself.", 400));
+
+  if (!reason?.trim())
+    return next(new AppError("Reason is required.", 400));
+
+  const { alreadyReported } = await Report.submitReport({
+    reportedBy:  reporterId,
+    targetId:    userId,
+    targetModel: "User",
+    reason,
+    description: description?.trim() || "",
+  });
+
+  if (alreadyReported)
+    return next(new AppError("You have already reported this user.", 409));
+
+  res.status(201).json({ 
+    success: true, 
+    message: "Report submitted. Our team will review it." 
   });
 });

@@ -65,8 +65,8 @@ savedSchema.statics.getBulkSaveStatus = async function (userId, postIds) {
 };
 
 /** Get saved posts for a user (paginated) */
-savedSchema.statics.getSavedPosts = function (userId, page = 1, limit = 12) {
-  return this.find({ savedBy: userId })
+savedSchema.statics.getSavedPosts = async function (userId, page = 1, limit = 12) {
+  const results = await this.find({ savedBy: userId })
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
@@ -76,6 +76,9 @@ savedSchema.statics.getSavedPosts = function (userId, page = 1, limit = 12) {
       select: "media type likesCount commentsCount viewsCount caption createdAt author",
       populate: { path: "author", select: "username fullName avatar" },
     });
+
+  // null posts filter karo (deleted/draft posts ki jagah null aata hai)
+  return results.filter((s) => s.post !== null);
 };
 
 const Saved = models.Saved || model("Saved", savedSchema);

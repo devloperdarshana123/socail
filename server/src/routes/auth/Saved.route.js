@@ -8,9 +8,9 @@ import {
 
 const router = express.Router();
 router.use(isAuthenticated, isActive);
+router.get("/", getSavedPosts);  
+router.get("/:postId/status", getSaveStatus);
 
-router.post("/:postId", toggleSave);           // Toggle save
-router.get("/", getSavedPosts);                // Get all saved posts
-router.get("/:postId/status", getSaveStatus);  // Check save status
+router.post("/:postId", toggleSave);   // Check save status
 
 export default router;

@@ -238,13 +238,13 @@ hashtagSchema.statics.recomputeTrendingScores = async function () {
   const bulkOps = hashtags.map((h) => ({
     updateOne: {
       filter: { _id: h._id },
-      update: {
-        $set: {
-          trendingScore:
-            h.recentPostsCount * 10 + Math.log(h.postsCount + 1),
-        },
-        $set: { recentPostsCount: 0 }, // reset for next window
-      },
+     // NAYA — dono ek hi $set mein rakho
+update: {
+  $set: {
+    trendingScore: h.recentPostsCount * 10 + Math.log(h.postsCount + 1),
+    recentPostsCount: 0,
+  },
+},
     },
   }));
 

@@ -35,8 +35,20 @@ export const chatWithAI = asyncHandler(async (req, res, next) => {
   const { message, history = [] } = req.body;
 
   if (!message?.trim()) {
-    return next(new AppError("Message is required.", 400));
-  }
+  return next(new AppError("Message is required.", 400));
+}
+
+if (message.trim().length > 1000) {
+  return next(new AppError("Message cannot exceed 1000 characters.", 400));
+}
+
+if (!Array.isArray(history)) {
+  return next(new AppError("History must be an array.", 400));
+}
+
+if (history.length > 50) {
+  return next(new AppError("History too long.", 400));
+}
 
   if (!process.env.GROQ_API_KEY) {
     return next(new AppError("AI service not configured.", 500));

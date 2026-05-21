@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchStoriesFeed, deleteStory, fetchMyHighlights } from "../lib/redux/storySlice";
+import { fetchStoriesFeed, deleteStory } from "../lib/redux/storySlice";
 import StoryViewer from "./StoryViewer";
 import StoryCreate from "./StoryCreate";
 
 export default function StoryBar() {
   const dispatch    = useDispatch();
   const currentUser = useSelector((s) => s.auth.user);
-  const { feed, feedLoading, highlights } = useSelector((s) => s.stories);
+  const { feed, feedLoading, } = useSelector((s) => s.stories);
 
   const [viewerOpen,  setViewerOpen]  = useState(false);
   const [viewerStart, setViewerStart] = useState(0);
@@ -16,7 +16,6 @@ export default function StoryBar() {
 
   useEffect(() => {
   dispatch(fetchStoriesFeed());
-  dispatch(fetchMyHighlights());
 }, []);
 
   const myGroup = feed.find(
@@ -88,28 +87,6 @@ export default function StoryBar() {
             </p>
           </div>
         ))}
-
-
-{/* Highlights */}
-{highlights.map((h) => (
-  <div key={h._id}
-    className="shrink-0 flex flex-col items-center gap-1.5 cursor-pointer">
-    <div className="w-14 h-14 rounded-full p-0.5 bg-[#e8d5be]">
-      <div className="w-full h-full rounded-full overflow-hidden border-2 border-white bg-[#f5ece0]">
-        {h.coverImage ? (
-          <img src={h.coverImage} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-[#c09a6e]">
-            <span className="text-white text-sm font-bold">{h.title?.[0]?.toUpperCase()}</span>
-          </div>
-        )}
-      </div>
-    </div>
-    <p className="text-xs text-[#5a3e2b] font-medium w-14 text-center truncate">
-      {h.title}
-    </p>
-  </div>
-))}
 
       </div>
 

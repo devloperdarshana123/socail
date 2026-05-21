@@ -101,6 +101,7 @@ const userSchema = new Schema(
 
     authProvider: {
       type: String,
+
       enum: ["email", "phone", "google", "apple"],
       default: "email",
     },
@@ -177,7 +178,7 @@ designation: {
     // ── Role ─────────────────────────────────
     role: {
       type: String,
-      enum: ["user", "admin", "moderator"],
+      enum: ["user", "admin", "moderator" , "super_admin"],
       default: "user",
     },
 
@@ -233,7 +234,11 @@ designation: {
       default: "en",
       maxlength: 10,
     },
-
+blockedUsers: [{
+  type: Schema.Types.ObjectId,
+  ref: "User",
+  default: [],
+}],
 
  // ── Business Info ─────────────────────────  ← YAHAN ADD KARO
     businessCategory: {
@@ -421,6 +426,7 @@ userSchema.methods.toSafeObject = function () {
     createdAt: this.createdAt,
     businessCategory: this.businessCategory || null, // ← ADD
     location: this.location || null,  
+    blockedUsers: this.blockedUsers || [],
     // ❌ password, refreshTokens, firebaseUid, __v — never sent
   };
 };
@@ -452,18 +458,14 @@ userSchema.statics.getPublicProfile = function (userId) {
 };
 
 userSchema.statics.searchUsers = function (query, limit = 20) {
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
   return this.find(
-    {
-      $text: { $search: query },
-      accountStatus: "active",
-    },
+    { $text: { $search: query }, accountStatus: "active" },
     { score: { $meta: "textScore" } },
   )
     .sort({ score: { $meta: "textScore" } })
-    .limit(limit)
-    .select(
-      "username fullName avatar isVerifiedBadge isPrivate followersCount",
-    );
+    .limit(safeLimit)   // ← safeLimit use karo
+    .select("username fullName avatar isVerifiedBadge isPrivate followersCount");
 };
 
 userSchema.statics.updateCount = function (userId, field, value) {

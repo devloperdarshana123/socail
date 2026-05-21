@@ -49,9 +49,15 @@ export const register = asyncHandler(async (req, res, next) => {
     );
   }
 
-  if (hasEmail && password.length < 8) {
-    return next(new AppError("Password must be at least 8 characters", 400));
-  }
+ const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+if (hasEmail && !passwordRegex.test(password)) {
+  return next(
+    new AppError(
+      "Password must be at least 8 characters with one uppercase, one lowercase, and one number",
+      400,
+    ),
+  );
+}
 
   // ── 2. Duplicate check ───────────────────────────────────────
   if (hasEmail) {
@@ -260,6 +266,19 @@ export const resendOtp = asyncHandler(async (req, res, next) => {
     });
   }
 
+
+  if (purpose === OTP_PURPOSE.FORGOT_PASSWORD && user.email) {
+  sendTemplateMail(
+    "forgotPassword",
+    { fullName: user.fullName, otp, expiresIn: "10 minutes" },
+    user.email,
+  ).catch((err) =>
+    logger.error("Resend forgot password email failed", { userId, error: err.message }),
+  );
+}
+
+
+
   logger.info("OTP resent", { userId, purpose });
 
   return res.status(200).json({
@@ -292,10 +311,9 @@ export const login = asyncHandler(async (req, res, next) => {
   // ── User fetch (password select karo explicitly) ─────────────
   const user = await User.findByEmail(email).select("+password");
 
-  if (!user) {
-    // Intentionally vague — user enumeration prevent karo
-    return next(new AppError("No account found with this email address.", 401));
-  }
+ if (!user) {
+  return next(new AppError("Invalid email or password.", 401));
+}
 
   // ── Password check ───────────────────────────────────────────
   const isMatch = await user.isPasswordCorrect(password);
@@ -420,7 +438,7 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
   }
 
   // ── User fetch with refreshTokens ────────────────────────────
-  const user = await User.findById(decoded._id).select("+refreshTokens");
+ const user = await User.findById(decoded._id).select("+refreshTokens +refreshTokens.token");
 
   if (!user) {
     return next(new AppError("User not found.", 401));
@@ -473,7 +491,7 @@ if (!storedToken) {
     .json({
       success: true,
       message: "Token refreshed successfully",
-      accessToken: newAccessToken,
+      ...(process.env.NODE_ENV === "production" ? {} : { accessToken: newAccessToken }),
     });
 });
 
@@ -640,4 +658,124 @@ export const setUsername = asyncHandler(async (req, res, next) => {
     },
     next,
   );
+});
+
+
+// ─────────────────────────────────────────────
+//  POST /auth/forgot-password
+//
+//  Body: { email }
+//  Flow:
+//    1. User dhundo (same response chahe mile ya na mile)
+//    2. OTP generate karo (existing OTP model use)
+//    3. Email bhejo
+// ─────────────────────────────────────────────
+
+export const forgotPassword = asyncHandler(async (req, res, next) => {
+  const { email } = req.body;
+
+  if (!email?.trim()) {
+    return next(new AppError("Email is required", 400));
+  }
+
+  // ⚠️ SECURITY: Dono case mein SAME response
+  // Taaki attacker ko pata na chale kaunsa email registered hai
+  const genericMsg = "If this email is registered, an OTP has been sent.";
+
+  const user = await User.findByEmail(email);
+  if (!user) {
+    return res.status(200).json({ success: true, message: genericMsg });
+  }
+
+  // Password wale users hi reset kar sakte hain
+  if (user.authProvider !== "email") {
+    return res.status(200).json({ success: true, message: genericMsg });
+  }
+
+  // ── OTP generate (existing model use kar raha hai) ───────────
+  const { otp } = await OTP.generateOtp(user._id, OTP_PURPOSE.FORGOT_PASSWORD);
+
+  // ── Email bhejo (non-blocking — existing pattern same rakha) ─
+  sendTemplateMail(
+    "forgotPassword", // template banani hogi (Step 3 mein)
+    { fullName: user.fullName, otp, expiresIn: "10 minutes" },
+    user.email,
+  ).catch((err) =>
+    logger.error("Forgot password email failed", {
+      userId: user._id,
+      error: err.message,
+    }),
+  );
+
+  logger.info("Forgot password OTP sent", { userId: user._id });
+
+  return res.status(200).json({
+    success: true,
+    message: genericMsg,
+    data: {
+      userId: user._id,       // frontend ko chahiye OTP screen ke liye
+      purpose: OTP_PURPOSE.FORGOT_PASSWORD,
+      nextRoute: "/verify-otp",
+    },
+  });
+});
+
+// ─────────────────────────────────────────────
+//  POST /auth/reset-password
+//
+//  Body: { userId, newPassword }
+//
+//  NOTE: OTP verify pehle /auth/verify-otp se hoga
+//  Woh accessToken dega — yeh route protected hai
+//  isliye isAuthenticated middleware lagega
+// ─────────────────────────────────────────────
+
+export const resetPassword = asyncHandler(async (req, res, next) => {
+  const { newPassword } = req.body;
+
+  if (!newPassword) {
+    return next(new AppError("New password is required", 400));
+  }
+
+  if (newPassword.length < 8) {
+    return next(new AppError("Password must be at least 8 characters", 400));
+  }
+
+  // req.user already hai from isAuthenticated middleware
+  const user = await User.findById(req.user._id).select("+password +refreshTokens");
+
+  if (!user) {
+    return next(new AppError("User not found", 404));
+  }
+
+  // Purane password se same na ho
+  const isSame = await user.isPasswordCorrect(newPassword);
+  if (isSame) {
+    return next(new AppError("New password cannot be same as old password", 400));
+  }
+
+  // ── Password update ──────────────────────────────────────────
+user.password = newPassword;
+user.refreshTokens = [];
+await user.save({ validateBeforeSave: false });
+
+  logger.info("Password reset successful, all sessions cleared", {
+    userId: user._id,
+  });
+
+  const isProduction = process.env.NODE_ENV === "production";
+  const cookieOptions = {
+    httpOnly: true,
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
+  };
+
+  return res
+    .status(200)
+    .clearCookie("accesstoken", cookieOptions)
+    .clearCookie("refreshtoken", cookieOptions)
+    .json({
+      success: true,
+      message: "Password reset successfully. Please log in again.",
+    });
 });

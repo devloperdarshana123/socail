@@ -51,7 +51,7 @@ function PostCard({ post, onClick }) {
       {/* ── Media / Text content ── */}
       {isText ? (
         // Text post — caption show karo
-        <div className="p-4 min-h-[120px] flex flex-col justify-between"
+        <div className="p-4 min-h-30 flex flex-col justify-between"
           style={{ background: `linear-gradient(135deg, ${T.brownLt}, #fff)` }}>
           <p className="text-sm font-medium line-clamp-5" style={{ color: T.text }}>
             {post.caption || "—"}
@@ -187,11 +187,26 @@ export default function Explore() {
     searchLoading, searchLoadingMore, error,
   } = useSelector((s) => s.explore);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [selectedPost, setSelectedPost] = useState(null); // future modal
+ const [searchInput, setSearchInput] = useState("");
+const [selectedPost, setSelectedPost] = useState(null);
+
+// URL se post restore karo
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const postId = params.get("post");
+  if (!postId) return;
+  const found = posts.find((p) => p._id === postId);
+  if (found) setSelectedPost(found);
+}, [posts]);
   const searchTimer = useRef(null);
   const loaderRef   = useRef(null);
 
+
+  useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  if (tab && tab !== activeType) dispatch(setActiveType(tab));
+}, []);
   // ── Initial fetch ──
   useEffect(() => {
     dispatch(clearExplore());
@@ -246,10 +261,11 @@ export default function Explore() {
   };
 
   // ── Tab change ──
-  const handleTabChange = (type) => {
-    if (type === activeType) return;
-    dispatch(setActiveType(type));
-  };
+ const handleTabChange = (type) => {
+  if (type === activeType) return;
+  dispatch(setActiveType(type));
+  window.history.pushState({}, "", `?tab=${type}`);
+};
 
   const displayPosts = isSearchMode ? searchPosts : posts;
   const isLoadingAny = loading || searchLoading;
@@ -351,7 +367,10 @@ export default function Explore() {
         {!error && (
           <MasonryGrid
             posts={displayPosts}
-            onPostClick={setSelectedPost}
+            onPostClick={(post) => {
+  setSelectedPost(post);
+  window.history.pushState({}, "", `?tab=${activeType}&post=${post._id}`);
+}}
             loading={isLoadingAny}
           />
         )}
@@ -379,7 +398,10 @@ export default function Explore() {
        {selectedPost && (
         <PostModal
           post={selectedPost}
-          onClose={() => setSelectedPost(null)}
+         onClose={() => {
+  setSelectedPost(null);
+  window.history.pushState({}, "", `?tab=${activeType}`);
+}}
         />
       )}
     </div>

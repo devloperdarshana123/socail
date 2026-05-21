@@ -203,7 +203,7 @@ postSchema.index({ author: 1, isDeleted: 1, createdAt: -1 });
 postSchema.index({ hashtags: 1, isDeleted: 1, createdAt: -1 });
 postSchema.index({ visibility: 1, isDeleted: 1, createdAt: -1 });
 postSchema.index({ type: 1, isDeleted: 1, createdAt: -1 }); // reel feed
-postSchema.index({ "location.coordinates": "2dsphere" });   // geo queries
+postSchema.index({ "location.coordinates": "2dsphere" }, { sparse: true });   // geo queries
 postSchema.index({ caption: "text" });                       // text search
 
 // ─────────────────────────────────────────────
@@ -238,8 +238,8 @@ postSchema.statics.getFeedPosts = function (authorIds, page = 1, limit = 20) {
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
-    .populate("author", "username fullName avatar isVerifiedBadge isPrivate")
-    
+  .populate("author", "username fullName avatar isVerifiedBadge isPrivate")
+.select("media type caption likesCount commentsCount viewsCount createdAt visibility commentsDisabled likesHidden hashtags author");
 };
 
 /**
@@ -282,9 +282,9 @@ postSchema.statics.getReelsFeed = function (page = 1, limit = 10) {
 /**
  * Get posts by hashtag
  */
-postSchema.statics.getPostsByHashtag = function (hashtagId, page = 1, limit = 20) {
+postSchema.statics.getPostsByHashtag = function (hashtag, page = 1, limit = 20) {
   return this.find({
-    hashtags: hashtagId,
+    hashtags: hashtag.toLowerCase().trim(),
     isDeleted: false,
     isDraft: false,
     visibility: "public",

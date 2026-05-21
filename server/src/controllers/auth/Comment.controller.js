@@ -3,6 +3,7 @@ import AppError from "../../utils/AppError.js";
 import Comment from "../../models/comment.model.js";
 import Post from "../../models/post.model.js";
 import logger from "../../config/logger.js";
+import { notifyChat } from "../../helper/notifyChat.js";
 
 // ─────────────────────────────────────────────
 //  POST /api/v2/comments/post/:postId
@@ -12,6 +13,9 @@ export const addComment = asyncHandler(async (req, res) => {
   const { postId } = req.params;
   const userId = req.user._id;
   const { content, parentCommentId = null, mentions = [] } = req.body;
+  if (!Array.isArray(mentions) || mentions.length > 10) {
+  throw new AppError("Mentions must be an array of max 10 users", 400);
+}
 
   if (!content?.trim()) throw new AppError("Comment content is required", 400);
 
@@ -30,7 +34,25 @@ export const addComment = asyncHandler(async (req, res) => {
   // Increment commentsCount on post
   await Post.updateCount(postId, "commentsCount", 1);
 
-  logger.info(`User ${userId} commented on post ${postId}`);
+ logger.info(`User ${userId} commented on post ${postId}`);
+
+  // Notification — apni post pe comment nahi
+  if (post.author.toString() !== userId.toString()) {
+    notifyChat("/notify/comment", {
+      to:     post.author.toString(),
+      from:   userId.toString(),
+      sender: {
+        fullName: req.user.fullName || req.user.username || "",
+        username: req.user.username || "",
+        avatar:   req.user.avatar?.url || null,
+      },
+      type:   parentCommentId ? "reply" : "comment",
+      postId: postId,
+      text:   content.trim().slice(0, 100),
+    }).catch((err) =>
+      logger.error("Comment notification failed", { error: err.message })
+    );
+  }
 
   res.status(201).json({ success: true, data: comment });
 });
@@ -41,8 +63,8 @@ export const addComment = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────
 export const getComments = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+ const page = Math.max(1, parseInt(req.query.page) || 1);
+const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
 
   const post = await Post.findOne({ _id: postId, isDeleted: false }).select("_id");
   if (!post) throw new AppError("Post not found", 404);
@@ -65,8 +87,8 @@ export const getComments = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────
 export const getReplies = asyncHandler(async (req, res) => {
   const { commentId } = req.params;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
 
   const replies = await Comment.getReplies(commentId, page, limit);
 

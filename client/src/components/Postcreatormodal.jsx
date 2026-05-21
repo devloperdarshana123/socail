@@ -26,7 +26,7 @@ function Avatar({ user, size = 40 }) {
   const avatarUrl = user?.avatar?.url || user?.avatarUrl || null;
   return (
     <div
-      className="rounded-full flex-shrink-0 flex items-center justify-center font-bold border-2 border-gray-100"
+      className="rounded-full shrink-0 flex items-center justify-center font-bold border-2 border-gray-100"
       style={{
         width: size,
         height: size,
@@ -48,7 +48,7 @@ function Toggle({ checked, onChange }) {
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="relative flex-shrink-0 border-none cursor-pointer transition-colors duration-300 rounded-xl"
+      className="relative shrink-0 border-none cursor-pointer transition-colors duration-300 rounded-xl"
       style={{
         width: 44,
         height: 24,
@@ -191,7 +191,7 @@ function MediaGrid({ files, onRemove, onMove }) {
   return (
     <div className="flex flex-wrap gap-2 mt-3">
       {files.map((m, idx) => (
-        <div key={idx} className="relative rounded-xl overflow-hidden w-[72px] h-[72px] flex-shrink-0">
+        <div key={idx} className="relative rounded-xl overflow-hidden w-18 h-18 shrink-0">
           {m.type === "video"
             ? <video src={m.previewUrl} className="w-full h-full object-cover" muted />
             : <img src={m.previewUrl} alt="" className="w-full h-full object-cover" />
@@ -199,7 +199,7 @@ function MediaGrid({ files, onRemove, onMove }) {
           {/* Remove */}
           <button
             onClick={() => onRemove(idx)}
-            className="absolute top-0.5 right-0.5 bg-black/60 border-none rounded-full w-[18px] h-[18px] flex items-center justify-center cursor-pointer"
+            className="absolute top-0.5 right-0.5 bg-black/60 border-none rounded-full w-4.4 h-4.5 flex items-center justify-center cursor-pointer"
           >
             <X size={10} color="#fff" />
           </button>
@@ -365,7 +365,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
 
       {/* Overlay */}
       <div
-        className="pcm-overlay fixed inset-0 z-[9999] flex items-center justify-center p-4"
+        className="pcm-overlay fixed inset-0 z-9999 flex items-center justify-center p-4"
         style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center" }}
         onClick={e => e.target === e.currentTarget && handleClose()}
       >
@@ -450,7 +450,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
             {tab !== "text" && (
               <>
                 <label
-                  className="flex-1 flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed min-h-[200px] cursor-pointer transition-all duration-200 hover:opacity-80"
+                  className="flex-1 flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed min-h-50 cursor-pointer transition-all duration-200 hover:opacity-80"
                   style={{ borderColor: isDark ? "#374151" : "#e5e7eb" }}
                 >
                   <div
@@ -496,25 +496,29 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
                 )}
               </>
             )}
-
-            {tab === "text" && (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
-                <div
-                  className="w-[72px] h-[72px] rounded-2xl flex items-center justify-center border"
-                  style={{
-                    background: isDark ? "#374151" : "#fff",
-                    borderColor: isDark ? "#4b5563" : "#f1f5f9",
-                  }}
-                >
-                  <Type size={32} color={brand} />
-                </div>
-                <span className="text-[15px] font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Text Post</span>
-                <span className="text-[13px] text-center" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
-                  Share your thoughts, stories, or anything on your mind
-                </span>
-              </div>
-            )}
-
+{tab === "text" && (
+  <div className="flex-1 flex flex-col gap-3">
+    <span className="text-[13px] font-semibold" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
+      Write your post
+    </span>
+    <textarea
+      className="pcm-textarea w-full resize-none text-[15px] leading-relaxed rounded-2xl px-4 py-3.5 border transition-colors duration-200 font-[inherit] flex-1"
+      value={caption}
+      onChange={e => setCaption(e.target.value.slice(0, MAX_CAPTION))}
+      placeholder="What's on your mind? Use #hashtags and @mentions..."
+      style={{
+        minHeight: 220,
+        background: isDark ? "#1f2937" : "#fff",
+        color: isDark ? "#f1f5f9" : "#111827",
+        borderColor: isDark ? "#374151" : "#e5e7eb",
+      }}
+    />
+    <span className="text-xs font-semibold text-right"
+      style={{ color: (MAX_CAPTION - caption.length) < 100 ? "#ef4444" : (isDark ? "#9ca3af" : "#6b7280") }}>
+      {MAX_CAPTION - caption.length} chars left
+    </span>
+  </div>
+)}
             {/* Post type badge */}
             <div className="mt-auto pt-4">
               <span
@@ -588,7 +592,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
 
                   {showVis && (
                     <div
-                      className="absolute left-0 min-w-[200px] rounded-2xl overflow-hidden z-50"
+                      className="absolute left-0 min-w-50 rounded-2xl overflow-hidden z-50"
                       style={{
                         top: "calc(100% + 6px)",
                         background: isDark ? "#111827" : "#ffffff",

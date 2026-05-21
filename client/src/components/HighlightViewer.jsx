@@ -4,7 +4,7 @@ import {  X, Trash2 } from "lucide-react";
 
 const DURATION = 5000;
 
-export default function HighlightViewer({ highlight, onClose, onDelete }) {
+export default function HighlightViewer({ highlight, onClose, onDelete, onRemoveSnap }) {
 const [idx, setIdx]           = useState(0);
 const [confirmDelete, setConfirmDelete] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -100,34 +100,41 @@ if (!snap) return null;
 
           {/* Header */}
           <div className="absolute top-6 left-0 right-0 z-20 flex items-center justify-between px-4 pt-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white bg-[#c09a6e] flex items-center justify-center">
-                {highlight.coverImage
-                  ? <img src={highlight.coverImage} alt="" className="w-full h-full object-cover" />
-                  : <span className="text-white text-sm font-bold">{highlight.title?.[0]}</span>
-                }
-              </div>
-              <p className="text-white text-sm font-semibold">{highlight.title}</p>
-            </div>
-            <div className="flex items-center gap-2">
+<div className="flex items-center gap-2">
   {!confirmDelete ? (
-    <button onClick={() => setConfirmDelete(true)}
+    <button onClick={() => { setConfirmDelete(true); setPaused(true); }}
       className="w-8 h-8 flex items-center justify-center rounded-full bg-white/20 text-white">
       <Trash2 size={15} />
     </button>
   ) : (
-    <div className="flex items-center gap-2 bg-black/40 rounded-full px-3 py-1.5">
-      <span className="text-white text-xs font-semibold">Delete highlight?</span>
-      <button
-        onClick={() => { onDelete?.(highlight._id); onClose(); }}
-        className="text-xs bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-full font-semibold">
-        Yes
-      </button>
-      <button
-        onClick={() => setConfirmDelete(false)}
-        className="text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-semibold">
-        No
-      </button>
+    <div className="flex flex-col gap-1.5 bg-black/70 rounded-2xl px-3 py-2">
+      <span className="text-white text-xs font-semibold text-center">What do you want to delete?</span>
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => {
+            onRemoveSnap?.(highlight._id, snap._id);
+            if (snapshots.length <= 1) {
+              onClose();
+            } else {
+              setIdx((i) => Math.max(0, i - 1));
+              setConfirmDelete(false);
+              setPaused(false);
+            }
+          }}
+          className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-2.5 py-1 rounded-full font-semibold">
+      This Story
+        </button>
+        <button
+          onClick={() => { onDelete?.(highlight._id); onClose(); }}
+          className="text-xs bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-full font-semibold">
+          Full Highlight
+        </button>
+        <button
+          onClick={() => { setConfirmDelete(false); setPaused(false); }}
+          className="text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-semibold">
+          Cancel
+        </button>
+      </div>
     </div>
   )}
   <button onClick={onClose}

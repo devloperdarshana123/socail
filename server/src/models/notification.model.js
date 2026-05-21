@@ -150,6 +150,13 @@ notificationSchema.index({ receiver: 1, isRead: 1, isDeleted: 1 });
 // Dedup check — prevent duplicate notification of same type from same sender on same ref
 notificationSchema.index({ receiver: 1, sender: 1, type: 1, refId: 1 }, { sparse: true });
 
+
+// Auto-delete notifications older than 90 days
+notificationSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 90 * 24 * 60 * 60 }
+);
+
 // ─────────────────────────────────────────────
 //  Virtuals
 // ─────────────────────────────────────────────
@@ -222,7 +229,8 @@ notificationSchema.statics.getInbox = function (userId, page = 1, limit = 20) {
     .skip((page - 1) * limit)
     .limit(limit)
     .populate("sender", "username fullName avatar isVerifiedBadge")
-    .populate("refId");
+    // NAYA — sirf zaroorat ke fields populate karo
+.populate({ path: "refId", select: "caption media type text" });
 };
 
 /**

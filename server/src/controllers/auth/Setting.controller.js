@@ -6,7 +6,7 @@ import User from "../../models/user.model.js";
 //  Logged-in user ka profile fetch karo
 // ─────────────────────────────────────────────
 export const getMyProfile = asyncHandler(async (req, res, next) => {
-  const user = await User.findById(req.user._id).select("-password -__v");
+  const user = await User.findById(req.user._id).select("-password -__v -refreshTokens");
   if (!user) return next(new AppError("User not found.", 404));
 
   res.status(200).json({
@@ -27,8 +27,19 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
   } = req.body;
 
   const updateFields = {};
-  if (fullName          !== undefined) updateFields.fullName          = fullName;
-  if (bio               !== undefined) updateFields.bio               = bio;
+if (fullName !== undefined) {
+  if (fullName.trim().length < 2 || fullName.trim().length > 50) {
+    return next(new AppError("Full name must be between 2 and 50 characters.", 400));
+  }
+  updateFields.fullName = fullName.trim();
+}
+
+if (bio !== undefined) {
+  if (bio.length > 300) {
+    return next(new AppError("Bio cannot exceed 300 characters.", 400));
+  }
+  updateFields.bio = bio;
+}
   if (designation       !== undefined) updateFields.designation       = designation;
   if (dateOfBirth       !== undefined) updateFields.dateOfBirth       = dateOfBirth || null;
   if (gender            !== undefined) updateFields.gender            = gender || null;
@@ -148,11 +159,11 @@ export const deactivateAccount = asyncHandler(async (req, res, next) => {
 
   await user.save({ validateBeforeSave: false });
 
-  res.clearCookie("refreshToken", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-  });
+ res.clearCookie("refreshtoken", {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+});
 
   res.status(200).json({
     success: true,

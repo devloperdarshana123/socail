@@ -169,6 +169,19 @@ export const deleteHighlight = createAsyncThunk(
     }
   }
 );
+export const removeSnapFromHighlight = createAsyncThunk(
+  "stories/removeSnap",
+  async ({ highlightId, snapId }, { rejectWithValue }) => {
+    try {
+      const { data } = await api.delete(`/stories/highlights/${highlightId}/snap/${snapId}`);
+      return { highlightId, snapId };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to remove snapshot");
+    }
+  }
+);
+
+
 
 // ─────────────────────────────────────────────
 //  Slice
@@ -319,6 +332,19 @@ story.reactionsCount = liked
     builder.addCase(deleteHighlight.fulfilled, (state, { payload: highlightId }) => {
       state.highlights = state.highlights.filter((h) => h._id !== highlightId);
     });
+// ── Remove Snap from Highlight ──
+    builder.addCase(removeSnapFromHighlight.fulfilled, (state, { payload }) => {
+      const { highlightId, snapId } = payload;
+      const idx = state.highlights.findIndex((h) => h._id === highlightId);
+      if (idx > -1) {
+        state.highlights[idx].snapshots = state.highlights[idx].snapshots.filter(
+          (s) => s._id !== snapId
+        );
+      }
+    });
+
+
+
   },
 });
 

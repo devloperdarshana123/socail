@@ -1,10 +1,15 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
-const userSchema = new mongoose.Schema({
-  name: String,
-  avatar: String,
-  email: String,
-}, { timestamps: true });
+const userSchema = new mongoose.Schema(
+  {
+    fullName: String,
+    username: String,
+    avatar: {
+      url: String,
+    },
+    email: String,
+  },
+  { timestamps: true }
+);
 
-// ✅ "socialusers" — same collection jo social-server use karta hai
-module.exports = mongoose.model("User", userSchema, "socialusers");
+export default mongoose.model("User", userSchema, "socialusers");

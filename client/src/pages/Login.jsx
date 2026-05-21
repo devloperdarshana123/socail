@@ -184,19 +184,25 @@ const Login = () => {
   // ── Backend error ─────────────────────────────────────────────
 useEffect(() => {
   if (!error) return;
+  console.log("Login error:", error);
 
-  if (error.toLowerCase().includes("password")) {
-    setErrors({ password: error });
-  } else if (
-    error.toLowerCase().includes("email") ||
-    error.toLowerCase().includes("account") ||
-    error.toLowerCase().includes("found")
-  ) {
-    setErrors({ email: error });
-  } else {
-    toast.error(error);
-  }
-
+if (
+  error.toLowerCase().includes("password") ||
+  error.toLowerCase().includes("incorrect") ||
+  error.toLowerCase().includes("wrong")
+) {
+  setErrors({ password: error });
+} else if (
+  error.toLowerCase().includes("email") ||
+  error.toLowerCase().includes("account") ||
+  error.toLowerCase().includes("found") ||
+  error.toLowerCase().includes("user") ||
+  error.toLowerCase().includes("exist")
+) {
+  setErrors({ email: error });
+} else {
+  toast.error(error);
+}
   const t = setTimeout(() => dispatch(clearLoginState()), 100);
   return () => clearTimeout(t);
 }, [error, dispatch]);

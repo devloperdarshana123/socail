@@ -335,12 +335,14 @@ const VerifyOTP = () => {
 
               {/* Back */}
               <div className="mt-8 pt-6 border-t border-[#e2e6ef]">
-                <button
-                  onClick={() => navigate("/register")}
-                  className="text-xs text-[#8494b4] hover:text-[#0f2557] transition-colors"
-                >
-                  ← Wrong email? Go back
-                </button>
+<button
+  onClick={() => navigate(
+    pendingPurpose === "forgot_password" ? "/forgot-password" : "/register"
+  )}
+  className="text-xs text-[#8494b4] hover:text-[#0f2557] transition-colors"
+>
+  ← {pendingPurpose === "forgot_password" ? "Back to forgot password" : "Wrong email? Go back"}
+</button>
               </div>
             </div>
           </div>

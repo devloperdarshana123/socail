@@ -44,10 +44,14 @@ const highlightSchema = new Schema(
     coverPublicId: { type: String, default: null },  // for future cover change/delete
 
     // Permanent snapshots — story expire hone ke baad bhi content yahaan rahega
-    snapshots: {
-      type: [snapshotSchema],
-      default: [],
-    },
+  snapshots: {
+  type: [snapshotSchema],
+  default: [],
+  validate: {
+    validator: function (v) { return v.length <= 100; },
+    message: "Highlight cannot have more than 100 stories",
+  },
+},
 
     isDeleted: { type: Boolean, default: false },
   },
@@ -55,6 +59,7 @@ const highlightSchema = new Schema(
 );
 
 highlightSchema.index({ author: 1, isDeleted: 1, createdAt: -1 });
+highlightSchema.index({ author: 1, title: 1 });
 
 const Highlight = models.Highlight || model("Highlight", highlightSchema);
 export default Highlight;

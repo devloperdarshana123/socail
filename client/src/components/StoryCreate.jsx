@@ -19,21 +19,20 @@ const { storyUploading: uploading } = useSelector((s) => s.stories);
     setPreview(URL.createObjectURL(f));
   };
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     if (!file || uploading) return;
-    setUploading(true);
     try {
       const form = new FormData();
       form.append("media", file);
       form.append("caption", caption);
-      const { data } = await api.post("/stories", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      if (data.success) { onCreated?.(data.story); onClose(); }
+      const result = await dispatch(createStory(form)).unwrap();
+      if (result) {
+        dispatch(fetchStoriesFeed());
+        onCreated?.(result);
+        onClose();
+      }
     } catch (err) {
       console.error("Story upload failed:", err);
-    } finally {
-      setUploading(false);
     }
   };
 

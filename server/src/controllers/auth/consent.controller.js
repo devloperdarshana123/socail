@@ -6,9 +6,14 @@ import AppError from "../../utils/AppError.js";
 export const saveConsent = asyncHandler(async (req, res) => {
   const { sessionId, analytics, marketing, policyVersion } = req.body;
 
-  if (!sessionId) {
-    throw new AppError("SessionId is required", 400);
-  }
+ if (!sessionId || typeof sessionId !== "string" || sessionId.trim().length < 8) {
+  throw new AppError("Valid sessionId is required", 400);
+}
+
+const VALID_VERSIONS = ["1.0", "1.1", "1.2"];
+if (policyVersion && !VALID_VERSIONS.includes(policyVersion)) {
+  throw new AppError("Invalid policy version", 400);
+}
 
   const consent = await Consent.findOneAndUpdate(
     { sessionId },

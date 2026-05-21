@@ -5,6 +5,7 @@ import { uploadToCloudinary, deleteFromCloudinary } from "../../helper/cloudinar
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import logger from "../../config/logger.js";
 import Like from "../../models/like.model.js";
+import AppError from "../../utils/AppError.js";
 import PostView from "../../models/postView.model.js";
 // ─────────────────────────────────────────────
 //  CREATE POST
@@ -86,7 +87,6 @@ export const createPost = asyncHandler(async (req, res) => {
          error: uploadError.message ,
          stack: uploadError.stack 
          });
-         console.error("CLOUDINARY FULL ERROR:", uploadError);
       return res.status(500).json({ success: false, message: "Media upload failed. Please try again." });
     }
   }
@@ -187,7 +187,8 @@ export const getPostInteraction = asyncHandler(async (req, res) => {
 //  GET /api/v2/posts/feed
 // ─────────────────────────────────────────────
 export const getFeedPosts = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20 } = req.query;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const userId = req.user._id;
 
   const user      = await req.user.populate("following");
@@ -208,7 +209,8 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
 //  GET /api/v2/posts/user/:userId
 // ─────────────────────────────────────────────
 export const getUserPosts = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 12 } = req.query;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
   const { userId }  = req.params;
   const viewerId    = req.user._id;
 
@@ -314,5 +316,29 @@ export const publishDraft = asyncHandler(async (req, res) => {
     success: true,
     message: "Post published successfully",
     post:    populated,
+  });
+});
+
+export const updatePost = asyncHandler(async (req, res, next) => {
+  const { postId } = req.params;
+  const { caption, isDraft } = req.body;
+
+  const post = await Post.findOne({ _id: postId, author: req.user._id });
+  if (!post) return next(new AppError("Post not found.", 404));
+
+  if (caption !== undefined) {
+  if (caption.length > 2200) {
+    return next(new AppError("Caption cannot exceed 2200 characters.", 400));
+  }
+  post.caption = caption.trim();
+}
+  if (isDraft !== undefined) post.isDraft = isDraft === true || isDraft === "true";
+
+  await post.save();
+
+  return res.status(200).json({
+    success: true,
+    message: "Post updated.",
+    post,
   });
 });

@@ -1,8 +1,9 @@
 
+
 import React, { useEffect, useState } from "react";
-import { Routes, Route, Navigate, useLocation , useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { Toaster ,  toast } from "react-hot-toast";
+import { Toaster, toast } from "react-hot-toast";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import VerifyOTP from "./pages/VerifyOTP";
@@ -22,51 +23,78 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Explore from "./pages/Explore";
 import Saved from "./pages/Saved";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Messages from "./pages/Messages";
 import PublicProfile from "./pages/PublicProfile";
-import { fetchMe , resetAuth } from "./lib/redux/authSlice";
+import { fetchMe, resetAuth } from "./lib/redux/authSlice";
 import { resetProfile } from "./lib/redux/userprofileslice";
 import { createPost } from "./lib/redux/postSlice";
+import { fetchNotifications } from "./lib/redux/notificationSlice";
 
-const HIDE_NAVBAR_ON = ["/", "/register", "/verify-otp", "/onboarding/username"];
+// ✅ Socket hooks — sirf ek baar App level pe mount karo
+import useSocketInit from "./lib/hooks/useSocketInit";
+
+const HIDE_NAVBAR_ON = ["/", "/register", "/verify-otp", "/onboarding/username", "/forgot-password", "/reset-password"];
 const HIDE_BANNER_ON = ["/privacy", "/terms", "/legal", "/help", "/about", "/locations", "/contact"];
 
 const App = () => {
   const location = useLocation();
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
+  const navigate  = useNavigate();
+  const dispatch  = useDispatch();
 
-  const user     = useSelector((state) => state.auth.user);
+  const user    = useSelector((state) => state.auth.user);
   const creating = useSelector((state) => state.posts.creating);
 
   const showBanner = !HIDE_BANNER_ON.includes(location.pathname);
   const showNavbar = !HIDE_NAVBAR_ON.includes(location.pathname);
 
-  const [showPostModal, setShowPostModal] = useState(false);
+  // ✅ Socket — ek baar connect, poori app mein reuse hoga
+  useSocketInit();
+
+  const [showPostModal, setShowPostModal] = useState(() =>
+    new URLSearchParams(window.location.search).get("modal") === "create-post"
+  );
 
   // App load pe user fetch
   useEffect(() => {
     dispatch(fetchMe());
   }, [dispatch]);
 
+  // Force logout handler
+  useEffect(() => {
+    const handleForceLogout = () => {
+      dispatch(resetAuth());
+      dispatch(resetProfile());
+      navigate("/");
+    };
+    window.addEventListener("auth:logout", handleForceLogout);
+    return () => window.removeEventListener("auth:logout", handleForceLogout);
+  }, [dispatch, navigate]);
+
+  // Token refresh — localStorage update
+  useEffect(() => {
+    const handleTokenRefreshed = (e) => {
+      if (e.detail?.token) localStorage.setItem("accessToken", e.detail.token);
+    };
+    window.addEventListener("auth:tokenRefreshed", handleTokenRefreshed);
+    return () => window.removeEventListener("auth:tokenRefreshed", handleTokenRefreshed);
+  }, []);
 
   useEffect(() => {
-  const handleForceLogout = () => {
-    dispatch(resetAuth());
-    dispatch(resetProfile());
-    navigate("/"); 
-  };
-  window.addEventListener("auth:logout", handleForceLogout);
-  return () => window.removeEventListener("auth:logout", handleForceLogout);
-}, [dispatch , navigate]);
+  if (user?._id) {
+    dispatch(fetchNotifications({ page: 1 }));
+  }
+}, [user?._id]);
+
   // Post submit handler
   const handlePostSubmit = async (formData) => {
-    const result = await dispatch(createPost(formData));
-
+    const isDraft = formData.get("isDraft") === "true";
+    const result  = await dispatch(createPost(formData));
     if (createPost.fulfilled.match(result)) {
       setShowPostModal(false);
-     toast.success("Post shared! 🎉");
+      toast.success(isDraft ? "Draft saved! 📝" : "Post shared! 🎉");
     } else {
-      // PostCreatorModal error apne andar dikhayega
       throw new Error(result.payload);
     }
   };
@@ -74,7 +102,10 @@ const App = () => {
   return (
     <>
       {showNavbar && (
-        <Navbar onCreatePost={() => setShowPostModal(true)} />
+        <Navbar onCreatePost={() => {
+          setShowPostModal(true);
+          window.history.pushState({}, "", "?modal=create-post");
+        }} />
       )}
 
       <Routes>
@@ -93,42 +124,42 @@ const App = () => {
         <Route path="/profile"             element={<Profile />} />
         <Route path="/profile/:username"   element={<PublicProfile />} />
         <Route path="/explore"             element={<Explore />} />
-        
-        <Route path="/saved"             element={<Saved/>} />
+        <Route path="/forgot-password"     element={<ForgotPassword />} />
+        <Route path="/reset-password"      element={<ResetPassword />} />
+    <Route path="/messages" element={<Messages/>} />
+        <Route path="/saved"               element={<Saved />} />
         <Route path="/settings"            element={<Settings />} />
         <Route path="*"                    element={<Navigate to="/" replace />} />
       </Routes>
 
       <PostCreatorModal
         isOpen={showPostModal}
-        onClose={() => setShowPostModal(false)}
+        onClose={() => {
+          setShowPostModal(false);
+          window.history.pushState({}, "", window.location.pathname);
+        }}
         currentUser={user}
         onSubmit={handlePostSubmit}
       />
 
       {showBanner && <CookieBanner />}
 
-
       <Toaster
-  position="top-right"
-  toastOptions={{
-    duration: 3500,
-    style: {
-      background: "#ffffff",
-      color: "#2d1f0f",
-      border: "1.5px solid #e8d5be",
-      borderRadius: "12px",
-      fontSize: "13px",
-      fontWeight: "600",
-    },
-    success: {
-      iconTheme: { primary: "#22c55e", secondary: "#fff" },
-    },
-    error: {
-      iconTheme: { primary: "#ef4444", secondary: "#fff" },
-    },
-  }}
-/>
+        position="top-right"
+        toastOptions={{
+          duration: 3500,
+          style: {
+            background: "#ffffff",
+            color: "#2d1f0f",
+            border: "1.5px solid #e8d5be",
+            borderRadius: "12px",
+            fontSize: "13px",
+            fontWeight: "600",
+          },
+          success: { iconTheme: { primary: "#22c55e", secondary: "#fff" } },
+          error:   { iconTheme: { primary: "#ef4444", secondary: "#fff" } },
+        }}
+      />
     </>
   );
 };

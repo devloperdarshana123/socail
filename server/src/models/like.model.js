@@ -166,7 +166,7 @@ likeSchema.statics.getLikedPostIds = function (userId, page = 1, limit = 20) {
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
-    .distinct("targetId");
+    .select("targetId");
 };
 
 /**

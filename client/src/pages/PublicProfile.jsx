@@ -2,25 +2,18 @@ import { useState, useRef, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Heart, MessageCircle, X, Grid, MapPin, Play,
-  Bookmark, Loader2, Send, Eye, UserPlus,
-  UserCheck, UserX, BadgeCheck, ArrowLeft
-} from "lucide-react";
+import FollowListModal from "../components/FollowListModal";
+import { Heart, MessageCircle, Grid, MapPin, Play, Loader2, UserPlus, UserCheck, BadgeCheck, ArrowLeft } from "lucide-react";
 import api from "../lib/services/api";
-import {
-  fetchComments, addComment, initInteraction,
-  fetchPostInteraction, recordPostView,
-  togglePostLike, toggleSavePost,
-} from "../lib/redux/postSlice";
+import PostModal from "../components/PostModal";
+import { followUser, unfollowUser } from "../lib/redux/authSlice";
+import { initInteraction, fetchPostInteraction, recordPostView ,  fetchComments } from "../lib/redux/postSlice";
 
 export default function PublicProfile() {
   const { username }   = useParams();
   const dispatch       = useDispatch();
   const navigate       = useNavigate();
   const currentUser    = useSelector((s) => s.auth.user);
-  const { interactions } = useSelector((s) => s.posts);
-
   const [profile,       setProfile]       = useState(null);
   const [posts,         setPosts]         = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -28,9 +21,13 @@ export default function PublicProfile() {
   const [followState,   setFollowState]   = useState("none");
   const [followLoading, setFollowLoading] = useState(false);
   const [selectedPost,  setSelectedPost]  = useState(null);
-  const [commentText,   setCommentText]   = useState("");
+  const [followModal, setFollowModal] = useState(() => {
+  const params = new URLSearchParams(window.location.search);
+  const modal = params.get("modal");
+  return modal === "followers" || modal === "following" ? modal : null;
+});
 
-  const commentInputRef = useRef(null);
+  
   const viewedPosts     = useRef(new Set());
 
   useEffect(() => {
@@ -48,18 +45,24 @@ export default function PublicProfile() {
         if (data.success) {
           setProfile(data.user);
           setPosts(data.posts || []);
-          setFollowState(
-            data.user.isFollowing ? "following" :
-            data.user.isPending   ? "pending"   : "none"
-          );
+          setFollowState(data.user.isFollowing ? "following" : "none");
         } else setError("User not found.");
       })
       .catch(() => setError("Could not load profile."))
       .finally(() => setLoading(false));
   }, [username]);
 
+
   useEffect(() => {
-    if (!selectedPost) return;
+  const params = new URLSearchParams(window.location.search);
+  const postId = params.get("post");
+  if (!postId || posts.length === 0) return;
+  const found = posts.find((p) => p._id === postId);
+  if (found) setSelectedPost(found);
+}, [posts]);
+  useEffect(() => {
+    if (!selectedPost) return
+    
     const postId = selectedPost._id;
     dispatch(initInteraction({ postId, likesCount: selectedPost.likesCount ?? 0, commentsCount: selectedPost.commentsCount ?? 0 }));
     dispatch(fetchComments({ postId }));
@@ -70,41 +73,42 @@ export default function PublicProfile() {
     }
   }, [selectedPost?._id]);
 
-  const interaction = selectedPost ? (interactions[selectedPost._id] || {}) : {};
+
 
   const handleFollow = async () => {
-    if (followLoading || !profile) return;
-    setFollowLoading(true);
-    const prev = followState;
-    const isFollowing = followState === "following";
-    setFollowState(isFollowing ? "none" : "pending");
-    setProfile(p => ({
-      ...p,
-      followersCount: isFollowing
-        ? Math.max(0, (p.followersCount || 0) - 1)
-        : (p.followersCount || 0) + 1,
-    }));
-    try {
-      await api[isFollowing ? "delete" : "post"](`/follow/${profile._id}`);
-      if (!isFollowing) setFollowState(profile.isPrivate ? "pending" : "following");
-    } catch {
-      setFollowState(prev);
-      setProfile(p => ({
-        ...p,
-        followersCount: prev === "following"
-          ? (p.followersCount || 0) + 1
-          : Math.max(0, (p.followersCount || 0) - 1),
-      }));
-    } finally {
-      setFollowLoading(false);
-    }
-  };
+  if (followLoading || !profile) return;
+  setFollowLoading(true);
+  const prev = followState;
 
-  const handleCommentSubmit = async () => {
-    if (!commentText.trim() || !selectedPost) return;
-    await dispatch(addComment({ postId: selectedPost._id, content: commentText.trim() }));
-    setCommentText("");
-  };
+  // Optimistic update
+if (followState === "following") {
+  setFollowState("none");
+  setProfile((p) => ({
+    ...p,
+    followersCount: Math.max(0, (p.followersCount || 0) - 1),
+  }));
+  const res = await dispatch(unfollowUser(profile._id));
+  if (unfollowUser.rejected.match(res)) {
+    setFollowState(prev);
+    setProfile((p) => ({
+      ...p,
+      followersCount: (p.followersCount || 0) + 1,
+    }));
+  }
+} else {
+  setFollowState("following");
+  setProfile((p) => ({ ...p, followersCount: (p.followersCount || 0) + 1 }));
+  const res = await dispatch(followUser(profile._id));
+  if (followUser.rejected.match(res)) {
+    setFollowState(prev);
+    setProfile((p) => ({
+      ...p,
+      followersCount: Math.max(0, (p.followersCount || 0) - 1),
+    }));
+  }
+}
+  setFollowLoading(false);
+};
 
   if (loading) return (
     <div className="min-h-screen bg-[#faf6f0] flex items-center justify-center">
@@ -121,13 +125,10 @@ export default function PublicProfile() {
     </div>
   );
 
-  const isPrivateAndNotFollowing = profile.isPrivate && followState !== "following" && !profile._id === currentUser?._id;
-
-  const followBtnConfig = {
-    none:      { label: "Follow",    icon: <UserPlus size={14} />,  cls: "bg-[#2d1f0f] hover:bg-[#1a1108] text-white" },
-    pending:   { label: "Requested", icon: <UserX size={14} />,     cls: "bg-white border-2 border-[#ddd0c0] text-[#5a3e2b] hover:bg-[#f5ece0]" },
-    following: { label: "Following", icon: <UserCheck size={14} />, cls: "bg-white border-2 border-[#ddd0c0] text-[#5a3e2b] hover:bg-[#f5ece0]" },
-  }[followState];
+const followBtnConfig = {
+  none:      { label: "Follow",    icon: <UserPlus size={14} />,  cls: "bg-[#2d1f0f] hover:bg-[#1a1108] text-white" },
+  following: { label: "Following", icon: <UserCheck size={14} />, cls: "bg-white border-2 border-[#ddd0c0] text-[#5a3e2b] hover:bg-[#f5ece0]" },
+}[followState];
 
   return (
     <div className="min-h-screen bg-[#faf6f0]">
@@ -137,7 +138,7 @@ export default function PublicProfile() {
         {profile.coverPhoto?.url ? (
           <img src={profile.coverPhoto.url} alt="Cover" className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-[#d4b896] via-[#c09a6e] to-[#8b6343]" />
+          <div className="w-full h-full bg-linear-to-br from-[#d4b896] via-[#c09a6e] to-[#8b6343]" />
         )}
         {/* Back button */}
         <button onClick={() => navigate(-1)}
@@ -235,24 +236,24 @@ export default function PublicProfile() {
         <div className="grid grid-cols-3 gap-3 mb-8">
           {[
             { label: "Posts",     value: profile.postsCount     ?? posts.length },
-            { label: "Followers", value: profile.followersCount ?? 0 },
-            { label: "Following", value: profile.followingCount ?? 0 },
+{ label: "Followers", value: profile.followersCount ?? 0, onClick: () => {
+  setFollowModal("followers");
+  window.history.pushState({}, "", `?modal=followers`);
+}},
+{ label: "Following", value: profile.followingCount ?? 0, onClick: () => {
+  setFollowModal("following");
+  window.history.pushState({}, "", `?modal=following`);
+}},
           ].map((s) => (
-            <div key={s.label} className="bg-white rounded-2xl py-4 text-center shadow-sm border border-[#e8d5be]/60">
+            <div key={s.label} onClick={s.onClick} className={`bg-white rounded-2xl py-4 text-center shadow-sm border border-[#e8d5be]/60 ${s.onClick ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}>
               <p className="text-2xl font-bold text-[#2d1f0f]">{s.value?.toLocaleString()}</p>
               <p className="text-xs text-[#8b7355] font-medium mt-0.5">{s.label}</p>
             </div>
           ))}
         </div>
 
-        {/* POSTS GRID */}
-        {isPrivateAndNotFollowing ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <div className="w-20 h-20 rounded-full bg-[#f0e4d4] flex items-center justify-center text-3xl">🔒</div>
-            <p className="text-base font-bold text-[#2d1f0f]">This account is private</p>
-            <p className="text-sm text-[#8b7355]">Follow to see their posts</p>
-          </div>
-        ) : posts.length === 0 ? (
+         {/* POSTS GRID */}
+        {posts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div className="w-20 h-20 rounded-full bg-[#f0e4d4] flex items-center justify-center">
               <Grid size={28} className="text-[#c09a6e]" />
@@ -269,7 +270,10 @@ export default function PublicProfile() {
               {posts.map((post) => (
                 <motion.div key={post._id}
                   whileHover={{ scale: 1.02 }} transition={{ duration: 0.18 }}
-                  onClick={() => setSelectedPost(post)}
+                  onClick={() => {
+  setSelectedPost(post);
+  window.history.pushState({}, "", `?post=${post._id}`);
+}}
                   className="relative aspect-square rounded-lg overflow-hidden cursor-pointer bg-[#e8d5be] group">
                   {post.type === "text" ? (
                     <div className="w-full h-full flex items-center justify-center p-3 bg-[#f5ece0]">
@@ -301,154 +305,41 @@ export default function PublicProfile() {
       </div>
 
       {/* POST MODAL */}
-      <AnimatePresence>
-        {selectedPost && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 md:p-4"
-            onClick={() => setSelectedPost(null)}>
-            <motion.div
-              initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.93, opacity: 0 }} transition={{ type: "spring", damping: 26, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col md:flex-row w-full max-w-4xl"
-              style={{ height: "min(95vh, 700px)", maxHeight: "95vh" }}>
-
-              {/* LEFT: Media */}
-              <div className="relative shrink-0 bg-black w-full md:w-[58%] h-[300px] md:h-auto">
-                {selectedPost.type === "text" ? (
-                  <div className="w-full h-full flex items-start p-8 overflow-y-auto bg-[#faf6f0]">
-                    <p className="text-base text-[#2d1f0f] leading-relaxed">{selectedPost.caption}</p>
-                  </div>
-                ) : selectedPost.type === "reel" ? (
-                  <video src={selectedPost.media?.[0]?.url} controls autoPlay
-                    className="w-full h-full object-contain"
-                    poster={selectedPost.media?.[0]?.thumbnailUrl} />
-                ) : (
-                  <img src={selectedPost.media?.[0]?.url} alt=""
-                    className="w-full h-full object-contain" />
-                )}
-              </div>
-
-              {/* RIGHT: Info */}
-              <div className="flex flex-col flex-1 min-w-0 bg-white">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#f0e4d4] shrink-0">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full overflow-hidden bg-[#e8d5be] shrink-0">
-                      {profile.avatar?.url
-                        ? <img src={profile.avatar.url} alt="" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#d4b896] to-[#c09a6e]">
-                            <span className="text-sm text-white font-bold">{profile.fullName?.[0]}</span>
-                          </div>
-                      }
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-[#2d1f0f]">{profile.fullName}</p>
-                      <p className="text-xs text-[#8b7355]">@{profile.username}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setSelectedPost(null)}
-                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f5ece0] text-[#8b7355]">
-                    <X size={16} />
-                  </button>
-                </div>
-
-                {/* Caption */}
-                {selectedPost.caption && (
-                  <div className="px-4 py-3 border-b border-[#f0e4d4] shrink-0">
-                    <p className="text-sm text-[#4a3828] leading-relaxed">{selectedPost.caption}</p>
-                  </div>
-                )}
-
-                {/* Comments */}
-                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
-                  {selectedPost.commentsDisabled ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-2">
-                      <span className="text-3xl">🔒</span>
-                      <p className="text-xs text-[#b0926a] font-semibold">Comments are turned off</p>
-                    </div>
-                  ) : interaction.commentsLoading ? (
-                    <div className="flex justify-center py-8">
-                      <Loader2 size={20} className="animate-spin text-[#c09a6e]" />
-                    </div>
-                  ) : interaction.comments?.length > 0 ? (
-                    interaction.comments.map((c, i) => (
-                      <div key={c._id || i} className="flex gap-2.5">
-                        <div className="w-7 h-7 rounded-full overflow-hidden bg-[#e8d5be] shrink-0">
-                          {c.user?.avatar?.url
-                            ? <img src={c.user.avatar.url} alt="" className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#d4b896] to-[#c09a6e]">
-                                <span className="text-xs text-white font-bold">{c.user?.fullName?.[0]}</span>
-                              </div>
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0 bg-[#faf6f0] rounded-xl px-3 py-2">
-                          <span className="text-xs font-bold text-[#2d1f0f]">{c.user?.username} </span>
-                          <span className="text-xs text-[#4a3828]">{c.content}</span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full gap-2 py-8">
-                      <MessageCircle size={24} className="text-[#d4b896]" />
-                      <p className="text-xs text-[#b0926a]">No comments yet</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="px-4 py-3 flex items-center gap-4 border-t border-[#f0e4d4] shrink-0">
-                  {!selectedPost.likesHidden && (
-                    <button onClick={() => dispatch(togglePostLike(selectedPost._id))}
-                      className="flex items-center gap-1.5 text-sm font-semibold">
-                      <Heart size={20} className={interaction.liked ? "fill-red-500 text-red-500" : "text-[#8b7355] hover:text-red-400"} />
-                      <span className={interaction.liked ? "text-red-500" : "text-[#4a3828]"}>
-                        {interaction.likesCount ?? selectedPost.likesCount ?? 0}
-                      </span>
-                    </button>
-                  )}
-                  <button onClick={() => commentInputRef.current?.focus()}
-                    className="flex items-center gap-1.5 text-sm font-semibold text-[#4a3828]">
-                    <MessageCircle size={20} className="text-[#8b6343]" />
-                    <span>{interaction.commentsCount ?? selectedPost.commentsCount ?? 0}</span>
-                  </button>
-                  <div className="flex items-center gap-1.5 text-sm text-[#4a3828]">
-                    <Eye size={20} className="text-[#8b6343]" />
-                    <span>{selectedPost.viewsCount ?? 0}</span>
-                  </div>
-                  <button onClick={() => dispatch(toggleSavePost(selectedPost._id))} className="ml-auto">
-                    <Bookmark size={20} className={interaction.saved ? "fill-[#5a3e2b] text-[#5a3e2b]" : "text-[#8b7355] hover:text-[#5a3e2b]"} />
-                  </button>
-                </div>
-
-                {/* Comment Input */}
-                {!selectedPost.commentsDisabled && (
-                  <div className="px-4 py-3 border-t border-[#f0e4d4] flex items-center gap-2 shrink-0">
-                    <div className="w-7 h-7 rounded-full overflow-hidden bg-[#e8d5be] shrink-0">
-                      {currentUser?.avatar?.url
-                        ? <img src={currentUser.avatar.url} alt="" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#d4b896] to-[#c09a6e]">
-                            <span className="text-xs text-white font-bold">{currentUser?.fullName?.[0]}</span>
-                          </div>
-                      }
-                    </div>
-                    <input ref={commentInputRef} type="text" value={commentText}
-                      onChange={(e) => setCommentText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCommentSubmit(); }}}
-                      placeholder="Add a comment..."
-                      className="flex-1 text-sm bg-[#f5ece0] rounded-full px-4 py-2 outline-none placeholder:text-[#b0926a] text-[#2d1f0f] focus:ring-1 focus:ring-[#c09a6e]" />
-                    <button onClick={handleCommentSubmit}
-                      disabled={!commentText.trim() || interaction.commentAdding}
-                      className="w-8 h-8 flex items-center justify-center bg-[#2d1f0f] hover:bg-[#1a1108] text-white rounded-full disabled:opacity-40 transition-all">
-                      {interaction.commentAdding ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <AnimatePresence>
+  {selectedPost && (
+    <PostModal
+      post={{
+        ...selectedPost,
+        author: selectedPost.author || {
+          _id: profile._id,
+          fullName: profile.fullName,
+          username: profile.username,
+          avatar: profile.avatar,
+        }
+      }}
+      onClose={() => {
+  setSelectedPost(null);
+  window.history.pushState({}, "", window.location.pathname);
+}}
+    />
+  )}
+</AnimatePresence>
+{followModal && (
+  <FollowListModal
+    userId={profile?._id}
+    type={followModal}
+   onClose={() => {
+  setFollowModal(null);
+  window.history.pushState({}, "", window.location.pathname);
+}}
+    onUnfollow={() => {
+      setProfile((p) => ({
+        ...p,
+        followingCount: Math.max(0, (p.followingCount || 0) - 1),
+      }));
+    }}
+  />
+)}
     </div>
   );
 }

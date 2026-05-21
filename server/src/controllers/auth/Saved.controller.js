@@ -35,8 +35,8 @@ export const toggleSave = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────
 export const getSavedPosts = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 12;
+ const page  = Math.max(1, parseInt(req.query.page)  || 1);
+const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
 
   const saved = await Saved.getSavedPosts(userId, page, limit);
 

@@ -109,28 +109,33 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
   const handleFollow = async (seller, e) => {
     e.stopPropagation();
 
-    const { _id, isFollowing, isPending } = seller;
-    const method = isFollowing ? "DELETE" : "POST";
+    const { _id, isFollowing } = seller;
+const method = isFollowing ? "DELETE" : "POST";
 
-    // Optimistic update
-    setSellers((prev) =>
-      prev.map((s) => {
-        if (s._id !== _id) return s;
-        if (isFollowing) return { ...s, isFollowing: false, followersCount: Math.max(0, (s.followersCount || 0) - 1) };
-        if (isPending)   return { ...s, isPending: false };
-        return { ...s, isPending: true };
-      })
-    );
+// Optimistic update
+setSellers((prev) =>
+  prev.map((s) => {
+    if (s._id !== _id) return s;
+    if (isFollowing) return { ...s, isFollowing: false, followersCount: Math.max(0, (s.followersCount || 0) - 1) };
+    return { ...s, isFollowing: true, followersCount: (s.followersCount || 0) + 1 };
+  })
+);
 
-   try {
+try {
   await api({ method, url: `/follow/${_id}` });
 } catch {
-      // Rollback on failure
-      setSellers((prev) =>
-        prev.map((s) => s._id === _id ? { ...s, isFollowing, isPending } : s)
-      );
-    }
+  // Rollback on failure
+  setSellers((prev) =>
+    prev.map((s) => s._id === _id ? { ...s, isFollowing } : s)
+  );
+}
   };
+
+  // ── Message ───────────────────────────────────────────────
+const handleMessage = (seller, e) => {
+  e.stopPropagation();
+  navigate(`/messages?with=${seller._id}`);
+};
 
   // ── View Profile ──────────────────────────────────────────
   const handleViewProfile = (seller, e) => {
@@ -284,28 +289,25 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
                             flex: 1, padding: "7px 0", borderRadius: 8,
                             fontSize: 12, fontWeight: 600, border: "none",
                             cursor: "pointer",
-                            background: seller.isFollowing ? "#f3f4f6"
-                              : seller.isPending  ? "#fef3c7"
-                              : "#1e3a5f",
-                            color: seller.isFollowing ? "#374151"
-                              : seller.isPending  ? "#92400e"
-                              : "#fff",
+                            background: seller.isFollowing ? "#f3f4f6" : "#1e3a5f",
+color: seller.isFollowing ? "#374151" : "#fff",
                             transition: "opacity 0.2s",
                           }}
                         >
-                          {seller.isFollowing ? "Following" : seller.isPending ? "Requested" : "Follow"}
+                        {seller.isFollowing ? "Following" : "Follow"}
                         </button>
 
-                        {seller.isFollowing && (
-                          <button style={{
-                            flex: 1, padding: "7px 0", borderRadius: 8,
-                            fontSize: 12, fontWeight: 600,
-                            border: "1.5px solid #1e3a5f",
-                            background: "#fff", color: "#1e3a5f", cursor: "pointer",
-                          }}>
-                            Message
-                          </button>
-                        )}
+                      <button
+  onClick={(e) => handleMessage(seller, e)}
+  style={{
+    flex: 1, padding: "7px 0", borderRadius: 8,
+    fontSize: 12, fontWeight: 600,
+    border: "1.5px solid #1e3a5f",
+    background: "#fff", color: "#1e3a5f", cursor: "pointer",
+  }}
+>
+  Message
+</button>
                       </div>
 
                       <button

@@ -40,10 +40,11 @@ const viewerSchema = new Schema(
     },
 
     // Reaction (like Instagram story react)
- reaction: {
+reaction: {
   type: String,
   default: null,
   trim: true,
+  maxlength: [10, "Reaction too long"],
 },
     reactedAt: {
       type: Date,
@@ -310,10 +311,13 @@ storySchema.statics.softDelete = function (storyId, authorId) {
 /**
  * Get viewers list for a story (author only)
  */
-storySchema.statics.getViewers = function (storyId, authorId, page = 1, limit = 30) {
-  return this.findOne({ _id: storyId, author: authorId })
-    .select("viewers viewsCount reactionsCount")
-    .slice("viewers", [(page - 1) * limit, limit]);
+storySchema.statics.getViewers = async function (storyId, authorId, page = 1, limit = 30) {
+  const skip = (page - 1) * limit;
+  const story = await this.findOne(
+    { _id: storyId, author: authorId },
+    { viewsCount: 1, reactionsCount: 1, viewers: { $slice: [skip, limit] } }
+  ).select("+viewers");
+  return story;
 };
 
 const Story = models.Story || model("Story", storySchema);

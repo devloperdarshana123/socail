@@ -1,24 +1,19 @@
-// const mongoose = require("mongoose");
-
-// const conversationSchema = new mongoose.Schema({
-//   participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-//   lastMessage: { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
-//    unreadCount: { type: Map, of: Number, default: {} },
-// }, { timestamps: true });
-
-// module.exports = mongoose.model("Conversation", conversationSchema);
-
-
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const conversationSchema = new mongoose.Schema(
   {
-    participants: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+    participants: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+      ],
+      validate: {
+        validator: (v) => v.length >= 2,
+        message: "Conversation mein kam se kam 2 participants hone chahiye",
       },
-    ],
+    },
     lastMessage: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",
@@ -29,15 +24,15 @@ const conversationSchema = new mongoose.Schema(
       of: Number,
       default: {},
     },
-    isGroup: {                                     // ✅ add
+    isGroup: {
       type: Boolean,
       default: false,
     },
-    groupName: {                                   // ✅ add
+    groupName: {
       type: String,
       default: null,
     },
-    groupAvatar: {                                 // ✅ add
+    groupAvatar: {
       type: String,
       default: null,
     },
@@ -45,8 +40,7 @@ const conversationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ✅ Indexes
 conversationSchema.index({ participants: 1 });
 conversationSchema.index({ updatedAt: -1 });
 
-module.exports = mongoose.model("Conversation", conversationSchema);
+export default mongoose.model("Conversation", conversationSchema);

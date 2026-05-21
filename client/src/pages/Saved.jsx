@@ -45,7 +45,7 @@ function SavedCard({ post, onClick }) {
       style={{ background: T.card, border: `1px solid ${T.border}` }}
     >
       {isText ? (
-        <div className="p-4 min-h-[120px] flex flex-col justify-between"
+        <div className="p-4 min-h-30 flex flex-col justify-between"
           style={{ background: `linear-gradient(135deg, ${T.brownLt}, #fff)` }}>
           <p className="text-sm font-medium line-clamp-5" style={{ color: T.text }}>
             {post.caption || "—"}
@@ -148,11 +148,21 @@ function MasonryGrid({ posts, onPostClick, loading }) {
 export default function Saved() {
   const dispatch = useDispatch();
   const { savedPosts, savedPostsLoading } = useSelector((s) => s.posts);
+  
+
   const [selectedPost, setSelectedPost] = useState(null);
 
-  useEffect(() => {
-    dispatch(fetchSavedPosts());
-  }, [dispatch]);
+useEffect(() => {
+  dispatch(fetchSavedPosts());
+}, [dispatch]);
+
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const postId = params.get("post");
+  if (!postId || savedPosts.length === 0) return;
+  const found = savedPosts.find((p) => p._id === postId);
+  if (found) setSelectedPost(found);
+}, [savedPosts]);
 
   return (
     <div className="min-h-screen pt-14 md:pt-0" style={{ background: T.bg }}>
@@ -189,7 +199,10 @@ export default function Saved() {
         {/* Grid */}
         <MasonryGrid
           posts={savedPosts}
-          onPostClick={setSelectedPost}
+          onPostClick={(post) => {
+  setSelectedPost(post);
+  window.history.pushState({}, "", `?post=${post._id}`);
+}}
           loading={savedPostsLoading}
         />
       </div>
@@ -198,7 +211,10 @@ export default function Saved() {
       {selectedPost && (
         <PostModal
           post={selectedPost}
-          onClose={() => setSelectedPost(null)}
+          onClose={() => {
+  setSelectedPost(null);
+  window.history.pushState({}, "", window.location.pathname);
+}}
         />
       )}
     </div>

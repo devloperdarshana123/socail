@@ -74,6 +74,7 @@ export const searchPosts = asyncHandler(async (req, res, next) => {
   const cursor = req.query.cursor || null;
 
   if (!q) return next(new AppError("Search query required.", 400));
+if (q.length > 100) return next(new AppError("Search query too long.", 400));
 
   const filter = {
     isDeleted:  false,
@@ -137,18 +138,17 @@ export const getPublicProfile = asyncHandler(async (req, res, next) => {
 
   if (!user) return next(new AppError("User not found.", 404));
 
-  const currentUserId = req.user._id;
+ const currentUserId = req.user?._id || null;
 
-  const followRecord = await Follow.findOne({
-    follower:  currentUserId,
-    following: user._id,
-  });
+ const followRecord = currentUserId
+  ? await Follow.findOne({ follower: currentUserId, following: user._id })
+  : null;
 
   const isFollowing = followRecord?.status === "accepted";
   const isPending   = followRecord?.status === "pending";
 
   let posts = [];
-  if (!user.isPrivate || isFollowing || user._id.equals(currentUserId)) {
+ if (!user.isPrivate || isFollowing || (currentUserId && user._id.equals(currentUserId))) {
     posts = await Post.find({
       author:    user._id,
       isDraft:   false,

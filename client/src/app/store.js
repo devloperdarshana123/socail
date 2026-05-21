@@ -1,81 +1,68 @@
+
+
+// client/src/store.js
 import { configureStore, combineReducers } from "@reduxjs/toolkit";
 import {
   persistStore,
   persistReducer,
-  FLUSH,
-  REHYDRATE,
-  PAUSE,
-  PERSIST,
-  PURGE,
-  REGISTER,
+  FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER,
 } from "redux-persist";
-import authReducer from "../lib/redux/authSlice";
-import postReducer from "../lib/redux/postSlice";
-import userProfileReducer from "../lib/redux/userprofileslice";
-import settingsReducer from "../lib/redux/Settingslice";
-import exploreReducer from "../lib/redux/Exploreslice";
-import storyReducer from "../lib/redux/storySlice";
-// ─────────────────────────────────────────────
-//  Storage — SSR safe, no import needed
-//  Manually banao taaki koi bundler issue na ho
-// ─────────────────────────────────────────────
 
+import authReducer        from "../lib/redux/authSlice";
+import postReducer        from "../lib/redux/postSlice";
+import userProfileReducer from "../lib/redux/userprofileslice";
+import settingsReducer    from "../lib/redux/Settingslice";
+import exploreReducer     from "../lib/redux/Exploreslice";
+import storyReducer       from "../lib/redux/storySlice";
+import chatReducer        from "../lib/redux/chatSlice";
+import followReducer      from "../lib/redux/followSlice";
+import notificationReducer from "../lib/redux/notificationSlice";
+
+// ── SSR-safe localStorage wrapper ────────────────────────────────────────────
 const storage = {
-  getItem: (key) => {
-    try {
-      return Promise.resolve(localStorage.getItem(key));
-    } catch {
-      return Promise.resolve(null);
-    }
-  },
-  setItem: (key, value) => {
-    try {
-      localStorage.setItem(key, value);
-      return Promise.resolve(true);
-    } catch {
-      return Promise.resolve(false);
-    }
-  },
-  removeItem: (key) => {
-    try {
-      localStorage.removeItem(key);
-      return Promise.resolve();
-    } catch {
-      return Promise.resolve();
-    }
-  },
+  getItem:    (key) => { try { return Promise.resolve(localStorage.getItem(key));    } catch { return Promise.resolve(null);  } },
+  setItem:    (key, value) => { try { localStorage.setItem(key, value); return Promise.resolve(true); } catch { return Promise.resolve(false); } },
+  removeItem: (key) => { try { localStorage.removeItem(key); return Promise.resolve(); } catch { return Promise.resolve(); } },
 };
 
-// ─────────────────────────────────────────────
-//  Persist Config
-//
-//  Persist honge:   user, accessToken, isAuthenticated
-//  Persist NAHI:    pendingUserId, pendingPurpose,
-//                   nextRoute, loading states
-// ─────────────────────────────────────────────
+// ── Persist Configs ───────────────────────────────────────────────────────────
 
+// Auth — sirf token aur user persist karo
 const authPersistConfig = {
   key: "auth",
   storage,
-  whitelist: ["user", "isAuthenticated"],
+  whitelist: ["user", "isAuthenticated", "accessToken"],
+};
+
+// Chat — sirf conversations sidebar persist karo
+// Messages persist MAT karo — stale data aur memory leak dono avoid hogi
+const chatPersistConfig = {
+  key: "chat",
+  storage,
+  whitelist: ["conversations", "totalUnread"],
+  // messages, typingUsers, onlineUsers — fresh fetch hogi hamesha
 };
 
 const userProfilePersistConfig = {
   key: "userProfile",
   storage,
-  whitelist: ["avatar", "coverPhoto"],  // sirf URLs save honge
+  whitelist: [], // kuch persist nahi
 };
+
+// ── Root Reducer ──────────────────────────────────────────────────────────────
 const rootReducer = combineReducers({
-  auth: persistReducer(authPersistConfig, authReducer),
-  posts: postReducer,
+  auth:        persistReducer(authPersistConfig, authReducer),
+  posts:       postReducer,
   userProfile: persistReducer(userProfilePersistConfig, userProfileReducer),
-  // userProfile: userProfileReducer,
-  // future slices: notifications, etc.
-  settings: settingsReducer,
-  explore: exploreReducer,
-  stories: storyReducer,
+  settings:    settingsReducer,
+  explore:     exploreReducer,
+  stories:     storyReducer,
+  chat:        persistReducer(chatPersistConfig, chatReducer),
+  follow:      followReducer,
+  notifications: notificationReducer
 });
 
+// ── Store ─────────────────────────────────────────────────────────────────────
 const store = configureStore({
   reducer: rootReducer,
   middleware: (getDefaultMiddleware) =>

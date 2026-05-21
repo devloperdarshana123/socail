@@ -1,17 +1,7 @@
 import logger from "../config/logger.js";
 import AppError from "../utils/AppError.js";
 
-// ─────────────────────────────────────────────
-//  sendToken
-//
-//  Access token  → httpOnly: true cookie  (15 min)
-//  Refresh token → httpOnly: true cookie  (7 days)
-//
-//  Response body mein sirf user data + nextRoute
-//  Token body mein NAHI bhejte — security best practice
-// ─────────────────────────────────────────────
 
-// sendToken.js — FINAL PRODUCTION VERSION
 
 export const sendToken = async (user, statusCode, res, options = {}, next) => {
   try {

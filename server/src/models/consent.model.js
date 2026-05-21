@@ -51,14 +51,26 @@ const consentSchema = new Schema(
 
     // User agent — browser/device info
     userAgent: {
-      type: String,
-      default: null,
-    },
+  type: String,
+  default: null,
+  maxlength: [500, "User agent too long"],
+},
   },
   {
     timestamps: true,
   }
 );
+consentSchema.statics.linkToUser = function (sessionId, userId) {
+  return this.updateMany(
+    { sessionId, userId: null },
+    { userId }
+  );
+};
+
+consentSchema.statics.getLatest = function (userId, policyVersion) {
+  return this.findOne({ userId, policyVersion }).sort({ createdAt: -1 });
+};
+
 
 // Compound index — ek user ka ek hi record
 consentSchema.index({ sessionId: 1, policyVersion: 1 });

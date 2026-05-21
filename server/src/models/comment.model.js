@@ -67,10 +67,14 @@ const commentSchema = new Schema(
     },
 
     // ── Mentions inside comment ────────────────
-    mentions: {
-      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
-      default: [],
-    },
+   mentions: {
+  type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+  default: [],
+  validate: {
+    validator: function (v) { return v.length <= 10; },
+    message: "Cannot mention more than 10 users in a comment",
+  },
+},
 
     // ── Engagement ────────────────────────────
     likesCount: {
@@ -267,8 +271,12 @@ commentSchema.statics.softDelete = async function (commentId, authorId) {
 /**
  * Hard delete — removes comment + all its replies (use with caution)
  */
-commentSchema.statics.hardDelete = async function (commentId, authorId) {
-  const comment = await this.findOne({ _id: commentId, author: authorId });
+commentSchema.statics.hardDelete = async function (commentId, authorId, isAdmin = false) {
+  const query = isAdmin
+    ? { _id: commentId }
+    : { _id: commentId, author: authorId };
+
+  const comment = await this.findOne(query);
   if (!comment) return null;
 
   // Delete all replies under this comment tree

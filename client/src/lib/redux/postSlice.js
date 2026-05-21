@@ -1,12 +1,426 @@
 
 
 
+// import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+// import api from "../services/api";
+
+// // ─────────────────────────────────────────────
+// //  Thunks
+// // ─────────────────────────────────────────────
+
+// export const createPost = createAsyncThunk(
+//   "posts/create",
+//   async (formData, { rejectWithValue }) => {
+//     try {
+//       const res = await api.post("/posts", formData, {
+//         headers: { "Content-Type": "multipart/form-data" },
+//       });
+//       return res.data.post;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Post create nahi ho saka");
+//     }
+//   }
+// );
+
+// export const fetchMyPosts = createAsyncThunk(
+//   "posts/fetchMyPosts",
+//   async (userId, { rejectWithValue }) => {
+//     try {
+//       const res = await api.get(`/posts/user/${userId}`);
+//       return res.data.data || res.data.posts || res.data;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Posts fetch nahi hue");
+//     }
+//   }
+// );
+
+// // ── Toggle like on a post ──
+// export const togglePostLike = createAsyncThunk(
+//   "posts/toggleLike",
+//   async ({ postId, postAuthorId = null }, { rejectWithValue }) => {
+//     try {
+//       const res = await api.post(`/likes/post/${postId}`);
+//       const { liked, likesCount } = res.data;
+ 
+//       // Like kiya — notification bhejo (unlike pe nahi)
+//       if (liked && postAuthorId) {
+//         try {
+//           const { getSocket } = await import("../services/socketManager");
+//           const socket = getSocket();
+//           if (socket?.connected) {
+//             socket.emit("send_like", {
+//               to: postAuthorId,
+//               postId,
+//             });
+//           }
+//         } catch (socketErr) {
+//           console.warn("Socket emit failed (non-critical):", socketErr.message);
+//         }
+//       }
+ 
+//       return { postId, liked, likesCount };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Like failed");
+//     }
+//   }
+// );
+
+// // ── Fetch comments for a post ──
+// export const fetchComments = createAsyncThunk(
+//   "posts/fetchComments",
+//   async ({ postId, page = 1 }, { rejectWithValue }) => {
+//     try {
+//       const res = await api.get(`/comments/post/${postId}?page=${page}&limit=20`);
+//       return { postId, comments: res.data.data, pagination: res.data.pagination };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Comments fetch nahi hue");
+//     }
+//   }
+// );
+
+// // ── Add a comment ──
+// export const addComment = createAsyncThunk(
+//   "posts/addComment",
+//   async ({ postId, content, parentCommentId = null, postAuthorId = null }, { rejectWithValue }) => {
+//     try {
+//       const res = await api.post(`/comments/post/${postId}`, { content, parentCommentId });
+//       const comment = res.data.data;
+ 
+//       // ── Socket emit — notification trigger karo ──────────────────────
+//       // postAuthorId PostModal se pass hoga
+//       // Self-comment pe notification nahi — backend bhi check karta hai but frontend pe bhi skip karo
+//       if (postAuthorId) {
+//         try {
+//           const { getSocket } = await import("../services/socketManager");
+//           const socket = getSocket();
+//           if (socket?.connected) {
+//             if (parentCommentId) {
+//               // Reply notification
+//               socket.emit("send_reply", {
+//                 to: postAuthorId,
+//                 postId,
+//                 commentId: comment._id,
+//                 preview: content.slice(0, 100),
+//               });
+//             } else {
+//               // Comment notification
+//               socket.emit("send_comment", {
+//                 to: postAuthorId,
+//                 postId,
+//                 preview: content.slice(0, 100),
+//               });
+//             }
+//           }
+//         } catch (socketErr) {
+//           // Socket fail hone pe comment submit fail nahi hona chahiye
+//           console.warn("Socket emit failed (non-critical):", socketErr.message);
+//         }
+//       }
+ 
+//       return { postId, comment };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Comment add nahi hua");
+//     }
+//   }
+// );
+
+// // ── Toggle save on a post ──
+// export const toggleSavePost = createAsyncThunk(
+//   "posts/toggleSave",
+//   async (postId, { rejectWithValue }) => {
+//     try {
+//       const res = await api.post(`/saved/${postId}`);
+//       return { postId, saved: res.data.saved };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Save failed");
+//     }
+//   }
+// );
+
+// // ── Fetch saved posts ──
+// export const fetchSavedPosts = createAsyncThunk(
+//   "posts/fetchSavedPosts",
+//   async (page = 1, { rejectWithValue }) => {
+//     try {
+//       const res = await api.get(`/saved?page=${page}&limit=12`);
+//       return res.data.data;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Saved posts fetch nahi hue");
+//     }
+//   }
+// );
+
+
+// // ── Fetch post interaction status (liked, saved) ──
+// export const fetchPostInteraction = createAsyncThunk(
+//   "posts/fetchInteraction",
+//   async (postId, { rejectWithValue }) => {
+//     try {
+//       const res = await api.get(`/posts/${postId}/interaction`);
+//       return { postId, liked: res.data.liked, saved: res.data.saved };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Interaction fetch failed");
+//     }
+//   }
+// );
+
+
+// // ✅ View count increment karo
+// export const recordPostView = createAsyncThunk(
+//   "posts/recordView",
+//   async (postId, { rejectWithValue }) => {
+//     try {
+//       await api.post(`/posts/${postId}/view`);
+//       return postId;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "View record failed");
+//     }
+//   }
+// );
+
+
+
+
+
+// // recordPostView ke baad add karo
+// export const deletePost = createAsyncThunk(
+//   "posts/deletePost",
+//   async (postId, { rejectWithValue }) => {
+//     try {
+//       await api.delete(`/posts/${postId}`);
+//       return postId;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Delete failed");
+//     }
+//   }
+// );
+
+
+
+// // ── Fetch draft posts ──
+// export const fetchDraftPosts = createAsyncThunk(
+//   "posts/fetchDrafts",
+//   async (_, { rejectWithValue }) => {
+//     try {
+//       const res = await api.get("/posts/drafts");
+//       return res.data.posts;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Drafts fetch nahi hue");
+//     }
+//   }
+// );
+
+// // ── Publish draft ──
+// export const publishDraftPost = createAsyncThunk(
+//   "posts/publishDraft",
+//   async (postId, { rejectWithValue }) => {
+//     try {
+//       const res = await api.patch(`/posts/${postId}/publish`);
+//       return { postId, post: res.data.post };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Publish failed");
+//     }
+//   }
+// );
+
+// // ─────────────────────────────────────────────
+// //  Slice
+// // ─────────────────────────────────────────────
+
+// const postSlice = createSlice({
+//   name: "posts",
+//   initialState: {
+//     feed: [],
+//     myPosts: [],
+//     savedPosts: [],
+//     myPostsLoading: false,
+//     savedPostsLoading: false,
+//     draftPosts:        [],
+// draftPostsLoading: false,
+// myPostsError: null,
+//     creating: false,
+//     createError: null,
+
+//     // Per-post interaction state
+//     // { [postId]: { liked, likesCount, saved, comments, commentsLoading } }
+//     interactions: {},
+//   },
+
+//   reducers: {
+//     prependPost(state, action) {
+//       state.feed.unshift(action.payload);
+//       state.myPosts.unshift(action.payload);
+//     },
+
+//     // Initialize interaction state for a post
+//     initInteraction(state, action) {
+//       const { postId, liked, likesCount, saved, commentsCount } = action.payload;
+//       if (!state.interactions[postId]) {
+//         state.interactions[postId] = {
+//           liked: liked ?? false,
+//           likesCount: likesCount ?? 0,
+//           saved: saved ?? false,
+//           commentsCount: commentsCount ?? 0,
+//           comments: [],
+//           commentsLoading: false,
+//           commentAdding: false,
+//         };
+//       }
+//     },
+//   },
+
+//   extraReducers: (builder) => {
+//     // ── createPost ──
+//     builder
+//       .addCase(createPost.pending, (state) => { state.creating = true; state.createError = null; })
+//       .addCase(createPost.fulfilled, (state, action) => {
+//         state.creating = false;
+//         if (action.payload) {
+//           state.feed.unshift(action.payload);
+//           state.myPosts.unshift(action.payload);
+//         }
+//       })
+//       .addCase(createPost.rejected, (state, action) => {
+//         state.creating = false;
+//         state.createError = action.payload;
+//       });
+
+//     // ── fetchMyPosts ──
+//     builder
+//       .addCase(fetchMyPosts.pending, (state) => { state.myPostsLoading = true; })
+//       .addCase(fetchMyPosts.fulfilled, (state, action) => {
+//         state.myPostsLoading = false;
+//         state.myPosts = Array.isArray(action.payload) ? action.payload : [];
+//       })
+//      .addCase(fetchMyPosts.rejected, (state, action) => {
+//   state.myPostsLoading = false;
+//   state.myPostsError = action.payload;
+// });
+
+//     // ── togglePostLike ──
+//     builder.addCase(togglePostLike.fulfilled, (state, action) => {
+//       const { postId, liked, likesCount } = action.payload;
+//       if (!state.interactions[postId]) state.interactions[postId] = {};
+//       state.interactions[postId].liked = liked;
+//       state.interactions[postId].likesCount = likesCount;
+//     });
+
+//     // ── fetchComments ──
+//     builder
+//       .addCase(fetchComments.pending, (state, action) => {
+//         const postId = action.meta.arg.postId;
+//         if (!state.interactions[postId]) state.interactions[postId] = {};
+//         state.interactions[postId].commentsLoading = true;
+//       })
+//       .addCase(fetchComments.fulfilled, (state, action) => {
+//         const { postId, comments } = action.payload;
+//         if (!state.interactions[postId]) state.interactions[postId] = {};
+//         state.interactions[postId].comments = comments;
+//         state.interactions[postId].commentsLoading = false;
+//       })
+//       .addCase(fetchComments.rejected, (state, action) => {
+//         const postId = action.meta.arg.postId;
+//         if (state.interactions[postId]) state.interactions[postId].commentsLoading = false;
+//       });
+
+
+//       // extraReducers mein add karo
+// builder.addCase(recordPostView.fulfilled, (state, action) => {
+//   const postId = action.payload;
+//   // viewsCount update karo agar interactions mein hai
+//   if (state.interactions[postId]) {
+//     state.interactions[postId].viewsCount = 
+//       (state.interactions[postId].viewsCount || 0) + 1;
+//   }
+// });
+
+//     // ── addComment ──
+//     builder
+//       .addCase(addComment.pending, (state, action) => {
+//         const postId = action.meta.arg.postId;
+//         if (!state.interactions[postId]) state.interactions[postId] = {};
+//         state.interactions[postId].commentAdding = true;
+//       })
+//       .addCase(addComment.fulfilled, (state, action) => {
+//         const { postId, comment } = action.payload;
+//         if (!state.interactions[postId]) state.interactions[postId] = {};
+//         state.interactions[postId].comments.unshift(comment);
+//         state.interactions[postId].commentsCount = (state.interactions[postId].commentsCount || 0) + 1;
+//         state.interactions[postId].commentAdding = false;
+//       })
+//       .addCase(addComment.rejected, (state, action) => {
+//         const postId = action.meta.arg.postId;
+//         if (state.interactions[postId]) state.interactions[postId].commentAdding = false;
+//       });
+
+//     // ── toggleSavePost ──
+//     builder.addCase(toggleSavePost.fulfilled, (state, action) => {
+//       const { postId, saved } = action.payload;
+//       if (!state.interactions[postId]) state.interactions[postId] = {};
+//       state.interactions[postId].saved = saved;
+
+//       // Remove from savedPosts list if unsaved
+//       if (!saved) {
+//         state.savedPosts = state.savedPosts.filter((p) => p._id !== postId);
+//       }
+//     });
+
+//     builder.addCase(fetchPostInteraction.fulfilled, (state, action) => {
+//   const { postId, liked, saved } = action.payload;
+//   if (!state.interactions[postId]) state.interactions[postId] = {};
+//   state.interactions[postId].liked = liked ?? false;
+//   state.interactions[postId].saved = saved ?? false;
+// });
+
+//     // ── fetchSavedPosts ──
+//     builder
+//       .addCase(fetchSavedPosts.pending, (state) => { state.savedPostsLoading = true; })
+//       .addCase(fetchSavedPosts.fulfilled, (state, action) => {
+//         state.savedPostsLoading = false;
+//         state.savedPosts = Array.isArray(action.payload) ? action.payload : [];
+//       })
+//       .addCase(fetchSavedPosts.rejected, (state) => { state.savedPostsLoading = false; });
+
+//        builder.addCase(deletePost.fulfilled, (state, action) => {
+//       const postId = action.payload;
+//       state.myPosts = state.myPosts.filter((p) => p._id !== postId);
+//       state.feed = state.feed.filter((p) => p._id !== postId);
+//       delete state.interactions[postId];
+//     });
+//     // ── fetchDraftPosts ──
+// builder
+//   .addCase(fetchDraftPosts.pending, (state) => {
+//     state.draftPostsLoading = true;
+//   })
+//   .addCase(fetchDraftPosts.fulfilled, (state, action) => {
+//     state.draftPostsLoading = false;
+//     state.draftPosts = Array.isArray(action.payload) ? action.payload : [];
+//   })
+//   .addCase(fetchDraftPosts.rejected, (state) => {
+//     state.draftPostsLoading = false;
+//   });
+
+// // ── publishDraftPost ──
+// builder.addCase(publishDraftPost.fulfilled, (state, action) => {
+//   const { postId, post } = action.payload;
+//   // Drafts se hatao
+//   state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
+//   // myPosts mein add karo
+//   if (post) state.myPosts.unshift(post);
+// });
+
+//   },
+// });
+
+
+
+// export const { prependPost, initInteraction } = postSlice.actions;
+// export default postSlice.reducer;
+
+
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../services/api";
-
-// ─────────────────────────────────────────────
-//  Thunks
-// ─────────────────────────────────────────────
 
 export const createPost = createAsyncThunk(
   "posts/create",
@@ -34,20 +448,21 @@ export const fetchMyPosts = createAsyncThunk(
   }
 );
 
-// ── Toggle like on a post ──
+// ── Toggle like ──
+// Socket emit NAHI — main server like.controller → notifyChat("/notify/like") se notification jaati hai
 export const togglePostLike = createAsyncThunk(
   "posts/toggleLike",
-  async (postId, { rejectWithValue }) => {
+  async ({ postId, postAuthorId = null }, { rejectWithValue }) => {
     try {
       const res = await api.post(`/likes/post/${postId}`);
-      return { postId, liked: res.data.liked, likesCount: res.data.likesCount };
+      const { liked, likesCount } = res.data;
+      return { postId, liked, likesCount };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Like failed");
     }
   }
 );
 
-// ── Fetch comments for a post ──
 export const fetchComments = createAsyncThunk(
   "posts/fetchComments",
   async ({ postId, page = 1 }, { rejectWithValue }) => {
@@ -60,20 +475,43 @@ export const fetchComments = createAsyncThunk(
   }
 );
 
-// ── Add a comment ──
+// ── Add comment ──
+// Socket emit NAHI — main server comment.controller → notifyChat("/notify/comment") se notification jaati hai
+// Reply ke liye socket "send_reply" emit hota hai notificationHandler.js mein kyunki
+// HTTP route /notify/reply nahi hai — woh socket se handle hota hai
 export const addComment = createAsyncThunk(
   "posts/addComment",
-  async ({ postId, content, parentCommentId = null }, { rejectWithValue }) => {
+  async ({ postId, content, parentCommentId = null, postAuthorId = null }, { rejectWithValue }) => {
     try {
       const res = await api.post(`/comments/post/${postId}`, { content, parentCommentId });
-      return { postId, comment: res.data.data };
+      const comment = res.data.data;
+
+      // Sirf reply ke liye socket emit — comment notification HTTP route se aati hai
+      // Reply ka koi HTTP route nahi isliye socket se bhejte hain
+      if (parentCommentId && postAuthorId) {
+        try {
+          const { getSocket } = await import("../services/socketManager");
+          const socket = getSocket();
+          if (socket?.connected) {
+            socket.emit("send_reply", {
+              to: postAuthorId,
+              postId,
+              commentId: comment._id,
+              preview: content.slice(0, 100),
+            });
+          }
+        } catch (socketErr) {
+          console.warn("Socket emit failed (non-critical):", socketErr.message);
+        }
+      }
+
+      return { postId, comment };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Comment add nahi hua");
     }
   }
 );
 
-// ── Toggle save on a post ──
 export const toggleSavePost = createAsyncThunk(
   "posts/toggleSave",
   async (postId, { rejectWithValue }) => {
@@ -86,7 +524,6 @@ export const toggleSavePost = createAsyncThunk(
   }
 );
 
-// ── Fetch saved posts ──
 export const fetchSavedPosts = createAsyncThunk(
   "posts/fetchSavedPosts",
   async (page = 1, { rejectWithValue }) => {
@@ -99,8 +536,6 @@ export const fetchSavedPosts = createAsyncThunk(
   }
 );
 
-
-// ── Fetch post interaction status (liked, saved) ──
 export const fetchPostInteraction = createAsyncThunk(
   "posts/fetchInteraction",
   async (postId, { rejectWithValue }) => {
@@ -113,8 +548,6 @@ export const fetchPostInteraction = createAsyncThunk(
   }
 );
 
-
-// ✅ View count increment karo
 export const recordPostView = createAsyncThunk(
   "posts/recordView",
   async (postId, { rejectWithValue }) => {
@@ -127,11 +560,6 @@ export const recordPostView = createAsyncThunk(
   }
 );
 
-
-
-
-
-// recordPostView ke baad add karo
 export const deletePost = createAsyncThunk(
   "posts/deletePost",
   async (postId, { rejectWithValue }) => {
@@ -144,9 +572,6 @@ export const deletePost = createAsyncThunk(
   }
 );
 
-
-
-// ── Fetch draft posts ──
 export const fetchDraftPosts = createAsyncThunk(
   "posts/fetchDrafts",
   async (_, { rejectWithValue }) => {
@@ -159,7 +584,6 @@ export const fetchDraftPosts = createAsyncThunk(
   }
 );
 
-// ── Publish draft ──
 export const publishDraftPost = createAsyncThunk(
   "posts/publishDraft",
   async (postId, { rejectWithValue }) => {
@@ -173,9 +597,6 @@ export const publishDraftPost = createAsyncThunk(
 );
 
 // ─────────────────────────────────────────────
-//  Slice
-// ─────────────────────────────────────────────
-
 const postSlice = createSlice({
   name: "posts",
   initialState: {
@@ -184,13 +605,11 @@ const postSlice = createSlice({
     savedPosts: [],
     myPostsLoading: false,
     savedPostsLoading: false,
-    draftPosts:        [],
-draftPostsLoading: false,
+    draftPosts: [],
+    draftPostsLoading: false,
+    myPostsError: null,
     creating: false,
     createError: null,
-
-    // Per-post interaction state
-    // { [postId]: { liked, likesCount, saved, comments, commentsLoading } }
     interactions: {},
   },
 
@@ -199,8 +618,6 @@ draftPostsLoading: false,
       state.feed.unshift(action.payload);
       state.myPosts.unshift(action.payload);
     },
-
-    // Initialize interaction state for a post
     initInteraction(state, action) {
       const { postId, liked, likesCount, saved, commentsCount } = action.payload;
       if (!state.interactions[postId]) {
@@ -218,31 +635,25 @@ draftPostsLoading: false,
   },
 
   extraReducers: (builder) => {
-    // ── createPost ──
     builder
-      .addCase(createPost.pending, (state) => { state.creating = true; state.createError = null; })
-      .addCase(createPost.fulfilled, (state, action) => {
+      .addCase(createPost.pending,    (state) => { state.creating = true; state.createError = null; })
+      .addCase(createPost.fulfilled,  (state, action) => {
         state.creating = false;
         if (action.payload) {
           state.feed.unshift(action.payload);
           state.myPosts.unshift(action.payload);
         }
       })
-      .addCase(createPost.rejected, (state, action) => {
-        state.creating = false;
-        state.createError = action.payload;
-      });
+      .addCase(createPost.rejected,   (state, action) => { state.creating = false; state.createError = action.payload; });
 
-    // ── fetchMyPosts ──
     builder
-      .addCase(fetchMyPosts.pending, (state) => { state.myPostsLoading = true; })
-      .addCase(fetchMyPosts.fulfilled, (state, action) => {
+      .addCase(fetchMyPosts.pending,    (state) => { state.myPostsLoading = true; })
+      .addCase(fetchMyPosts.fulfilled,  (state, action) => {
         state.myPostsLoading = false;
         state.myPosts = Array.isArray(action.payload) ? action.payload : [];
       })
-      .addCase(fetchMyPosts.rejected, (state) => { state.myPostsLoading = false; });
+      .addCase(fetchMyPosts.rejected,   (state, action) => { state.myPostsLoading = false; state.myPostsError = action.payload; });
 
-    // ── togglePostLike ──
     builder.addCase(togglePostLike.fulfilled, (state, action) => {
       const { postId, liked, likesCount } = action.payload;
       if (!state.interactions[postId]) state.interactions[postId] = {};
@@ -250,7 +661,6 @@ draftPostsLoading: false,
       state.interactions[postId].likesCount = likesCount;
     });
 
-    // ── fetchComments ──
     builder
       .addCase(fetchComments.pending, (state, action) => {
         const postId = action.meta.arg.postId;
@@ -268,7 +678,13 @@ draftPostsLoading: false,
         if (state.interactions[postId]) state.interactions[postId].commentsLoading = false;
       });
 
-    // ── addComment ──
+    builder.addCase(recordPostView.fulfilled, (state, action) => {
+      const postId = action.payload;
+      if (state.interactions[postId]) {
+        state.interactions[postId].viewsCount = (state.interactions[postId].viewsCount || 0) + 1;
+      }
+    });
+
     builder
       .addCase(addComment.pending, (state, action) => {
         const postId = action.meta.arg.postId;
@@ -287,66 +703,50 @@ draftPostsLoading: false,
         if (state.interactions[postId]) state.interactions[postId].commentAdding = false;
       });
 
-    // ── toggleSavePost ──
     builder.addCase(toggleSavePost.fulfilled, (state, action) => {
       const { postId, saved } = action.payload;
       if (!state.interactions[postId]) state.interactions[postId] = {};
       state.interactions[postId].saved = saved;
-
-      // Remove from savedPosts list if unsaved
-      if (!saved) {
-        state.savedPosts = state.savedPosts.filter((p) => p._id !== postId);
-      }
+      if (!saved) state.savedPosts = state.savedPosts.filter((p) => p._id !== postId);
     });
 
     builder.addCase(fetchPostInteraction.fulfilled, (state, action) => {
-  const { postId, liked, saved } = action.payload;
-  if (!state.interactions[postId]) state.interactions[postId] = {};
-  state.interactions[postId].liked = liked ?? false;
-  state.interactions[postId].saved = saved ?? false;
-});
+      const { postId, liked, saved } = action.payload;
+      if (!state.interactions[postId]) state.interactions[postId] = {};
+      state.interactions[postId].liked = liked ?? false;
+      state.interactions[postId].saved = saved ?? false;
+    });
 
-    // ── fetchSavedPosts ──
     builder
-      .addCase(fetchSavedPosts.pending, (state) => { state.savedPostsLoading = true; })
-      .addCase(fetchSavedPosts.fulfilled, (state, action) => {
+      .addCase(fetchSavedPosts.pending,    (state) => { state.savedPostsLoading = true; })
+      .addCase(fetchSavedPosts.fulfilled,  (state, action) => {
         state.savedPostsLoading = false;
         state.savedPosts = Array.isArray(action.payload) ? action.payload : [];
       })
-      .addCase(fetchSavedPosts.rejected, (state) => { state.savedPostsLoading = false; });
+      .addCase(fetchSavedPosts.rejected,   (state) => { state.savedPostsLoading = false; });
 
-       builder.addCase(deletePost.fulfilled, (state, action) => {
+    builder.addCase(deletePost.fulfilled, (state, action) => {
       const postId = action.payload;
       state.myPosts = state.myPosts.filter((p) => p._id !== postId);
-      state.feed = state.feed.filter((p) => p._id !== postId);
+      state.feed    = state.feed.filter((p) => p._id !== postId);
       delete state.interactions[postId];
     });
-    // ── fetchDraftPosts ──
-builder
-  .addCase(fetchDraftPosts.pending, (state) => {
-    state.draftPostsLoading = true;
-  })
-  .addCase(fetchDraftPosts.fulfilled, (state, action) => {
-    state.draftPostsLoading = false;
-    state.draftPosts = Array.isArray(action.payload) ? action.payload : [];
-  })
-  .addCase(fetchDraftPosts.rejected, (state) => {
-    state.draftPostsLoading = false;
-  });
 
-// ── publishDraftPost ──
-builder.addCase(publishDraftPost.fulfilled, (state, action) => {
-  const { postId, post } = action.payload;
-  // Drafts se hatao
-  state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
-  // myPosts mein add karo
-  if (post) state.myPosts.unshift(post);
-});
+    builder
+      .addCase(fetchDraftPosts.pending,   (state) => { state.draftPostsLoading = true; })
+      .addCase(fetchDraftPosts.fulfilled, (state, action) => {
+        state.draftPostsLoading = false;
+        state.draftPosts = Array.isArray(action.payload) ? action.payload : [];
+      })
+      .addCase(fetchDraftPosts.rejected,  (state) => { state.draftPostsLoading = false; });
 
+    builder.addCase(publishDraftPost.fulfilled, (state, action) => {
+      const { postId, post } = action.payload;
+      state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
+      if (post) state.myPosts.unshift(post);
+    });
   },
 });
-
-
 
 export const { prependPost, initInteraction } = postSlice.actions;
 export default postSlice.reducer;
