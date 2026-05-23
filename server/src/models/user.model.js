@@ -175,6 +175,27 @@ designation: {
       index: true,
     },
 
+    // accountStatus ke baad, role se pehle add karo:
+
+activeSuspension: {
+  suspendedAt:  { type: Date,    default: null },
+  suspendedBy:  { type: Schema.Types.ObjectId, ref: "User", default: null },
+  reason:       { type: String,  default: null },
+  duration:     { type: Number,  default: null },
+  expiresAt:    { type: Date,    default: null },
+},
+
+suspensionHistory: [
+  {
+    action:      { type: String, enum: ["suspended", "unsuspended", "banned"] },
+    performedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    reason:      { type: String },
+    duration:    { type: Number, default: null },
+    expiresAt:   { type: Date,   default: null },
+    createdAt:   { type: Date,   default: Date.now },
+  }
+],
+
     // ── Role ─────────────────────────────────
     role: {
       type: String,

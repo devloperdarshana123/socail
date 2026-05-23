@@ -1,4 +1,4 @@
-// src/components/CustomSelect.jsx
+
 import { useState, useRef, useEffect } from "react";
 
 export default function CustomSelect({ value, onChange, options, placeholder = "Select" }) {
@@ -20,13 +20,13 @@ export default function CustomSelect({ value, onChange, options, placeholder = "
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white/80 hover:border-white/20 focus:outline-none focus:border-violet-500/60 transition-colors min-w-[130px] cursor-pointer"
+        className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white/80 hover:border-white/20 focus:outline-none focus:border-violet-500/60 transition-colors min-w-32.5 cursor-pointer"
       >
         <span className="flex-1 text-left truncate">
           {selected ? selected.label : placeholder}
         </span>
         <svg
-          className={`w-3.5 h-3.5 text-white/40 flex-shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className={`w-3.5 h-3.5 text-white/40 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           fill="none" stroke="currentColor" viewBox="0 0 24 24"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -47,7 +47,7 @@ export default function CustomSelect({ value, onChange, options, placeholder = "
               }`}
             >
               {opt.value === value && (
-                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
               )}

@@ -50,9 +50,9 @@ export const createStory = createAsyncThunk(
   "stories/createStory",
   async (formData, { rejectWithValue }) => {
     try {
-      const { data } = await api.post("/stories", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+     const { data } = await api.post("/stories", formData, {
+  headers: { "Content-Type": "application/json" },
+});
       return data.story;
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Failed to create story");
@@ -144,12 +144,31 @@ export const createHighlight = createAsyncThunk(
   }
 );
 
+// export const addToHighlight = createAsyncThunk(
+//   "stories/addToHighlight",
+//   async ({ highlightId, storyId }, { rejectWithValue }) => {
+//     try {
+//       const { data } = await api.post(`/stories/highlights/${highlightId}/add`, { storyId });
+//       return { highlightId, highlight: data.highlight, removed: data.removed };
+//     } catch (err) {
+//       return rejectWithValue(
+//         err.response?.data?.message || "Failed to add to highlight"
+//       );
+//     }
+//   }
+// );
+
+
+
 export const addToHighlight = createAsyncThunk(
   "stories/addToHighlight",
   async ({ highlightId, storyId }, { rejectWithValue }) => {
     try {
-      const { data } = await api.post(`/stories/highlights/${highlightId}/add`, { storyId });
-      return { highlightId, highlight: data.highlight, removed: data.removed };
+      const { data } = await api.post(
+        `/stories/highlights/${highlightId}/add`,
+        { storyId }
+      );
+      return { highlightId, highlight: data.highlight };
     } catch (err) {
       return rejectWithValue(
         err.response?.data?.message || "Failed to add to highlight"
@@ -157,7 +176,6 @@ export const addToHighlight = createAsyncThunk(
     }
   }
 );
-
 export const deleteHighlight = createAsyncThunk(
   "stories/deleteHighlight",
   async (highlightId, { rejectWithValue }) => {
@@ -323,10 +341,19 @@ story.reactionsCount = liked
     });
 
     // ── Add to Highlight ──
+    // builder.addCase(addToHighlight.fulfilled, (state, { payload }) => {
+    //   const idx = state.highlights.findIndex((h) => h._id === payload.highlightId);
+    //   if (idx > -1) state.highlights[idx] = payload.highlight;
+    // });
+
+
     builder.addCase(addToHighlight.fulfilled, (state, { payload }) => {
-      const idx = state.highlights.findIndex((h) => h._id === payload.highlightId);
-      if (idx > -1) state.highlights[idx] = payload.highlight;
-    });
+  const idx = state.highlights.findIndex((h) => h._id === payload.highlightId);
+  if (idx > -1) {
+    // Deep replace — purana object nahi, naya server se aaya object
+    state.highlights[idx] = { ...payload.highlight };
+  }
+});
 
     // ── Delete Highlight ──
     builder.addCase(deleteHighlight.fulfilled, (state, { payload: highlightId }) => {

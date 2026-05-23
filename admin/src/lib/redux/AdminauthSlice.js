@@ -71,12 +71,11 @@ const initialState = {
     success: false,
   },
 
-  fetchMe: {
-    loading: false,
-    error: null,
-    initialized: false,
-    initialized: true, // app start pe ek baar fetchMe hoti hai
-  },
+ fetchMe: {
+  loading: false,
+  error: null,
+  initialized: false,
+},
 
   logout: {
     loading: false,

@@ -7,6 +7,7 @@ import { motion , AnimatePresence} from "framer-motion";
 import DraftsList from "../components/DraftsList";
 import EditDraftModal from "../components/EditDraftModal";
 import { createPortal } from "react-dom";
+import { resolvePostThumb , isVideoMedia } from "../utils/mediaUtils";
 import {
   Plus, X, Grid,
   MapPin, Pencil, Camera, Play, Bookmark,
@@ -58,7 +59,7 @@ function PostGridMenu({ onDelete }) {
           />
           <div
             className="absolute top-8 right-1.5 z-40 bg-white rounded-xl shadow-xl
-              border border-[#e8d5be] overflow-hidden min-w-[130px]"
+              border border-[#e8d5be] overflow-hidden min-w-32.5"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -318,12 +319,14 @@ const isLoadingPosts = activeTab === "saved" ? savedPostsLoading : activeTab ===
           <h1 className="text-xl font-bold text-[#2d1f0f]">{user?.fullName || user?.name}</h1>
           <p className="text-sm text-[#8b6343] font-medium">@{user?.username}</p>
           {user?.bio && <p className="text-sm text-[#4a3828] mt-1.5">{user?.bio}</p>}
-          {user?.location && (
-            <p className="flex items-center gap-1 text-xs text-[#8b7355] mt-1">
-              <MapPin size={12} />
-              {user?.location?.city ? `${user.location.city}, ${user.location.state}` : user?.location}
-            </p>
-          )}
+         {user?.location?.city || user?.location?.state || user?.location?.country ? (
+  <p className="flex items-center gap-1 text-xs text-[#8b7355] mt-1">
+    <MapPin size={12} />
+    {[user.location.city, user.location.state, user.location.country]
+      .filter(Boolean)
+      .join(", ")}
+  </p>
+) : null}
         </div>
 
         {/* Stats */}
@@ -445,11 +448,9 @@ const isLoadingPosts = activeTab === "saved" ? savedPostsLoading : activeTab ===
   ) : (
     <div className="grid grid-cols-3 gap-0.5 mb-8">
       {draftPosts.map((post) => {
-        const imgSrc =
-          post.type === "reel"
-            ? post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url
-            : post.media?.[0]?.url || post.thumbnail || post.image;
-        const isTextPost = post.type === "text" || (!imgSrc && post.caption);
+
+        const imgSrc = resolvePostThumb(post);
+const isTextPost = post.type === "text" || (!imgSrc && post.caption);
 
         return (
           <motion.div
@@ -482,10 +483,14 @@ const isLoadingPosts = activeTab === "saved" ? savedPostsLoading : activeTab ===
                 </div>
               ) : imgSrc ? (
                 <img
-                  src={imgSrc}
-                  alt=""
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
+  src={imgSrc}
+  alt=""
+  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+  onError={(e) => {
+    e.target.style.display = "none";
+    e.target.parentNode.style.background = "#e8d5be";
+  }}
+/>
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-[#e8d5be]">
                   <Grid size={20} className="text-[#c09a6e]" />
@@ -535,12 +540,10 @@ const isLoadingPosts = activeTab === "saved" ? savedPostsLoading : activeTab ===
 ) : (
   <div className="grid grid-cols-3 gap-0.5 mb-8">
             {displayPosts.map((post) => {
-              const imgSrc =
-                post.type === "reel"
-                  ? post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url
-                  : post.media?.[0]?.url || post.thumbnail || post.image;
 
-              const isTextPost = post.type === "text" || (!imgSrc && post.caption);
+              const imgSrc = resolvePostThumb(post);
+const isVid = isVideoMedia(post);
+const isTextPost = post.type === "text" || (!imgSrc && post.caption);
 
               return (
                 <motion.div
@@ -602,11 +605,18 @@ const isLoadingPosts = activeTab === "saved" ? savedPostsLoading : activeTab ===
                       </div>
                     )}
 
-                    {post.type === "reel" && (
+                    {/* {post.type === "reel" && (
                       <div className="absolute top-2 right-2 bg-black/40 rounded-full p-1">
                         <Play size={12} className="text-white fill-white" />
                       </div>
-                    )}
+                    )} */}
+
+
+                    {isVid && (
+  <div className="absolute top-2 right-2 bg-black/40 rounded-full p-1">
+    <Play size={12} className="text-white fill-white" />
+  </div>
+)}
 
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100">
                       <span className="flex items-center gap-1 text-white text-sm font-bold">

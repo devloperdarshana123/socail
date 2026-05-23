@@ -1,10 +1,10 @@
 
 
 import { useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Toaster } from "sonner";
 import { fetchAdminMe, forceLogout } from "./lib/redux/AdminauthSlice";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 
 // ── Layouts ──
 import AdminLayout from "./layouts/AdminLayout";
@@ -20,32 +20,50 @@ import Location from "./pages/Location";
 import Contact from "./pages/Contact";
 import UsersPage from "./pages/UsersPage";
 
+
 // ── baad mein uncomment karo jab ban jayein ──
-// import Dashboard from "./pages/Dashboard";
-// import PostsPage from "./pages/PostsPage";
-// import ReportsPage from "./pages/ReportsPage";
+import DashboardPage from "./pages/DashboardPage";
+import PostsPage from "./pages/PostsPage";
+import ReportsPage from "./pages/Reportspage";
 // import SettingsPage from "./pages/SettingsPage";
-// import UserDetailPage from "./pages/UserDetailPage";
+import UserDetailPage from "./pages/UserDetailPage";
 
 // ─────────────────────────────────────────────
 //  Protected Route — sirf super_admin access
 // ─────────────────────────────────────────────
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, fetchMe } = useSelector((s) => s.adminAuth);
-  if (!fetchMe.initialized) return null;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!fetchMe.initialized) return <AppLoader />;
+  if (!isAuthenticated) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   return children;
 };
-
 // ─────────────────────────────────────────────
 //  Public Route — logged in ho toh dashboard pe
 // ─────────────────────────────────────────────
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, fetchMe } = useSelector((s) => s.adminAuth);
-  if (!fetchMe.initialized) return null;
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  const location = useLocation();
+  if (!fetchMe.initialized) return <AppLoader />;
+  if (isAuthenticated) {
+    const dest = location.state?.from || "/dashboard";
+    return <Navigate to={dest} replace />;
+  }
   return children;
 };
+function AppLoader() {
+  return (
+    <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center gap-4 z-50">
+      <div className="relative w-12 h-12">
+        <div className="absolute inset-0 rounded-full border-2 border-violet-500/20" />
+        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-violet-500 animate-spin" />
+        <div className="absolute inset-2 rounded-full border-2 border-transparent border-t-violet-300/60 animate-spin"
+          style={{ animationDuration: "0.6s", animationDirection: "reverse" }} />
+      </div>
+      <p className="text-xs font-semibold text-slate-500 tracking-widest uppercase">Loading</p>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────
 //  App
@@ -99,46 +117,19 @@ const App = () => {
           <Route
             path="/dashboard"
             element={
-              <div className="flex items-center justify-center min-h-[calc(100vh-60px)]">
-                <div className="text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-7 h-7 text-indigo-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
-                    </svg>
-                  </div>
-                  <p className="text-white/60 text-sm font-medium">Dashboard — Coming Soon</p>
-                </div>
-              </div>
+              <DashboardPage/>
             }
           />
 
           <Route path="/users" element={<UsersPage />} />
 
-          <Route
-            path="/users/:id"
-            element={
-              <div className="flex items-center justify-center min-h-[calc(100vh-60px)]">
-                <p className="text-white/40 text-sm">User Detail — Coming Soon</p>
-              </div>
-            }
-          />
+         <Route path="/users/:id" element={<UserDetailPage />} />
 
-          <Route
-            path="/posts"
-            element={
-              <div className="flex items-center justify-center min-h-[calc(100vh-60px)]">
-                <p className="text-white/40 text-sm">Posts — Coming Soon</p>
-              </div>
-            }
-          />
+          <Route path="/posts" element={<PostsPage />} />
 
           <Route
             path="/reports"
-            element={
-              <div className="flex items-center justify-center min-h-[calc(100vh-60px)]">
-                <p className="text-white/40 text-sm">Reports — Coming Soon</p>
-              </div>
-            }
+            element={<ReportsPage/> }
           />
 
           <Route

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useDispatch, useSelector } from "react-redux";
+import api from "../lib/services/api";
 import {
   X, Heart, MessageCircle, Bookmark,
   Play, Pause, ChevronLeft, ChevronRight, Send, Eye,
@@ -208,6 +209,32 @@ const isOwner = me?._id === post?.author?._id;
   const [likeAnim, setLikeAnim]       = useState(false);
   const inputRef = useRef(null);
 
+
+const viewTimerRef = useRef(null);
+const viewStartRef = useRef(null);
+
+useEffect(() => {
+  if (!postId || !post) return;
+  if (isOwner) return; // khud ki post — skip
+  if (sessionStorage.getItem(`view_${postId}`)) return; // already viewed
+
+  viewStartRef.current = Date.now();
+
+  viewTimerRef.current = setTimeout(async () => {
+    try {
+      const duration = Math.floor((Date.now() - viewStartRef.current) / 1000);
+      await api.post(`/posts/${postId}/view`, {
+        source: "modal",
+        duration,
+      });
+      sessionStorage.setItem(`view_${postId}`, "1");
+    } catch {
+      // silent fail
+    }
+  }, 3000);
+
+  return () => clearTimeout(viewTimerRef.current);
+}, [postId, isOwner]);
   // ── key fix: hasMedia checks properly ──
  const hasMedia = post?.type !== "text" && Array.isArray(post?.media) && post.media.length > 0;
 const isText   = post?.type === "text";

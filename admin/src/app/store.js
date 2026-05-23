@@ -2,7 +2,9 @@ import { configureStore } from "@reduxjs/toolkit";
 import adminAuthReducer from "../lib/redux/AdminauthSlice";
 
 import usersReducer     from "../lib/redux/usersSlice";  
-
+import adminPostsReducer from "../lib/redux/Postsslice";
+import reportsReducer from "../lib/redux/Reportsslice";
+import dashboardReducer from "../lib/redux/dashboardSlice";
 // ─────────────────────────────────────────────
 //  Admin Redux Store
 // ─────────────────────────────────────────────
@@ -11,6 +13,10 @@ const store = configureStore({
   reducer: {
     adminAuth: adminAuthReducer,
     users:     usersReducer, 
+     adminPosts: adminPostsReducer,
+     reports: reportsReducer,
+     dashboard:dashboardReducer,
+
   },
 
   middleware: (getDefaultMiddleware) =>

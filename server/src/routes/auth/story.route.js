@@ -14,7 +14,7 @@ storyRouter.use(isAuthenticated, isActive);
 
 // Static routes pehle
 storyRouter.get("/feed",                getStoriesFeed);
-storyRouter.post("/",                   uploadSingle("media"), createStory);
+storyRouter.post("/",             createStory);
 
 // Highlight routes — specific pehle
 storyRouter.get("/highlights/my",                    getMyHighlights);

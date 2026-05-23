@@ -88,17 +88,27 @@ const App = () => {
 }, [user?._id]);
 
   // Post submit handler
-  const handlePostSubmit = async (formData) => {
-    const isDraft = formData.get("isDraft") === "true";
-    const result  = await dispatch(createPost(formData));
-    if (createPost.fulfilled.match(result)) {
-      setShowPostModal(false);
-      toast.success(isDraft ? "Draft saved! 📝" : "Post shared! 🎉");
-    } else {
-      throw new Error(result.payload);
-    }
-  };
+  // const handlePostSubmit = async (formData) => {
+  //   const isDraft = formData.get("isDraft") === "true";
+  //   const result  = await dispatch(createPost(formData));
+  //   if (createPost.fulfilled.match(result)) {
+  //     setShowPostModal(false);
+  //     toast.success(isDraft ? "Draft saved! 📝" : "Post shared! 🎉");
+  //   } else {
+  //     throw new Error(result.payload);
+  //   }
+  // };
 
+
+  const handlePostSubmit = async (postData) => {
+  const result = await dispatch(createPost(postData));
+  if (createPost.fulfilled.match(result)) {
+    setShowPostModal(false);
+    toast.success(postData.isDraft ? "Draft saved! 📝" : "Post shared! 🎉");
+  } else {
+    throw new Error(result.payload);
+  }
+};
   return (
     <>
       {showNavbar && (

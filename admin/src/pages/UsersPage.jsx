@@ -6,11 +6,12 @@ import { useNavigate } from "react-router-dom";
 import CustomSelect from "../components/CustomSelect";
 import {
   fetchUsers, updateUserStatus, toggleVerifiedBadge, deleteUser,
-  setFilters, setPage, clearErrors, resetFilters,
+  setFilters, setPage, clearErrors, resetFilters,  bulkUpdateStatus,
   selectUsers, selectUsersLoading, selectUsersError,
   selectActionLoading, selectActionError,
   selectUsersPagination, selectUsersFilters,
 } from "../lib/redux/usersSlice";
+import { UsersTableSkeleton } from "../components/skeletons";
 
 function useDebounce(value, delay = 400) {
   const [debounced, setDebounced] = useState(value);
@@ -68,7 +69,7 @@ function Avatar({ user, size = "md" }) {
     return <img src={user.profilePicture} alt={user.username} className={`${sizes[size]} rounded-full object-cover ring-2 ring-white shadow-sm`} />;
   }
   return (
-    <div className={`${sizes[size]} ${color} rounded-full flex items-center justify-center font-bold text-white ring-2 ring-white shadow-sm flex-shrink-0`}>
+    <div className={`${sizes[size]} ${color} rounded-full flex items-center justify-center font-bold text-white ring-2 ring-white shadow-sm shrink-0`}>
       {getInitials(user?.fullName || user?.username || "?")}
     </div>
   );
@@ -85,7 +86,7 @@ function StatCard({ label, value, icon, accent }) {
   return (
     <div className={`rounded-2xl border ${a.card} px-5 py-4 flex items-center gap-4 shadow-sm`}>
       
-     <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${a.icon}`}>
+     <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${a.icon}`}>
   {icon}
 </div>
       <div>
@@ -116,36 +117,184 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmLabel
   );
 }
 
-function StatusModal({ isOpen, onClose, onConfirm, user, loading }) {
-  const [status, setStatus] = useState("");
-  const [reason, setReason] = useState("");
-  useEffect(() => { if (isOpen) { setStatus(""); setReason(""); } }, [isOpen]);
+const DURATION_PRESETS = [
+  { value: "1d",   label: "1 Day",     desc: "Minor violation" },
+  { value: "3d",   label: "3 Days",    desc: "Repeat offense" },
+  { value: "7d",   label: "7 Days",    desc: "Serious violation" },
+  { value: "14d",  label: "14 Days",   desc: "Severe behavior" },
+  { value: "30d",  label: "30 Days",   desc: "Critical breach" },
+  { value: "perm", label: "Permanent", desc: "No expiry", danger: true },
+];
+
+function parseDays(val) {
+  return { "1d": 1, "3d": 3, "7d": 7, "14d": 14, "30d": 30 }[val] ?? 0;
+}
+
+function SuspendModal({ isOpen, onClose, onConfirm, user, loading }) {
+  const [duration, setDuration] = useState("7d");
+  const [reason, setReason]     = useState("");
+  const [action, setAction]     = useState("suspend");
+
+  useEffect(() => {
+    if (isOpen && user) {
+      setDuration("7d");
+      setReason("");
+      setAction(user.accountStatus === "suspended" ? "lift" : "suspend");
+    }
+  }, [isOpen, user]);
+
   if (!isOpen || !user) return null;
-  const statusOptions = [
-    { value: "active",    label: "Active",    color: "text-emerald-600" },
-    { value: "suspended", label: "Suspended", color: "text-amber-600" },
-    { value: "banned",    label: "Banned",    color: "text-red-600" },
-  ].filter((o) => o.value !== user.status);
+
+  const selected   = DURATION_PRESETS.find((p) => p.value === duration);
+  const isSuspended = user.accountStatus === "suspended";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-100">
-        <h3 className="text-base font-semibold text-slate-800 mb-1">Change Status</h3>
-        <p className="text-sm text-slate-400 mb-5">Update account status for <span className="text-slate-700 font-medium">@{user.username}</span></p>
-        <div className="space-y-2 mb-4">
-          {statusOptions.map((opt) => (
-            <label key={opt.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${status === opt.value ? "border-violet-400 bg-violet-50" : "border-slate-200 hover:border-slate-300 bg-slate-50"}`}>
-              <input type="radio" name="status" value={opt.value} checked={status === opt.value} onChange={() => setStatus(opt.value)} className="accent-violet-600" />
-              <span className={`text-sm font-semibold ${opt.color}`}>{opt.label}</span>
-            </label>
-          ))}
+      <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-100 overflow-hidden">
+
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <Avatar user={user} size="md" />
+            <div>
+              <p className="text-sm font-bold text-slate-800">{user.fullName || user.username}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-slate-400">@{user.username}</p>
+                <StatusBadge status={user.accountStatus} />
+              </div>
+            </div>
+          </div>
+
+          {/* Action Tabs */}
+<div className="flex gap-1 mt-4 bg-slate-100 rounded-xl p-1">
+  {isSuspended ? (
+    <button
+      onClick={() => setAction("lift")}
+      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all
+        ${action === "lift" ? "bg-white shadow-sm text-emerald-600" : "text-slate-500 hover:text-slate-700"}`}
+    >
+      Lift Suspension
+    </button>
+  ) : (
+    <button
+      onClick={() => setAction("suspend")}
+      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all
+        ${action === "suspend" ? "bg-white shadow-sm text-amber-600" : "text-slate-500 hover:text-slate-700"}`}
+    >
+      Suspend
+    </button>
+  )}
+  <button
+    onClick={() => setAction("ban")}
+    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all
+      ${action === "ban" ? "bg-white shadow-sm text-red-600" : "text-slate-500 hover:text-slate-700"}`}
+  >
+    Ban
+  </button>
+</div>
         </div>
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (optional) — may be sent to the user" rows={3} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400 mb-5" />
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} disabled={loading} className="px-4 py-2 rounded-xl text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors disabled:opacity-50">Cancel</button>
-          <button onClick={() => onConfirm({ status, reason })} disabled={!status || loading} className="px-4 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50 flex items-center gap-2">
-            {loading && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>}
-            Update Status
+
+        <div className="px-6 py-4 space-y-4">
+
+          {/* Duration — only for suspend */}
+          {action === "suspend" && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Duration</p>
+              <div className="grid grid-cols-3 gap-2">
+                {DURATION_PRESETS.map((p) => (
+                  <button
+                    key={p.value}
+                    onClick={() => setDuration(p.value)}
+                    className={`rounded-xl border py-2.5 px-2 text-center transition-all ${
+                      duration === p.value
+                        ? p.danger
+                          ? "border-red-400 bg-red-50"
+                          : "border-violet-400 bg-violet-50"
+                        : "border-slate-200 hover:border-slate-300 bg-slate-50"
+                    }`}
+                  >
+                    <p className={`text-sm font-bold ${
+                      duration === p.value
+                        ? p.danger ? "text-red-600" : "text-violet-700"
+                        : "text-slate-700"
+                    }`}>{p.label}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{p.desc}</p>
+                  </button>
+                ))}
+              </div>
+              {selected && (
+                <p className="text-xs text-slate-400 mt-2 text-center">
+                  {selected.value === "perm"
+                    ? "⚠️ Permanent — cannot auto-expire"
+                    : `Expires: ${new Date(Date.now() + parseDays(selected.value) * 86400000)
+                        .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
+                  }
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Reason */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+              Reason {action !== "lift" && <span className="text-red-400">*</span>}
+            </p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              placeholder={
+                action === "lift"
+                  ? "Reason for lifting (optional)"
+                  : action === "ban"
+                  ? "Reason for permanent ban…"
+                  : "Describe the violation…"
+              }
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm
+                text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400"
+            />
+          </div>
+
+          {/* Active suspension info */}
+          {isSuspended && user.activeSuspension?.expiresAt && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <p className="text-xs font-semibold text-amber-700">Current Suspension</p>
+              <p className="text-xs text-amber-600 mt-1">{user.activeSuspension.reason}</p>
+              <p className="text-xs text-amber-500 mt-1">
+                Expires: {new Date(user.activeSuspension.expiresAt)
+                  .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-5 flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm({ action, duration, reason })}
+            disabled={(action !== "lift" && !reason.trim()) || loading}
+            className={`px-5 py-2 rounded-xl text-sm font-medium text-white transition-colors
+              disabled:opacity-50 flex items-center gap-2 ${
+                action === "ban"  ? "bg-red-600 hover:bg-red-500" :
+                action === "lift" ? "bg-emerald-600 hover:bg-emerald-500" :
+                "bg-amber-500 hover:bg-amber-400"
+              }`}
+          >
+            {loading && (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            )}
+            {action === "lift" ? "Lift Suspension" : action === "ban" ? "Ban Account" : "Suspend"}
           </button>
         </div>
       </div>
@@ -153,6 +302,140 @@ function StatusModal({ isOpen, onClose, onConfirm, user, loading }) {
   );
 }
 
+
+
+function BulkActionModal({ isOpen, onClose, onConfirm, count, actionType, loading }) {
+  const [duration, setDuration] = useState("7d");
+  const [reason, setReason]     = useState("");
+
+  useEffect(() => {
+    if (isOpen) { setDuration("7d"); setReason(""); }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const selected = DURATION_PRESETS.find((p) => p.value === duration);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-100 overflow-hidden">
+
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">
+  {actionType === "lift" ? "Bulk Lift Suspension" : "Bulk Suspend"}
+</p>
+<p className="text-xs text-slate-400 mt-0.5">
+  {count} user{count > 1 ? "s" : ""} will be {actionType === "lift" ? "unsuspended" : "suspended"}
+</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+
+          {/* Duration */}
+       {/* Duration — only for suspend */}
+          {actionType !== "lift" && <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Duration</p>
+            <div className="grid grid-cols-3 gap-2">
+              {DURATION_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => setDuration(p.value)}
+                  className={`rounded-xl border py-2.5 px-2 text-center transition-all ${
+                    duration === p.value
+                      ? p.danger
+                        ? "border-red-400 bg-red-50"
+                        : "border-violet-400 bg-violet-50"
+                      : "border-slate-200 hover:border-slate-300 bg-slate-50"
+                  }`}
+                >
+                  <p className={`text-sm font-bold ${
+                    duration === p.value
+                      ? p.danger ? "text-red-600" : "text-violet-700"
+                      : "text-slate-700"
+                  }`}>{p.label}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{p.desc}</p>
+                </button>
+              ))}
+            </div>
+           {selected && (
+              <p className="text-xs text-slate-400 mt-2 text-center">
+                {selected.value === "perm"
+                  ? "⚠️ Permanent — cannot auto-expire"
+                  : `Expires: ${new Date(Date.now() + parseDays(selected.value) * 86400000)
+                      .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
+                }
+              </p>
+            )}
+          </div>}
+
+          {/* Reason */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+              Reason <span className="text-red-400">*</span>
+            </p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              placeholder="Reason for bulk suspension…"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm
+                text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400"
+            />
+          </div>
+
+          {/* Warning */}
+         {/* Warning */}
+          <div className={`border rounded-xl px-4 py-3 ${actionType === "lift" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+            <p className={`text-xs font-medium ${actionType === "lift" ? "text-emerald-600" : "text-red-600"}`}>
+              {actionType === "lift"
+                ? `✅ This will lift suspension for ${count} user${count > 1 ? "s" : ""}. This action is logged.`
+                : `⚠️ This will suspend ${count} user${count > 1 ? "s" : ""} at once. This action is logged.`
+              }
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-5 flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+         <button
+            onClick={() => onConfirm({ duration, reason, actionType })}
+            disabled={(actionType !== "lift" && !reason.trim()) || loading}
+            className={`px-5 py-2 rounded-xl text-sm font-medium text-white transition-colors
+              disabled:opacity-50 flex items-center gap-2
+              ${actionType === "lift" ? "bg-emerald-600 hover:bg-emerald-500" : "bg-amber-500 hover:bg-amber-400"}`}
+          >
+            {loading && (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            )}
+            {actionType === "lift" ? `Lift ${count} Suspension${count > 1 ? "s" : ""}` : `Suspend ${count} User${count > 1 ? "s" : ""}`}
+          </button>
+           
+        </div>
+      </div>
+    </div>
+  );
+}
 function UserRowMenu({ user, onStatusChange, onToggleVerify, onDelete, actionLoading }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -194,7 +477,7 @@ function UserRowMenu({ user, onStatusChange, onToggleVerify, onDelete, actionLoa
 function SkeletonRow() {
   return (
     <tr className="border-b border-slate-100">
-      {[...Array(7)].map((_, i) => (
+      {[...Array(8)].map((_, i) => (
         <td key={i} className="px-4 py-4">
           <div className="h-4 bg-slate-100 rounded-full animate-pulse" style={{ width: `${60 + (i * 13) % 40}%` }} />
         </td>
@@ -222,6 +505,20 @@ export default function UsersPage() {
   const [deleteModal, setDeleteModal] = useState({ open: false, user: null });
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const [selected, setSelected]       = useState(new Set());
+const [bulkModal, setBulkModal] = useState({ open: false, type: "suspend" });
+const [bulkLoading, setBulkLoading] = useState(false);
+
+const toggleSelect     = (id) => setSelected((prev) => {
+  const n = new Set(prev);
+  n.has(id) ? n.delete(id) : n.add(id);
+  return n;
+});
+const toggleSelectAll  = () => setSelected((prev) =>
+  prev.size === users.length ? new Set() : new Set(users.map((u) => u._id))
+);
+const clearSelection   = () => setSelected(new Set());
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
@@ -261,10 +558,31 @@ export default function UsersPage() {
     }
   };
 
-  const handleStatusConfirm = async ({ status, reason }) => {
-    const result = await dispatch(updateUserStatus({ userId: statusModal.user._id, status, reason }));
-    if (!result.error) { showToast(`@${statusModal.user.username} status updated to ${status}`); setStatusModal({ open: false, user: null }); }
+ const handleStatusConfirm = async ({ action, duration, reason }) => {
+  const statusMap = {
+    suspend: "suspended",
+    lift:    "active",
+    ban:     "banned",
   };
+
+  const result = await dispatch(updateUserStatus({
+    userId: statusModal.user._id,
+    status: statusMap[action],
+    reason,
+    duration: action === "suspend" ? duration : undefined,
+  }));
+
+  if (!result.error) {
+    showToast(
+      action === "lift"
+        ? `@${statusModal.user.username} suspension lifted`
+        : action === "ban"
+        ? `@${statusModal.user.username} banned`
+        : `@${statusModal.user.username} suspended`
+    );
+    setStatusModal({ open: false, user: null });
+  }
+};
 
   const handleDeleteConfirm = async () => {
     setDeleteLoading(true);
@@ -272,6 +590,31 @@ export default function UsersPage() {
     setDeleteLoading(false);
     if (!result.error) { showToast(`@${deleteModal.user.username} deleted`); setDeleteModal({ open: false, user: null }); }
   };
+
+
+const handleBulkConfirm = async ({ duration, reason, actionType }) => {
+  setBulkLoading(true);
+  const result = await dispatch(bulkUpdateStatus({
+    userIds:  Array.from(selected),
+    status:   actionType === "lift" ? "active" : "suspended",
+    duration: actionType === "lift" ? undefined : duration,
+    reason,
+  }));
+  setBulkLoading(false);
+
+  if (!result.error) {
+    const { success, failed } = result.payload.data;
+    const word = actionType === "lift" ? "unsuspended" : "suspended";
+    showToast(
+      failed.length > 0
+        ? `${success.length} ${word}, ${failed.length} failed`
+        : `${success.length} user${success.length > 1 ? "s" : ""} ${word}`
+    );
+    clearSelection();
+    setBulkModal({ open: false, type: "suspend" });
+    dispatch(fetchUsers({ ...filters }));
+  }
+};
 
   const handleToggleVerify = async (userId) => {
     const result = await dispatch(toggleVerifiedBadge(userId));
@@ -295,7 +638,7 @@ export default function UsersPage() {
     <>
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-5 right-5 z-[100] px-4 py-3 rounded-xl text-sm font-semibold shadow-lg border ${
+        <div className={`fixed top-5 right-5 z-100 px-4 py-3 rounded-xl text-sm font-semibold shadow-lg border ${
           toast.type === "error"
             ? "bg-red-50 border-red-200 text-red-700"
             : "bg-emerald-50 border-emerald-200 text-emerald-700"
@@ -304,7 +647,22 @@ export default function UsersPage() {
         </div>
       )}
 
-      <StatusModal isOpen={statusModal.open} user={statusModal.user} onClose={() => setStatusModal({ open: false, user: null })} onConfirm={handleStatusConfirm} loading={actionLoading === statusModal.user?._id} />
+     <SuspendModal
+  isOpen={statusModal.open}
+  user={statusModal.user}
+  onClose={() => setStatusModal({ open: false, user: null })}
+  onConfirm={handleStatusConfirm}
+  loading={actionLoading === statusModal.user?._id}
+/>
+<BulkActionModal
+  isOpen={bulkModal.open}
+  onClose={() => setBulkModal({ open: false, type: "suspend" })}
+  onConfirm={handleBulkConfirm}
+  count={selected.size}
+  actionType={bulkModal.type}
+  loading={bulkLoading}
+/>
+
       <ConfirmModal isOpen={deleteModal.open} onClose={() => setDeleteModal({ open: false, user: null })} onConfirm={handleDeleteConfirm} title="Delete Account" message={`Permanently delete @${deleteModal.user?.username}? This cannot be undone.`} confirmLabel="Delete" danger loading={deleteLoading} />
 
       <div className="min-h-screen bg-slate-50">
@@ -357,7 +715,7 @@ export default function UsersPage() {
           {/* Filters */}
           <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5 mb-5 shadow-sm">
             <div className="flex flex-wrap gap-3">
-              <div className="relative flex-1 min-w-[220px] max-w-sm">
+              <div className="relative flex-1 min-w-55 max-w-sm">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                 </svg>
@@ -380,6 +738,32 @@ export default function UsersPage() {
             </div>
           </div>
 
+          {selected.size > 0 && (
+  <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-violet-50 border border-violet-200 rounded-xl">
+    <span className="text-sm font-semibold text-violet-700">
+      {selected.size} selected
+    </span>
+   <button
+  onClick={() => setBulkModal({ open: true, type: "suspend" })}
+  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-white transition-colors"
+>
+  Suspend All
+</button>
+<button
+  onClick={() => setBulkModal({ open: true, type: "lift" })}
+  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+>
+  Unsuspend All
+</button>
+    <button
+      onClick={clearSelection}
+      className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition-colors"
+    >
+      Clear selection
+    </button>
+  </div>
+)}
+
           {/* Error Banner */}
           {error && (
             <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
@@ -394,15 +778,23 @@ export default function UsersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">
-                    {[
-                      { label: "User",      col: "fullName"       },
-                      { label: "Role",      col: null             },
-                      { label: "Status",    col: "accountStatus"  },
-                      { label: "Posts",     col: "postsCount"     },
-                      { label: "Followers", col: "followersCount" },
-                      { label: "Joined",    col: "createdAt"      },
-                      { label: "",          col: null             },
-                    ].map(({ label, col }) => (
+                  <th className="px-4 py-3 w-10">
+  <input
+    type="checkbox"
+    checked={selected.size === users.length && users.length > 0}
+    onChange={toggleSelectAll}
+    className="w-4 h-4 rounded accent-violet-600 cursor-pointer"
+  />
+</th>
+{[
+  { label: "User",      col: "fullName"       },
+  { label: "Role",      col: null             },
+  { label: "Status",    col: "accountStatus"  },
+  { label: "Posts",     col: "postsCount"     },
+  { label: "Followers", col: "followersCount" },
+  { label: "Joined",    col: "createdAt"      },
+  { label: "",          col: null             },
+].map(({ label, col }) => (
                       <th
                         key={label}
                         onClick={col ? () => handleSort(col) : undefined}
@@ -414,12 +806,12 @@ export default function UsersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loading
-                    ? [...Array(8)].map((_, i) => <SkeletonRow key={i} />)
+                {loading
+  ? <UsersTableSkeleton />
                     : users.length === 0
                     ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-20 text-center">
+  <td colSpan={8} className="px-4 py-20 text-center">
                           <div className="flex flex-col items-center gap-3">
                             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center">
                               <svg className="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -431,16 +823,24 @@ export default function UsersPage() {
                       </tr>
                     )
                     : users.map((user) => (
-                      <tr key={user._id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
-                        {/* User */}
-                        <td className="px-4 py-3.5">
+                     <tr key={user._id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
+  <td className="px-4 py-3.5 w-10">
+    <input
+      type="checkbox"
+      checked={selected.has(user._id)}
+      onChange={() => toggleSelect(user._id)}
+      className="w-4 h-4 rounded accent-violet-600 cursor-pointer"
+    />
+  </td>
+  {/* User */}
+  <td className="px-4 py-3.5">
                           <div className="flex items-center gap-3">
                             <Avatar user={user} />
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-semibold text-slate-800 truncate">{user.fullName || user.username}</span>
                                 {user.isVerified && (
-                                  <svg className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                  <svg className="w-3.5 h-3.5 text-sky-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
                                   </svg>
                                 )}

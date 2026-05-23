@@ -26,11 +26,14 @@ import followRouter from "./routes/auth/follow.route.js";
 import messageRouter from "./routes/auth/message.route.js";
 import notificationRoutes from "./routes/auth/notification.route.js";
 import transcribeRoute from "./routes/auth/Transcribe.route.js";
+import "./cron/suspensionCron.js";
 
 
 //admin//
 import adminAuthRoute from "./routes/admin/Admin.auth.route.js";
 import adminUserRoute from "./routes/admin/Admin.user.routes .js";
+import adminReportRoute from "./routes/admin/Admin.report.routes.js";
+import dashboardRoutes from "./routes/admin/Admin.dashboard.route.js";
 
 const app = express();
 
@@ -64,7 +67,8 @@ if (process.env.NODE_ENV !== "test") {
 // CHANGE 3: Rate limiting — DDoS / brute force se bachao
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+ max: process.env.NODE_ENV === "production" ? 500 : 0,
+skip: () => process.env.NODE_ENV === "development",
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: "Too many requests, please try again later." },
@@ -130,7 +134,10 @@ app.use("/api/v2/transcribe", transcribeRoute);
 
 app.use("/api/v2/admin/login", adminAuthLimiter);
 app.use("/api/v2/admin/auth", adminAuthRoute);
+app.use("/api/v2/admin/dashboard", dashboardRoutes);
 app.use("/api/v2/admin",      adminUserRoute); 
+app.use("/api/v2/admin", adminReportRoute);
+
 
 
 // ── 404 Handler ──

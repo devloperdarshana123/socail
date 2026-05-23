@@ -11,9 +11,14 @@ import {
   toggleVerifiedBadge,
   getDashboardStats,
   getAllPosts,
-  bulkUpdateStatus,
-  getSuspensionHistory,
 } from "../../controllers/admin/admin.user.controller.js";
+import {
+  getAllReports,
+  getReportById,
+  updateReportStatus,
+  bulkUpdateReports,
+  getReportStats,
+} from "../../controllers/admin/admin.report.controller.js";
 
 const router = express.Router();
 
@@ -24,20 +29,25 @@ router.use(isAuthenticated, isAdmin);
 router.get("/stats", getDashboardStats);
 
 // ── Users ────────────────────────────────────────────────────
-router.post("/users/bulk-status",             bulkUpdateStatus);  
-router.get("/users",              getAllUsers);
-router.get("/users/:id",          getUserById);
-router.get("/users/:id/posts",    getUserPosts);
-router.get("/users/:id/reports",  getUserReports);
-router.get("/users/:id/suspension-history",   getSuspensionHistory); 
-router.get("/posts", getAllPosts);
+router.get("/users",             getAllUsers);
+router.get("/users/:id",         getUserById);
+router.get("/users/:id/posts",   getUserPosts);
+router.get("/users/:id/reports", getUserReports);
 
 // ── User Actions ─────────────────────────────────────────────
 router.patch("/users/:id/status",       updateUserStatus);
 router.patch("/users/:id/verify-badge", toggleVerifiedBadge);
 router.delete("/users/:id",             deleteUserAccount);
 
-// ── Post Actions ─────────────────────────────────────────────
+// ── Posts ────────────────────────────────────────────────────
+router.get("/posts",           getAllPosts);
 router.delete("/posts/:postId", deletePost);
+
+// ── Reports ──────────────────────────────────────────────────
+router.get("/reports/stats",        getReportStats);       // before /:id
+router.get("/reports",              getAllReports);
+router.get("/reports/:id",          getReportById);
+router.patch("/reports/bulk",       bulkUpdateReports);    // before /:id
+router.patch("/reports/:id/status", updateReportStatus);
 
 export default router;

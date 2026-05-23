@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import PostModal from "../components/PostModal";
+import { resolvePostThumb } from "../utils/mediaUtils";
 import { Search, X, Image, Video, FileText, Grid, Heart, MessageCircle, Eye, Play } from "lucide-react";
 import {
   fetchExplorePosts,
@@ -40,7 +41,7 @@ function PostCard({ post, onClick }) {
   const isMulti = post.media?.length > 1;
 
   // Thumbnail URL
-  const thumb = post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || null;
+const thumb = resolvePostThumb(post);
 
   return (
     <div

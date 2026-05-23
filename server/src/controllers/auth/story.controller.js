@@ -9,48 +9,75 @@ import { notifyChat } from "../../helper/notifyChat.js";
 // ─────────────────────────────────────────────
 //  POST /api/v2/stories — Create story
 // ─────────────────────────────────────────────
+// export const createStory = asyncHandler(async (req, res, next) => {
+//   if (!req.file) return next(new AppError("Media file required.", 400));
+
+//   const maxSize = req.file.mimetype.startsWith("video") ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+//   if (req.file.size > maxSize) {
+//     return next(new AppError(
+//       req.file.mimetype.startsWith("video")
+//         ? "Video cannot exceed 50MB."
+//         : "Image cannot exceed 10MB.",
+//       400
+//     ));
+//   }
+
+//   const { caption = "", audience = "public" } = req.body;
+
+//   const resourceType = req.file.mimetype.startsWith("video") ? "video" : "image";
+//   const isVideo = resourceType === "video";
+
+//   const uploaded = await uploadToCloudinary(req.file.buffer, {
+//     folder: "stories",
+//     resourceType,
+//     ...(isVideo && {
+//       eager: [{ format: "jpg", transformation: [{ start_offset: "0" }] }],
+//       eager_async: false,
+//     }),
+//   });
+
+//   const story = await Story.create({
+//     author: req.user._id,
+//     media: {
+//       url:          uploaded.secure_url,
+//       publicId:     uploaded.public_id,
+//       resourceType,
+//       width:        uploaded.width,
+//       height:       uploaded.height,
+//       duration:     uploaded.duration || null,
+//       thumbnailUrl: isVideo
+//         ? (uploaded.eager?.[0]?.secure_url ||
+//            uploaded.secure_url
+//              .replace("/upload/", "/upload/so_0,f_jpg/")
+//              .replace(/\.(mp4|webm|mov|avi)$/, ".jpg"))
+//         : null,
+//     },
+//     caption,
+//     audience: "public",
+//   });
+
+//   return res.status(201).json({ success: true, story });
+// });
+
+
 export const createStory = asyncHandler(async (req, res, next) => {
-  if (!req.file) return next(new AppError("Media file required.", 400));
+  const { caption = "", audience = "public", media } = req.body;
 
-  const maxSize = req.file.mimetype.startsWith("video") ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
-  if (req.file.size > maxSize) {
-    return next(new AppError(
-      req.file.mimetype.startsWith("video")
-        ? "Video cannot exceed 50MB."
-        : "Image cannot exceed 10MB.",
-      400
-    ));
+  // req.file nahi — frontend se Cloudinary URL aayega
+  if (!media?.url || !media?.publicId) {
+    return next(new AppError("Media required.", 400));
   }
-
-  const { caption = "", audience = "public" } = req.body;
-
-  const resourceType = req.file.mimetype.startsWith("video") ? "video" : "image";
-  const isVideo = resourceType === "video";
-
-  const uploaded = await uploadToCloudinary(req.file.buffer, {
-    folder: "stories",
-    resourceType,
-    ...(isVideo && {
-      eager: [{ format: "jpg", transformation: [{ start_offset: "0" }] }],
-      eager_async: false,
-    }),
-  });
 
   const story = await Story.create({
     author: req.user._id,
     media: {
-      url:          uploaded.secure_url,
-      publicId:     uploaded.public_id,
-      resourceType,
-      width:        uploaded.width,
-      height:       uploaded.height,
-      duration:     uploaded.duration || null,
-      thumbnailUrl: isVideo
-        ? (uploaded.eager?.[0]?.secure_url ||
-           uploaded.secure_url
-             .replace("/upload/", "/upload/so_0,f_jpg/")
-             .replace(/\.(mp4|webm|mov|avi)$/, ".jpg"))
-        : null,
+      url:          media.url,
+      publicId:     media.publicId,
+      resourceType: media.resourceType || "image",
+      width:        media.width  || null,
+      height:       media.height || null,
+      duration:     media.duration || null,
+      thumbnailUrl: media.thumbnailUrl || null,
     },
     caption,
     audience: "public",
@@ -58,7 +85,6 @@ export const createStory = asyncHandler(async (req, res, next) => {
 
   return res.status(201).json({ success: true, story });
 });
-
 // ─────────────────────────────────────────────
 //  GET /api/v2/stories/feed — Stories feed
 // ─────────────────────────────────────────────
@@ -338,6 +364,96 @@ export const getMyHighlights = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────
 //  POST /api/v2/stories/highlights/:id/add — Add story to highlight
 // ─────────────────────────────────────────────
+// export const addToHighlight = asyncHandler(async (req, res, next) => {
+//   const { storyId } = req.body;
+//   if (!storyId) return next(new AppError("storyId is required.", 400));
+
+//   const story = await Story.findOne({
+//     _id:       storyId,
+//     author:    req.user._id,
+//     isDeleted: false,
+//   }).select("media textContent type");
+
+//   if (!story) return next(new AppError("Story not found.", 404));
+
+//   const highlight = await Highlight.findOne({
+//     _id:       req.params.id,
+//     author:    req.user._id,
+//     isDeleted: false,
+//   });
+
+//   if (!highlight) return next(new AppError("Highlight not found.", 404));
+
+//   const existingHighlight = await Highlight.findOne({
+//     author:    req.user._id,
+//     isDeleted: false,
+//     _id:       { $ne: req.params.id },
+//     "snapshots.storyId": storyId,
+//   });
+//   if (existingHighlight) {
+//     return res.status(400).json({
+//       success: false,
+//       message: `This story is already in "${existingHighlight.title}" highlight`,
+//       conflictHighlightId: existingHighlight._id,
+//     });
+//   }
+
+//   const alreadyIdx = highlight.snapshots.findIndex(
+//     (s) => s.storyId?.toString() === storyId
+//   );
+//   if (alreadyIdx > -1) {
+//     const snap = highlight.snapshots[alreadyIdx];
+//     if (snap.publicId) {
+//       await deleteFromCloudinary(snap.publicId, snap.resourceType).catch(() => {});
+//     }
+//     highlight.snapshots.splice(alreadyIdx, 1);
+//     if (highlight.coverImage === snap.url) {
+//       const nextMedia = highlight.snapshots.find(s => s.url);
+//       highlight.coverImage = nextMedia?.url || null;
+//     }
+//     await highlight.save();
+//     return res.status(200).json({ success: true, highlight, removed: true });
+//   }
+
+//   let snapshot;
+//   if (story.type === "text") {
+//     snapshot = { storyId: story._id, type: "text", textContent: story.textContent };
+//   } else {
+//     try {
+//       const copied = await copyToCloudinary(story.media.url, {
+//         folder:        "highlights",
+//         resource_type: story.media.resourceType,
+//       });
+//       snapshot = {
+//         storyId:      story._id,
+//         type:         story.media.resourceType,
+//         url:          copied.secure_url,
+//         publicId:     copied.public_id,
+//         resourceType: story.media.resourceType,
+//         thumbnailUrl: story.media.resourceType === "video"
+//           ? copied.secure_url.replace("/upload/", "/upload/so_0/")
+//           : null,
+//       };
+//     } catch {
+//       snapshot = {
+//         storyId:      story._id,
+//         type:         story.media.resourceType,
+//         url:          story.media.url,
+//         publicId:     null,
+//         resourceType: story.media.resourceType,
+//       };
+//     }
+//   }
+
+//   highlight.snapshots.push(snapshot);
+//   if (!highlight.coverImage && snapshot.url) highlight.coverImage = snapshot.url;
+//   await highlight.save();
+
+//   return res.status(200).json({ success: true, highlight });
+// });
+
+
+
 export const addToHighlight = asyncHandler(async (req, res, next) => {
   const { storyId } = req.body;
   if (!storyId) return next(new AppError("storyId is required.", 400));
@@ -347,7 +463,6 @@ export const addToHighlight = asyncHandler(async (req, res, next) => {
     author:    req.user._id,
     isDeleted: false,
   }).select("media textContent type");
-
   if (!story) return next(new AppError("Story not found.", 404));
 
   const highlight = await Highlight.findOne({
@@ -355,47 +470,43 @@ export const addToHighlight = asyncHandler(async (req, res, next) => {
     author:    req.user._id,
     isDeleted: false,
   });
-
   if (!highlight) return next(new AppError("Highlight not found.", 404));
 
-  const existingHighlight = await Highlight.findOne({
-    author:    req.user._id,
-    isDeleted: false,
-    _id:       { $ne: req.params.id },
+  // ── Already is highlight mein hai? ──
+  const alreadyExists = highlight.snapshots.some(
+    (s) => s.storyId?.toString() === storyId
+  );
+  if (alreadyExists) {
+    return next(new AppError("Story is already in this highlight.", 400));
+  }
+
+  // ── Kisi aur highlight mein toh nahi? ──
+  const conflictHighlight = await Highlight.findOne({
+    author:              req.user._id,
+    isDeleted:           false,
+    _id:                 { $ne: req.params.id },
     "snapshots.storyId": storyId,
   });
-  if (existingHighlight) {
+  if (conflictHighlight) {
     return res.status(400).json({
-      success: false,
-      message: `This story is already in "${existingHighlight.title}" highlight`,
-      conflictHighlightId: existingHighlight._id,
+      success:             false,
+      message:             `Already in "${conflictHighlight.title}" highlight`,
+      conflictHighlightId: conflictHighlight._id,
     });
   }
 
-  const alreadyIdx = highlight.snapshots.findIndex(
-    (s) => s.storyId?.toString() === storyId
-  );
-  if (alreadyIdx > -1) {
-    const snap = highlight.snapshots[alreadyIdx];
-    if (snap.publicId) {
-      await deleteFromCloudinary(snap.publicId, snap.resourceType).catch(() => {});
-    }
-    highlight.snapshots.splice(alreadyIdx, 1);
-    if (highlight.coverImage === snap.url) {
-      const nextMedia = highlight.snapshots.find(s => s.url);
-      highlight.coverImage = nextMedia?.url || null;
-    }
-    await highlight.save();
-    return res.status(200).json({ success: true, highlight, removed: true });
-  }
-
+  // ── Cloudinary pe copy karo ──
   let snapshot;
   if (story.type === "text") {
-    snapshot = { storyId: story._id, type: "text", textContent: story.textContent };
+    snapshot = {
+      storyId:     story._id,
+      type:        "text",
+      textContent: story.textContent,
+    };
   } else {
     try {
       const copied = await copyToCloudinary(story.media.url, {
-        folder:        "highlights",
+        folder:        "erovians/highlights",
         resource_type: story.media.resourceType,
       });
       snapshot = {
@@ -405,7 +516,8 @@ export const addToHighlight = asyncHandler(async (req, res, next) => {
         publicId:     copied.public_id,
         resourceType: story.media.resourceType,
         thumbnailUrl: story.media.resourceType === "video"
-          ? copied.secure_url.replace("/upload/", "/upload/so_0/")
+          ? copied.secure_url.replace("/upload/", "/upload/so_0,f_jpg/")
+              .replace(/\.(mp4|webm|mov|avi)$/, ".jpg")
           : null,
       };
     } catch {
@@ -420,12 +532,16 @@ export const addToHighlight = asyncHandler(async (req, res, next) => {
   }
 
   highlight.snapshots.push(snapshot);
-  if (!highlight.coverImage && snapshot.url) highlight.coverImage = snapshot.url;
+  if (!highlight.coverImage && snapshot.url) {
+    highlight.coverImage = snapshot.url;
+  }
   await highlight.save();
 
-  return res.status(200).json({ success: true, highlight });
-});
+  // ── Fresh highlight DB se lo — stale data nahi ──
+  const updated = await Highlight.findById(highlight._id).lean();
 
+  return res.status(200).json({ success: true, highlight: updated });
+});
 // ─────────────────────────────────────────────
 //  DELETE /api/v2/stories/highlights/:id — Delete highlight
 // ─────────────────────────────────────────────

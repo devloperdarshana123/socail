@@ -12,6 +12,14 @@ import { accountSuspended } from "../../mail/templates/accountSuspended.js";
 // ─────────────────────────────────────────────────────────────
 
 const ALLOWED_STATUSES = ["active", "pending", "suspended", "deactivated", "banned"];
+const DURATION_MAP = {
+  "1d":   1,
+  "3d":   3,
+  "7d":   7,
+  "14d":  14,
+  "30d":  30,
+  "perm": null,
+};
 
 const paginationMeta = (total, page, limit) => ({
   total,
@@ -168,11 +176,11 @@ export const getUserById = asyncHandler(async (req, res, next) => {
 
   // ── Fetch recent posts ────────────────────────────────────────
   const [posts, reportStats] = await Promise.all([
-    Post.find({ author: id, isDeleted: { $ne: true } })
-      .select("content media likesCount commentsCount createdAt isArchived")
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean(),
+  Post.find({ author: id, isDeleted: { $ne: true }, isDraft: { $ne: true } })
+  .select("caption type media likesCount commentsCount viewsCount createdAt")
+  .sort({ createdAt: -1 })
+  .limit(10)
+  .lean(),
 
     Report.aggregate([
       { $match: { reportedUser: user._id } },
@@ -220,8 +228,8 @@ export const getUserPosts = asyncHandler(async (req, res, next) => {
   const filter = { author: id, isDeleted: { $ne: true } };
 
   const [posts, total] = await Promise.all([
-    Post.find(filter)
-      .select("content media likesCount commentsCount viewsCount createdAt isArchived postType")
+  Post.find(filter)
+  .select("caption type media likesCount commentsCount viewsCount createdAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -279,14 +287,14 @@ export const getUserReports = asyncHandler(async (req, res, next) => {
 
 export const updateUserStatus = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
-  const { status, reason } = req.body;
+  const { status, reason, duration } = req.body;
 
   if (!status || !ALLOWED_STATUSES.includes(status)) {
     return next(new AppError(`Invalid status. Allowed: ${ALLOWED_STATUSES.join(", ")}`, 400));
   }
 
-  // Prevent admin modifying another super_admin
-  const target = await User.findById(id).select("email username fullName accountStatus role");
+  const target = await User.findById(id)
+    .select("email username fullName accountStatus role activeSuspension suspensionHistory");
   if (!target) return next(new AppError("User not found", 404));
 
   if (target.role === "super_admin" && req.user._id.toString() !== target._id.toString()) {
@@ -295,9 +303,62 @@ export const updateUserStatus = asyncHandler(async (req, res, next) => {
 
   const previousStatus = target.accountStatus;
   target.accountStatus = status;
+
+  if (status === "suspended") {
+    if (!reason?.trim()) return next(new AppError("Reason is required for suspension", 400));
+    if (!duration || !(duration in DURATION_MAP)) {
+      return next(new AppError("Valid duration required: 1d, 3d, 7d, 14d, 30d, perm", 400));
+    }
+
+    const days      = DURATION_MAP[duration];
+    const expiresAt = days ? new Date(Date.now() + days * 86_400_000) : null;
+
+    target.activeSuspension = {
+      suspendedAt: new Date(),
+      suspendedBy: req.user._id,
+      reason:      reason.trim(),
+      duration:    days,
+      expiresAt,
+    };
+
+    target.suspensionHistory.push({
+      action:      "suspended",
+      performedBy: req.user._id,
+      reason:      reason.trim(),
+      duration:    days,
+      expiresAt,
+    });
+
+  } else if (status === "active" && previousStatus === "suspended") {
+    target.activeSuspension = {
+      suspendedAt: null, suspendedBy: null,
+      reason: null, duration: null, expiresAt: null,
+    };
+    target.suspensionHistory.push({
+      action:      "unsuspended",
+      performedBy: req.user._id,
+      reason:      reason?.trim() || "Manually lifted by admin",
+      duration:    null,
+      expiresAt:   null,
+    });
+
+  } else if (status === "banned") {
+    if (!reason?.trim()) return next(new AppError("Reason is required for ban", 400));
+    target.activeSuspension = {
+      suspendedAt: null, suspendedBy: null,
+      reason: null, duration: null, expiresAt: null,
+    };
+    target.suspensionHistory.push({
+      action:      "banned",
+      performedBy: req.user._id,
+      reason:      reason.trim(),
+      duration:    null,
+      expiresAt:   null,
+    });
+  }
+
   await target.save({ validateBeforeSave: false });
 
-  // Send email notification on suspend/ban
   if ((status === "suspended" || status === "banned") && target.email) {
     try {
       await sendMail({
@@ -305,33 +366,35 @@ export const updateUserStatus = asyncHandler(async (req, res, next) => {
         subject: status === "banned"
           ? "Your account has been permanently banned"
           : "Your account has been temporarily suspended",
-        html: accountSuspendedTemplate({
-          fullName: target.fullName,
+        html: accountSuspended({
+          fullName:  target.fullName,
           status,
-          reason: reason || "Violation of community guidelines",
+          reason:    reason || "Violation of community guidelines",
+          expiresAt: target.activeSuspension?.expiresAt ?? null,
         }),
       });
     } catch (mailErr) {
       logger.error("Failed to send account status email", { mailErr });
-      // Non-blocking — don't fail the request
     }
   }
 
   logger.info("Admin updated user status", {
-    adminId: req.user._id,
+    adminId:      req.user._id,
     targetUserId: id,
     previousStatus,
-    newStatus: status,
+    newStatus:    status,
     reason,
+    duration,
   });
 
   return res.status(200).json({
     success: true,
     message: `User status updated to '${status}' successfully`,
     data: {
-      _id: target._id,
-      username: target.username,
-      accountStatus: target.accountStatus,
+      _id:              target._id,
+      username:         target.username,
+      accountStatus:    target.accountStatus,
+      activeSuspension: target.activeSuspension,
     },
   });
 });
@@ -462,6 +525,157 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
       posts: { total: totalPosts },
       reports: { pending: pendingReports },
       today: { newUsers: newUsersToday },
+    },
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────
+//  GET /admin/posts
+//  All posts with pagination, filters, search
+//  Add this at the END of admin.user.controller.js
+// ─────────────────────────────────────────────────────────────
+
+export const getAllPosts = asyncHandler(async (req, res, next) => {
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+  const skip  = (page - 1) * limit;
+
+  const {
+    type,
+    search,
+    sortBy    = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
+  // ── Build filter ────────────────────────────────────────────
+  const filter = {
+    isDeleted: { $ne: true },
+    isDraft:   { $ne: true },
+  };
+
+  if (type && ["image", "reel", "text"].includes(type)) {
+    filter.type = type;
+  }
+
+  if (search?.trim()) {
+    filter.caption = { $regex: search.trim(), $options: "i" };
+  }
+
+  // ── Allowed sort fields (prevent injection) ─────────────────
+  const SORT_WHITELIST = ["createdAt", "likesCount", "commentsCount", "viewsCount"];
+  const sortField = SORT_WHITELIST.includes(sortBy) ? sortBy : "createdAt";
+  const sortDir   = sortOrder === "asc" ? 1 : -1;
+
+  // ── Parallel: posts + total count ───────────────────────────
+  const [posts, total] = await Promise.all([
+    Post.find(filter)
+      .sort({ [sortField]: sortDir })
+      .skip(skip)
+      .limit(limit)
+      .populate("author", "username fullName avatar isVerifiedBadge accountStatus")
+      .select("caption type media likesCount commentsCount viewsCount createdAt author")
+      .lean(),
+    Post.countDocuments(filter),
+  ]);
+
+  logger.info("Admin fetched all posts", {
+    adminId: req.user._id,
+    filter,
+    total,
+    page,
+  });
+
+  return res.status(200).json({
+    success: true,
+    data: posts,
+    pagination: paginationMeta(total, page, limit),
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────
+//  POST /admin/users/bulk-status
+//  Bulk suspend / ban (max 50)
+// ─────────────────────────────────────────────────────────────
+export const bulkUpdateStatus = asyncHandler(async (req, res, next) => {
+  const { userIds, status, reason, duration } = req.body;
+
+  if (!Array.isArray(userIds) || !userIds.length)
+    return next(new AppError("userIds array required", 400));
+  if (userIds.length > 50)
+    return next(new AppError("Max 50 users per bulk action", 400));
+  if (!status || !ALLOWED_STATUSES.includes(status))
+    return next(new AppError("Invalid status", 400));
+  if (status === "suspended" && (!duration || !(duration in DURATION_MAP)))
+    return next(new AppError("Valid duration required for suspension", 400));
+  if ((status === "suspended" || status === "banned") && !reason?.trim())
+    return next(new AppError("Reason is required", 400));
+
+  const days      = status === "suspended" ? DURATION_MAP[duration] : null;
+  const expiresAt = days ? new Date(Date.now() + days * 86_400_000) : null;
+
+  const results = { success: [], failed: [] };
+
+  await Promise.allSettled(
+    userIds.map(async (userId) => {
+      try {
+        const user = await User.findById(userId)
+          .select("role accountStatus activeSuspension suspensionHistory username");
+        if (!user || user.role === "super_admin") throw new Error("Not allowed");
+
+        user.accountStatus = status;
+
+        if (status === "suspended") {
+          user.activeSuspension = {
+            suspendedAt: new Date(),
+            suspendedBy: req.user._id,
+            reason:      reason.trim(),
+            duration:    days,
+            expiresAt,
+          };
+          user.suspensionHistory.push({
+            action:      "suspended",
+            performedBy: req.user._id,
+            reason:      reason.trim(),
+            duration:    days,
+            expiresAt,
+          });
+        }
+
+        await user.save({ validateBeforeSave: false });
+        results.success.push(userId);
+      } catch (err) {
+        results.failed.push({ userId, error: err.message });
+      }
+    })
+  );
+
+  logger.info("Admin bulk status update", {
+    adminId: req.user._id, status,
+    total: userIds.length, ...results,
+  });
+
+  return res.status(200).json({ success: true, data: results });
+});
+
+// ─────────────────────────────────────────────────────────────
+//  GET /admin/users/:id/suspension-history
+// ─────────────────────────────────────────────────────────────
+export const getSuspensionHistory = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.params.id)
+    .select("username fullName accountStatus activeSuspension suspensionHistory")
+    .populate("suspensionHistory.performedBy", "username fullName")
+    .populate("activeSuspension.suspendedBy",  "username fullName")
+    .lean();
+
+  if (!user) return next(new AppError("User not found", 404));
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      activeSuspension:  user.activeSuspension,
+      suspensionHistory: [...user.suspensionHistory].reverse(),
     },
   });
 });
