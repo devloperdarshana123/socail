@@ -75,7 +75,7 @@ function Stat({ icon, value, label }) {
 }
 
 // ── MAIN COMPONENT ────────────────────────────────────────────
-export default function PostDetailModal({ post, onClose, onDelete, deleteLoading }) {
+export default function PostDetailModal({ post, onClose, onDelete, deleteLoading, hideAuthorNav = false }) {
   const navigate              = useNavigate();
   const [mediaIdx, setMediaIdx] = useState(0);
   const [showDel,  setShowDel]  = useState(false);
@@ -259,13 +259,19 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { onClose(); navigate(`/users/${author?._id}`); }}
-                    className="text-sm font-bold text-slate-800 hover:text-violet-600
-                      truncate transition-colors leading-none"
-                  >
-                    @{author?.username}
-                  </button>
+                 {hideAuthorNav ? (
+  <span className="text-sm font-bold text-slate-800 truncate leading-none">
+    @{author?.username}
+  </span>
+) : (
+  <button
+    onClick={() => { onClose(); navigate(`/users/${author?._id}`); }}
+    className="text-sm font-bold text-slate-800 hover:text-violet-600
+      truncate transition-colors leading-none"
+  >
+    @{author?.username}
+  </button>
+)}
                   <Badge type={post.type} />
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5 truncate">{author?.fullName}</p>
@@ -338,18 +344,20 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
             {/* Actions */}
             <div className="px-5 py-4 mt-auto space-y-2">
               {/* Go to user */}
-              <button
-                onClick={() => { onClose(); navigate(`/users/${author?._id}`); }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl
-                  border border-slate-200 bg-white hover:bg-slate-50 text-slate-700
-                  text-sm font-semibold transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                View Author Profile
-              </button>
+             {!hideAuthorNav && (
+  <button
+    onClick={() => { onClose(); navigate(`/users/${author?._id}`); }}
+    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl
+      border border-slate-200 bg-white hover:bg-slate-50 text-slate-700
+      text-sm font-semibold transition-colors"
+  >
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
+    View Author Profile
+  </button>
+)}
 
               {/* Delete — only if onDelete prop provided */}
               {onDelete && (

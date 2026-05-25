@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { UserDetailSkeleton } from "../components/skeletons";
+import PostDetailModal from "../components/PostDetailmodal";
 import {
   fetchUserById,
   fetchUserPosts,
@@ -107,7 +108,7 @@ function resolveThumb(post) {
   );
 }
 
-function PostTile({ post, onDelete }) {
+function PostTile({ post, onDelete, onClick }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const isText = post.type === "text";
   const isVid  = post.type === "reel" || post.media?.[0]?.resourceType === "video";
@@ -115,7 +116,9 @@ function PostTile({ post, onDelete }) {
 
   return (
     <div className="relative group rounded-xl overflow-hidden border border-slate-100 bg-slate-50"
-      style={{ paddingBottom: "100%", height: 0 }}>
+      style={{ paddingBottom: "100%", height: 0 }}
+      onClick={onClick} 
+      >
       <div className="absolute inset-0">
 
         {/* Content */}
@@ -267,6 +270,7 @@ export default function UserDetailPage() {
   const [toast,       setToast]       = useState(null);
   const [statusModal, setStatusModal] = useState(false);
   const [postsPage,   setPostsPage]   = useState(1);
+  const [selectedPost, setSelectedPost] = useState(null);
 
   const showToast = useCallback((msg, type = "success") => {
     setToast({ msg, type });
@@ -323,6 +327,16 @@ export default function UserDetailPage() {
           {toast.msg}
         </div>
       )}
+
+      <PostDetailModal
+  post={selectedPost}
+  onClose={() => setSelectedPost(null)}
+  onDelete={async (postId) => {
+    await handleDeletePost(postId);
+    setSelectedPost(null);
+  }}
+  deleteLoading={actionLoading}
+/>
 
       {/* Status Modal */}
       {statusModal && (
@@ -492,6 +506,7 @@ export default function UserDetailPage() {
                             key={post._id}
                             post={post}
                             onDelete={handleDeletePost}
+                            onClick={() => setSelectedPost({ ...post, author: post.author ?? user })}
                           />
                         ))
                     }

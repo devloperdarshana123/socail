@@ -666,12 +666,12 @@ const handleBulkConfirm = async ({ duration, reason, actionType }) => {
       <ConfirmModal isOpen={deleteModal.open} onClose={() => setDeleteModal({ open: false, user: null })} onConfirm={handleDeleteConfirm} title="Delete Account" message={`Permanently delete @${deleteModal.user?.username}? This cannot be undone.`} confirmLabel="Delete" danger loading={deleteLoading} />
 
       <div className="min-h-screen bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2">
 
           {/* Header */}
           <div className="flex items-center justify-between mb-7">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Users</h1>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Users</h1>
               <p className="text-sm text-slate-400 mt-0.5">
                 {loading ? "Loading…" : `${totalUsers.toLocaleString()} total users`}
               </p>

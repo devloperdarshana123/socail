@@ -519,11 +519,11 @@ export default function ReportsPage() {
         />
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2">
 
         {/* Page header */}
         <div className="mb-6">
-          <h1 className="text-xl font-bold text-slate-800">Reports</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Reports</h1>
           <p className="text-sm text-slate-400 mt-0.5">
             Review and action user-submitted reports
           </p>

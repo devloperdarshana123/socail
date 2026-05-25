@@ -143,11 +143,11 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
               <Copy size={8} className="text-white sm:hidden" />
               <Copy size={10} className="text-white hidden sm:block" />
             </div>
-          )}
+          )}  
         </div>
 
         {/* Hover Overlay */}
-        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20
+        <div className={`absolute inset-0 bg-linear-to-t from-black/80 via-black/40 to-black/20
           flex flex-col justify-between p-2 sm:p-3 transition-opacity duration-200
           ${hovered ? "opacity-100" : "opacity-0"}`}>
 
@@ -358,12 +358,12 @@ export default function PostsPage() {
       />
 
       <div className="min-h-screen bg-slate-50">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-8">
 
           {/* ── Page Header ── */}
           <div className="flex items-center justify-between mb-5 sm:mb-8">
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Post</h1>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Post</h1>
               <p className="text-xs sm:text-sm text-slate-400 mt-0.5 sm:mt-1 flex items-center gap-1.5">
                 <TrendingUp size={12} />
                 {loading ? "Loading…" : `${total.toLocaleString()} total posts`}
