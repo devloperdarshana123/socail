@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Bookmark, Heart, MessageCircle, Play, Video, Image, FileText } from "lucide-react";
 import { fetchSavedPosts } from "../lib/redux/postSlice";
 import PostModal from "../components/PostModal";
+import { resolvePostThumb, isVideoMedia } from "../utils/mediaUtils";
 
 // ── Theme ──────────────────────────────────────────────────────
 const T = {
@@ -36,7 +37,8 @@ function SavedCard({ post, onClick }) {
   const isReel  = post.type === "reel";
   const isText  = post.type === "text";
   const isMulti = post.media?.length > 1;
-  const thumb   = post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url || null;
+const thumb = resolvePostThumb(post);
+  const isVid  = isVideoMedia(post);
 
   return (
     <div
@@ -66,13 +68,21 @@ function SavedCard({ post, onClick }) {
             <img src={thumb} alt={post.caption || "post"}
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               loading="lazy" />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center"
-              style={{ background: T.brownLt }}>
-              <Video size={32} style={{ color: T.textLt }} />
+       ) : (
+           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+              style={{ background: "linear-gradient(135deg, #1a1a2e, #16213e)" }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: "50%",
+                background: "rgba(255,255,255,0.15)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Play size={20} fill="white" color="white" />
+              </div>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: 500, letterSpacing: 0.5 }}>
+                {isVid ? "REEL" : "POST"}
+              </span>
             </div>
           )}
-
           {isReel && (
             <div className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center bg-black/50">
               <Play size={14} fill="white" color="white" />

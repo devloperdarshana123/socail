@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useDispatch, useSelector } from "react-redux";
+import ReportModal from "./ReportModal";
 import api from "../lib/services/api";
+import { toast } from "sonner";
 import {
   X, Heart, MessageCircle, Bookmark,
   Play, Pause, ChevronLeft, ChevronRight, Send, Eye,
@@ -207,6 +209,7 @@ const isOwner = me?._id === post?.author?._id;
   const [commentText, setCommentText] = useState("");
   const [replyingTo, setReplyingTo]   = useState(null);
   const [likeAnim, setLikeAnim]       = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const inputRef = useRef(null);
 
 
@@ -328,8 +331,12 @@ const isText   = post?.type === "text";
         .pm-action-btn:hover { opacity: 0.75 }
         .pm-left-section::-webkit-scrollbar { width: 3px; }
         .pm-left-section::-webkit-scrollbar-thumb { background: #c09a6e; border-radius: 99px; }
-        .pm-right-section::-webkit-scrollbar { width: 3px; }
-        .pm-right-section::-webkit-scrollbar-thumb { background: #c09a6e; border-radius: 99px; }
+        .pm-right-section::-webkit-scrollbar { width: 2px; }
+        .pm-right-section::-webkit-scrollbar-track { background: transparent; }
+        .pm-right-section::-webkit-scrollbar-thumb { background: #d4b896; border-radius: 99px; }
+        .pm-left-section::-webkit-scrollbar { width: 2px; }
+        .pm-left-section::-webkit-scrollbar-track { background: transparent; }
+        .pm-left-section::-webkit-scrollbar-thumb { background: #d4b896; border-radius: 99px; }
 
         @media (max-width: 768px) {
           .pm-modal-container {
@@ -453,9 +460,7 @@ const isText   = post?.type === "text";
            <span style={{ fontSize: 11, color: T.textLt, flexShrink: 0 }}>
   {timeAgo(post.createdAt)}
 </span>
-
-{isOwner && (
-  <div style={{ position: "relative", marginLeft: 4 }}>
+<div style={{ position: "relative", marginLeft: 4, zIndex: 11 }}>
     <button
       onClick={() => setShowMenu((v) => !v)}
       style={{
@@ -482,7 +487,7 @@ const isText   = post?.type === "text";
           border: `1px solid ${T.border}`,
           minWidth: 160,
         }}>
-          <button
+          {isOwner && <button
             onClick={() => { setShowMenu(false); setDeleteConfirm(true); }}
             style={{
               width: "100%", padding: "12px 16px",
@@ -494,14 +499,32 @@ const isText   = post?.type === "text";
             onMouseEnter={(e) => e.currentTarget.style.background = "#fef2f2"}
             onMouseLeave={(e) => e.currentTarget.style.background = "none"}
           >
-            <Trash2 size={15} />
-            Delete Post
-          </button>
+           <Trash2 size={15} />
+          Delete Post
+          </button>}
+          {!isOwner && (
+            <button
+              onClick={() => { setShowMenu(false); setShowReport(true); }}
+              style={{
+                width: "100%", padding: "12px 16px",
+                display: "flex", alignItems: "center", gap: 10,
+                background: "none", border: "none", cursor: "pointer",
+                color: "#ef4444", fontSize: 13, fontWeight: 600, textAlign: "left",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "#fef2f2"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+            >
+              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+Report post
+            </button>
+          )}
         </div>
       </>
     )}
   </div>
-)}
           </div>
 
           {/* Caption (only for media posts — text posts show caption on left) */}
@@ -521,7 +544,7 @@ const isText   = post?.type === "text";
           )}
 
           {/* Comments list */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px",
+         <div className="pm-right-section" style={{ flex: 1, overflowY: "auto", padding: "4px 16px",
             scrollbarWidth: "thin", scrollbarColor: `${T.border} transparent` }}>
             {post.commentsDisabled ? (
               <div style={{ textAlign: "center", padding: "32px 0" }}>
@@ -653,6 +676,25 @@ const isText   = post?.type === "text";
 
 </div>
       
+{showReport && (
+          <ReportModal
+            targetModel="Post"
+            onClose={() => setShowReport(false)}
+            onSubmit={async (reason) => {
+              setShowReport(false);
+              try {
+               await api.post("/user/report", {
+                  targetId:    post._id,
+                  targetModel: "Post",
+                  reason,
+                });
+                toast.success("Report submitted. Our team will review it.");
+              } catch (err) {
+                toast.error(err?.response?.data?.message || "Failed to submit report.");
+              }
+            }}
+          />
+        )}
         {deleteConfirm && (
           <div style={{
             position: "absolute", inset: 0, zIndex: 30,

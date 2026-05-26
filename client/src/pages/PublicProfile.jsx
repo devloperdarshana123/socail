@@ -110,6 +110,10 @@ if (followState === "following") {
   setFollowLoading(false);
 };
 
+ const handleMessage = () => {
+    navigate(`/messages?with=${profile._id}`);
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-[#faf6f0] flex items-center justify-center">
       <Loader2 size={32} className="animate-spin text-[#c09a6e]" />
@@ -195,7 +199,11 @@ const followBtnConfig = {
       {followBtnConfig.label}
     </button>
     {followState === "following" && (
-      <button className="flex items-center gap-1.5 bg-white border-2 border-[#ddd0c0] text-[#5a3e2b] text-sm font-semibold px-5 py-2.5 rounded-full shadow-sm hover:bg-[#f5ece0] transition-all">
+     <button
+        onClick={handleMessage}
+        className="flex items-center gap-1.5 bg-white border-2 border-[#ddd0c0] text-[#5a3e2b] text-sm font-semibold px-5 py-2.5 rounded-full shadow-sm hover:bg-[#f5ece0] transition-all"
+      >
+        <MessageCircle size={14} />
         Message
       </button>
     )}

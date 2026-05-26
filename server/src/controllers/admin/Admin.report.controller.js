@@ -109,7 +109,7 @@ export const getReportById = asyncHandler(async (req, res, next) => {
     .populate({
       path:    "targetId",
       select:  "username fullName avatar caption media type likesCount commentsCount createdAt author accountStatus",
-      populate: { path: "author", select: "username fullName avatar isVerifiedBadge" },
+      populate: { path: "author", select: "username fullName avatar isVerifiedBadge", strictPopulate: false },
     })
     .populate("reviewedBy", "username fullName avatar")
     .select("+moderatorNote")   // include hidden field

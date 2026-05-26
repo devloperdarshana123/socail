@@ -47,8 +47,8 @@ export const fetchComments = createAsyncThunk(
   "posts/fetchComments",
   async ({ postId, page = 1 }, { rejectWithValue }) => {
     try {
-      const res = await api.get(`/comments/post/${postId}?page=${page}&limit=20`);
-      return { postId, comments: res.data.data, pagination: res.data.pagination };
+    const res = await api.get(`/comments/post/${postId}?limit=20`);
+return { postId, comments: res.data.data, nextCursor: res.data.nextCursor };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Comments fetch nahi hue");
     }
@@ -92,30 +92,61 @@ export const addComment = createAsyncThunk(
   }
 );
 
+// export const toggleSavePost = createAsyncThunk(
+//   "posts/toggleSave",
+//   async (postId, { rejectWithValue }) => {
+//     try {
+//       const res = await api.post(`/saved/${postId}`);
+//       return { postId, saved: res.data.saved };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Save failed");
+//     }
+//   }
+// );
+
+
 export const toggleSavePost = createAsyncThunk(
   "posts/toggleSave",
   async (postId, { rejectWithValue }) => {
     try {
       const res = await api.post(`/saved/${postId}`);
-      return { postId, saved: res.data.saved };
+      return { postId, saved: res.data.saved, savedCount: res.data.savedCount };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Save failed");
     }
   }
 );
+// export const fetchSavedPosts = createAsyncThunk(
+//   "posts/fetchSavedPosts",
+//   async (page = 1, { rejectWithValue }) => {
+//     try {
+//       const res = await api.get(`/saved?page=${page}&limit=12`);
+//       return res.data.data;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Saved posts fetch nahi hue");
+//     }
+//   }
+// );
+
 
 export const fetchSavedPosts = createAsyncThunk(
   "posts/fetchSavedPosts",
-  async (page = 1, { rejectWithValue }) => {
+  async ({ beforeId } = {}, { rejectWithValue }) => {
     try {
-      const res = await api.get(`/saved?page=${page}&limit=12`);
-      return res.data.data;
+      const params = new URLSearchParams({ limit: 12 });
+      if (beforeId) params.set("beforeId", beforeId);
+      const res = await api.get(`/saved?${params}`);
+      return {
+        items:      Array.isArray(res.data.data) ? res.data.data : [],
+        hasMore:    res.data.pagination?.hasMore    ?? false,
+        nextCursor: res.data.pagination?.nextCursor ?? null,
+        append:     !!beforeId,
+      };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Saved posts fetch nahi hue");
     }
   }
 );
-
 export const fetchPostInteraction = createAsyncThunk(
   "posts/fetchInteraction",
   async (postId, { rejectWithValue }) => {
@@ -189,6 +220,8 @@ const postSlice = createSlice({
     draftPostsLoading: false,
     myPostsError: null,
     creating: false,
+    savedPostsHasMore:    false,
+savedPostsNextCursor: null,
     createError: null,
     interactions: {},
   },
@@ -217,13 +250,18 @@ const postSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(createPost.pending,    (state) => { state.creating = true; state.createError = null; })
-      .addCase(createPost.fulfilled,  (state, action) => {
-        state.creating = false;
-        if (action.payload) {
-          state.feed.unshift(action.payload);
-          state.myPosts.unshift(action.payload);
-        }
-      })
+      .addCase(createPost.fulfilled, (state, action) => {
+  state.creating = false;
+  if (!action.payload) return;
+  if (action.payload.isDraft) {
+    // Draft: only goes into draftPosts, never feed/grid
+    state.draftPosts.unshift(action.payload);
+  } else {
+    // Published post: goes into feed and profile grid
+    state.feed.unshift(action.payload);
+    state.myPosts.unshift(action.payload);
+  }
+})
       .addCase(createPost.rejected,   (state, action) => { state.creating = false; state.createError = action.payload; });
 
     builder
@@ -248,11 +286,11 @@ const postSlice = createSlice({
         state.interactions[postId].commentsLoading = true;
       })
       .addCase(fetchComments.fulfilled, (state, action) => {
-        const { postId, comments } = action.payload;
-        if (!state.interactions[postId]) state.interactions[postId] = {};
-        state.interactions[postId].comments = comments;
-        state.interactions[postId].commentsLoading = false;
-      })
+  const { postId, comments } = action.payload;
+  if (!state.interactions[postId]) state.interactions[postId] = {};
+  state.interactions[postId].comments = Array.isArray(comments) ? comments : [];
+  state.interactions[postId].commentsLoading = false;
+})
       .addCase(fetchComments.rejected, (state, action) => {
         const postId = action.meta.arg.postId;
         if (state.interactions[postId]) state.interactions[postId].commentsLoading = false;
@@ -274,7 +312,10 @@ const postSlice = createSlice({
       .addCase(addComment.fulfilled, (state, action) => {
         const { postId, comment } = action.payload;
         if (!state.interactions[postId]) state.interactions[postId] = {};
-        state.interactions[postId].comments.unshift(comment);
+        if (!Array.isArray(state.interactions[postId].comments)) {
+  state.interactions[postId].comments = [];
+}
+state.interactions[postId].comments.unshift(comment);
         state.interactions[postId].commentsCount = (state.interactions[postId].commentsCount || 0) + 1;
         state.interactions[postId].commentAdding = false;
       })
@@ -283,12 +324,16 @@ const postSlice = createSlice({
         if (state.interactions[postId]) state.interactions[postId].commentAdding = false;
       });
 
-    builder.addCase(toggleSavePost.fulfilled, (state, action) => {
-      const { postId, saved } = action.payload;
-      if (!state.interactions[postId]) state.interactions[postId] = {};
-      state.interactions[postId].saved = saved;
-      if (!saved) state.savedPosts = state.savedPosts.filter((p) => p._id !== postId);
-    });
+   builder.addCase(toggleSavePost.fulfilled, (state, action) => {
+  const { postId, saved, savedCount } = action.payload;
+  if (!state.interactions[postId]) state.interactions[postId] = {};
+  state.interactions[postId].saved = saved;
+  if (savedCount !== undefined) state.interactions[postId].savedCount = savedCount;
+  if (!saved) state.savedPosts = state.savedPosts.filter((p) => {
+    const id = p?.post?._id || p?._id;
+    return id !== postId;
+  });
+});
 
     builder.addCase(fetchPostInteraction.fulfilled, (state, action) => {
       const { postId, liked, saved } = action.payload;
@@ -297,18 +342,26 @@ const postSlice = createSlice({
       state.interactions[postId].saved = saved ?? false;
     });
 
-    builder
-      .addCase(fetchSavedPosts.pending,    (state) => { state.savedPostsLoading = true; })
-      .addCase(fetchSavedPosts.fulfilled,  (state, action) => {
-        state.savedPostsLoading = false;
-        state.savedPosts = Array.isArray(action.payload) ? action.payload : [];
-      })
-      .addCase(fetchSavedPosts.rejected,   (state) => { state.savedPostsLoading = false; });
+ builder
+  .addCase(fetchSavedPosts.pending,   (state) => { state.savedPostsLoading = true; })
+  .addCase(fetchSavedPosts.fulfilled, (state, action) => {
+    state.savedPostsLoading = false;
+    const posts = action.payload.items.map((s) => s.post).filter(Boolean);
+    if (action.payload.append) {
+      state.savedPosts = [...state.savedPosts, ...posts];
+    } else {
+      state.savedPosts = posts;
+    }
+    state.savedPostsHasMore   = action.payload.hasMore;
+    state.savedPostsNextCursor = action.payload.nextCursor;
+  })
+  .addCase(fetchSavedPosts.rejected, (state) => { state.savedPostsLoading = false; });
 
     builder.addCase(deletePost.fulfilled, (state, action) => {
       const postId = action.payload;
       state.myPosts = state.myPosts.filter((p) => p._id !== postId);
       state.feed    = state.feed.filter((p) => p._id !== postId);
+      state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
       delete state.interactions[postId];
     });
 

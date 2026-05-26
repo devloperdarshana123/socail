@@ -7,201 +7,9 @@ import logger from "../../config/logger.js";
 import Like from "../../models/like.model.js";
 import AppError from "../../utils/AppError.js";
 import PostView from "../../models/postView.model.js";
-
-// ─────────────────────────────────────────────
-//  CREATE POST
-//  POST /api/v2/posts
-// ─────────────────────────────────────────────
-// export const createPost = asyncHandler(async (req, res) => {
-//   const {
-//     caption = "",
-//     visibility = "public",
-//     type,
-//     commentsDisabled,
-//     likesHidden,
-//     location,
-//     isDraft,
-//   } = req.body;
-
-//   const files    = req.files || [];
-//   const authorId = req.user._id;
-
-//   for (const file of files) {
-//   if (file.size > 10 * 1024 * 1024) {
-//     return res.status(400).json({
-//       success: false,
-//       message: `File "${file.originalname}" 10MB  is max size chosse small size .`,
-//     });
-//   }
-// }
-//   // ── Validation ──
-//   if (!type || !["text", "image", "reel"].includes(type)) {
-//     return res.status(400).json({ success: false, message: "Invalid post type" });
-//   }
-//   if (type === "text" && files.length > 0) {
-//     return res.status(400).json({ success: false, message: "Text post cannot have media" });
-//   }
-//   if (type === "image" && files.length === 0) {
-//     return res.status(400).json({ success: false, message: "Image post requires at least one image" });
-//   }
-//   if (type === "reel" && files.length !== 1) {
-//     return res.status(400).json({ success: false, message: "Reel must have exactly one video" });
-//   }
-//   if (type === "reel" && !files[0]?.mimetype?.startsWith("video/")) {
-//     return res.status(400).json({ success: false, message: "Reel must be a video file" });
-//   }
-
-//   // ── Upload media to Cloudinary ──
-//   const mediaItems = [];
-
-//   for (let i = 0; i < files.length; i++) {
-//     const file    = files[i];
-//     const isVideo = file.mimetype.startsWith("video/");
-
-//     try {
-//       const result = await uploadToCloudinary(file.buffer, {
-//         folder:         isVideo ? "erovians/reels" : "erovians/posts",
-//         resourceType:   isVideo ? "video" : "image",
-//         transformation: isVideo ? [] : [{ quality: "auto:good", fetch_format: "auto" }],
-//         eager:          isVideo ? [{ format: "jpg", transformation: [{ start_offset: "0" }] }] : [],
-//         eager_async:    true,
-//       });
-
-//       mediaItems.push({
-//         url:          result.secure_url,
-//         publicId:     result.public_id,
-//         resourceType: isVideo ? "video" : "image",
-//         width:        result.width    || null,
-//         height:       result.height   || null,
-//         duration:     result.duration || null,
-//         thumbnailUrl: result.eager?.[0]?.secure_url || null,
-//         format:       result.format   || null,
-//         bytes:        result.bytes    || null,
-//         order:        i,
-//       });
-//     } catch (uploadError) {
-//       // Rollback — jo already upload ho gaye unhe delete karo
-//       for (const item of mediaItems) {
-//         await deleteFromCloudinary(item.publicId, item.resourceType).catch(() => {});
-//       }
-//       logger.error("Cloudinary upload failed", {
-//          error: uploadError.message ,
-//          stack: uploadError.stack 
-//          });
-//       return res.status(500).json({ success: false, message: "Media upload failed. Please try again." });
-//     }
-//   }
-
-//   // ── Parse location ──
-//   // Sirf tab save karo jab user ne actually location di ho
-//   let locationData = undefined;
-
-//   if (location) {
-//     try {
-//       const parsed   = typeof location === "string" ? JSON.parse(location) : location;
-//       const hasName   = parsed.name?.trim();
-//       const hasCoords = parsed.lat && parsed.lng;
-
-//       if (hasName || hasCoords) {
-//         locationData = {};
-//         if (hasName)   locationData.name = parsed.name.trim();
-//         if (hasCoords) locationData.coordinates = {
-//           type:        "Point",
-//           coordinates: [parseFloat(parsed.lng), parseFloat(parsed.lat)],
-//         };
-//       }
-//     } catch {
-//       locationData = undefined; // Invalid JSON — silently ignore
-//     }
-//   }
-
-//   // ── Create Post ──
-//   const newPost = await Post.create({
-//     author:           authorId,
-//     type,
-//     caption:          caption.trim(),
-//     media:            mediaItems,
-//     visibility,
-//     commentsDisabled: commentsDisabled === "true" || commentsDisabled === true,
-//     likesHidden:      likesHidden === "true"      || likesHidden === true,
-//     isDraft:          isDraft === "true"           || isDraft === true || false,
-//     ...(locationData !== undefined && { location: locationData }),
-//   });
-
-//   // ── Populate & return ──
-//   const populated = await Post.getPostById(newPost._id);
-
-//   logger.info("Post created", { postId: newPost._id, author: authorId, type });
-
-//   return res.status(201).json({
-//     success: true,
-//     message: "Post created successfully",
-//     post:    populated,
-//   });
-// });
-
-
-// export const createPost = asyncHandler(async (req, res) => {
-//   const {
-//     caption = "",
-//     visibility = "public",
-//     type,
-//     commentsDisabled,
-//     likesHidden,
-//     location,
-//     isDraft,
-//     media,           // ← Now receiving array of media objects
-//   } = req.body;
-
-//   const authorId = req.user._id;
-
-//   // Validation
-//   if (!["text", "image", "reel"].includes(type)) {
-//     return res.status(400).json({ success: false, message: "Invalid post type" });
-//   }
-
-//   if ((type === "image" && (!media || media.length === 0)) ||
-//       (type === "reel" && (!media || media.length !== 1)) ||
-//       (type === "text" && media && media.length > 0)) {
-//     return res.status(400).json({ success: false, message: "Invalid media for post type" });
-//   }
-
-//   // Optional: Verify public_ids if you want extra security
-
-//   let locationData = null;
-//   if (location) {
-//     try {
-//       locationData = typeof location === "string" ? JSON.parse(location) : location;
-//     } catch {}
-//   }
-
-//   const newPost = await Post.create({
-//     author: authorId,
-//     type,
-//     caption: caption.trim(),
-//     media: media || [],           // ← Directly save what frontend sends
-//     visibility,
-//     commentsDisabled: !!commentsDisabled,
-//     likesHidden: !!likesHidden,
-//     isDraft: !!isDraft,
-//     ...(locationData && { location: locationData }),
-//   });
-
-//   const populated = await Post.getPostById(newPost._id);
-
-//   return res.status(201).json({
-//     success: true,
-//     message: "Post created successfully",
-//     post: populated,
-//   });
-// });
-//  GET SINGLE POST
-//  GET /api/v2/posts/:postId
-// ─────────────────────────────────────────────
-
-// ─── Security helpers ────────────────────────────────────────────────────────
-
-
+import Follow from "../../models/follow.model.js";
+import Saved from "../../models/saved.model.js";
+import User from "../../models/user.model.js";
 const sanitizeMediaItem = (item, index) => ({
   url:          String(item.url          || ""),
   publicId:     String(item.publicId     || ""),
@@ -237,6 +45,7 @@ export const createPost = asyncHandler(async (req, res, next) => {
   if (!["text", "image", "reel"].includes(type)) {
     return next(new AppError("Invalid post type.", 400));
   }
+ if (!Boolean(isDraft)) {
   if (type === "image" && (!media || media.length < 1)) {
     return next(new AppError("Image post requires at least one image.", 400));
   }
@@ -249,6 +58,14 @@ export const createPost = asyncHandler(async (req, res, next) => {
   if (media.length > 10) {
     return next(new AppError("Maximum 10 media items allowed.", 400));
   }
+} else {
+  if (media.length > 10) {
+    return next(new AppError("Maximum 10 media items allowed.", 400));
+  }
+  if (!caption?.trim() && (!media || media.length === 0)) {
+    return next(new AppError("Draft must have at least a caption or media.", 400));
+  }
+}
 
   // ── Sanitize ──
   const sanitized = media.map(sanitizeMediaItem);
@@ -284,8 +101,15 @@ export const createPost = asyncHandler(async (req, res, next) => {
     ...(locationData && { location: locationData }),
   });
 
-  const populated = await Post.getPostById(newPost._id);
-
+ const populated = await Post.getPostById(
+  newPost._id,
+  authorId,
+  false,
+  { allowDraft: Boolean(isDraft) },
+);
+if (!newPost.isDraft) {
+  await User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } });
+}
   logger.info("Post created", { postId: newPost._id, author: authorId, type });
 
   return res.status(201).json({
@@ -294,30 +118,6 @@ export const createPost = asyncHandler(async (req, res, next) => {
     post:    populated,
   });
 });
-// export const getPost = asyncHandler(async (req, res) => {
-//   const post = await Post.getPostById(req.params.postId);
-
-//   if (!post) {
-//     return res.status(404).json({ success: false, message: "Post not found" });
-//   }
-
-//   // ✅ Sirf ek baar view count badhe
-//   try {
-//     await PostView.create({
-//       user: req.user._id,
-//       post: req.params.postId,
-//     });
-//     // Create successful — pehli baar dekha, count badhaao
-//     await Post.updateCount(req.params.postId, "viewsCount", 1);
-//   } catch (err) {
-//     // Duplicate key error — already dekha hai, count mat badhaao
-//     if (err.code !== 11000) {
-//       throw err; // Koi aur error hai toh throw karo
-//     }
-//   }
-
-//   return res.status(200).json({ success: true, post });
-// });
 
 
 export const getPost = asyncHandler(async (req, res) => {
@@ -327,17 +127,17 @@ export const getPost = asyncHandler(async (req, res) => {
   // View tracking frontend recordView se hogi — getPost sirf data dega
   return res.status(200).json({ success: true, post });
 });
-
 export const getPostInteraction = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const userId = req.user._id;
+  const userId     = req.user._id;
 
-  const liked = await Like.hasLiked(userId, postId, "Post");
+  // Run both checks in parallel — no sequential DB calls
+  const [liked, saved] = await Promise.all([
+    Like.hasLiked(userId, postId, "Post"),
+    Saved.hasSaved(userId, postId),
+  ]);
 
-  return res.status(200).json({
-    success: true,
-    liked,
-  });
+  return res.status(200).json({ success: true, liked, saved });
 });
 
 // ─────────────────────────────────────────────
@@ -345,42 +145,37 @@ export const getPostInteraction = asyncHandler(async (req, res) => {
 //  GET /api/v2/posts/feed
 // ─────────────────────────────────────────────
 export const getFeedPosts = asyncHandler(async (req, res) => {
-  const page  = Math.max(1, parseInt(req.query.page)  || 1);
-const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
-  const userId = req.user._id;
+  const { beforeId } = req.query;
+  const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+  const userId       = req.user._id;
 
-  const user      = await req.user.populate("following");
-  const authorIds = [userId, ...user.following.map((f) => f._id)];
+  const follows   = await Follow.find({ follower: userId }).select("following").lean();
+  const authorIds = [userId, ...follows.map((f) => f.following)];
 
-  const posts = await Post.getFeedPosts(authorIds, Number(page), Number(limit));
+  const { items, hasMore, nextCursor } = await Post.getFeedPosts(authorIds, { beforeId: beforeId || null, limit });
 
-  return res.status(200).json({
-    success: true,
-    posts,
-    page:    Number(page),
-    hasMore: posts.length === Number(limit),
-  });
+  return res.status(200).json({ success: true, posts: items, hasMore, nextCursor });
 });
-
 // ─────────────────────────────────────────────
 //  GET USER POSTS (Profile Grid)
 //  GET /api/v2/posts/user/:userId
 // ─────────────────────────────────────────────
 export const getUserPosts = asyncHandler(async (req, res) => {
-  const page  = Math.max(1, parseInt(req.query.page)  || 1);
-const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
-  const { userId }  = req.params;
-  const viewerId    = req.user._id;
+  const { userId }   = req.params;
+  const { beforeId } = req.query;
+  const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
+  const viewerId     = req.user._id.toString();
 
-  const isFollower  = req.user.following?.includes(userId) || viewerId.toString() === userId;
-  const posts       = await Post.getUserPosts(userId, isFollower, Number(page), Number(limit));
+  const isOwner    = viewerId === userId;
+  const isFollower = isOwner
+    ? false
+    : !!(await Follow.findOne({ follower: viewerId, following: userId }).lean());
 
-  return res.status(200).json({
-    success: true,
-    posts,
-    page:    Number(page),
-    hasMore: posts.length === Number(limit),
-  });
+  const { items, hasMore, nextCursor } = await Post.getUserPosts(
+    userId, isFollower, isOwner, { beforeId: beforeId || null, limit }
+  );
+
+  return res.status(200).json({ success: true, data: items, hasMore, nextCursor });
 });
 
 // ─────────────────────────────────────────────
@@ -405,23 +200,17 @@ export const deletePost = asyncHandler(async (req, res) => {
 
   await Post.softDelete(postId, authorId);
 
+
+await User.findOneAndUpdate(
+  { _id: authorId, postsCount: { $gt: 0 } },
+  { $inc: { postsCount: -1 } }
+);
   logger.info("Post deleted", { postId, author: authorId });
 
   return res.status(200).json({ success: true, message: "Post deleted successfully" });
 });
 
-// export const recordView = asyncHandler(async (req, res) => {
-//   const { postId } = req.params;
 
-//   try {
-//     await PostView.create({ user: req.user._id, post: postId });
-//     await Post.updateCount(postId, "viewsCount", 1);
-//   } catch (err) {
-//     if (err.code !== 11000) throw err; // Duplicate — ignore
-//   }
-
-//   return res.status(200).json({ success: true });
-// });
 
 // ─────────────────────────────────────────────
 //  GET DRAFT POSTS
@@ -450,30 +239,22 @@ export const recordView = asyncHandler(async (req, res) => {
   const device = /mobile/i.test(ua) ? "mobile" : /tablet|ipad/i.test(ua) ? "tablet" : "desktop";
 
   // ── 5. Try insert — duplicate silently ignore ──
-  try {
-    await PostView.create({
-      user:     userId,
-      post:     postId,
-      viewedAt: new Date(),
-      source:   safeSource,
-      duration: Math.min(Math.max(0, Number(duration) || 0), 3600), // max 1 hour
-      device,
-    });
+  // ── 5. Delegate to model static — single source of truth ──
+  const { isNewView } = await PostView.recordView({
+    user:     userId,
+    post:     postId,
+    source:   safeSource,
+    duration: Number(duration) || 0,
+    device,
+  });
 
-    // ── 6. Atomic increment — race condition safe ──
-    await Post.findByIdAndUpdate(postId, { $inc: { viewsCount: 1 } });
-
+  if (isNewView) {
     logger.info("View recorded", { postId, userId, source: safeSource, device });
-
-    return res.status(200).json({ success: true, recorded: true });
-
-  } catch (err) {
-    if (err.code === 11000) {
-      // Already viewed — silently return
-      return res.status(200).json({ success: true, recorded: false, reason: "already_viewed" });
-    }
-    throw err;
   }
+
+  return res.status(200).json({ success: true, recorded: isNewView });
+   
+ 
 });
 
 export const getDraftPosts = asyncHandler(async (req, res) => {
@@ -515,8 +296,9 @@ export const publishDraft = asyncHandler(async (req, res) => {
   post.isDraft = false;
   await post.save();
 
-  const populated = await Post.getPostById(post._id);
+ const populated = await Post.getPostById(post._id, authorId, false);
 
+ await User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } });
   logger.info("Draft published", { postId, author: authorId });
 
   return res.status(200).json({

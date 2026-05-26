@@ -212,7 +212,7 @@ function DetailPanel({ report, loading, actionLoading, onClose, onUpdate }) {
 
   if (!report && !loading) return null;
 
-  const busy = actionLoading === report?._id;
+ const busy = !!actionLoading && actionLoading === report?._id;
 
   const handleSubmit = () => {
     if (!status) return;
@@ -460,21 +460,21 @@ export default function ReportsPage() {
     dispatch(fetchReportById(report._id));
   };
 
-  const handleUpdate = async (args) => {
-    const res = await dispatch(updateReportStatus(args));
-    if (!res.error) {
-      showToast("Report updated successfully");
-      // Refresh counts
-      dispatch(fetchReports({
-        status:      filters.status      || undefined,
-        targetModel: filters.targetModel || undefined,
-        page:        filters.page,
-        limit:       filters.limit,
-      }));
-    } else {
-      showToast(res.payload ?? "Failed to update", "error");
-    }
-  };
+ const handleUpdate = async (args) => {
+  const res = await dispatch(updateReportStatus(args));
+  if (!res.error) {
+    showToast("Report updated successfully");
+    dispatch(closeReport());          // ← yeh add karo
+    dispatch(fetchReports({
+      status:      filters.status      || undefined,
+      targetModel: filters.targetModel || undefined,
+      page:        filters.page,
+      limit:       filters.limit,
+    }));
+  } else {
+    showToast(res.payload ?? "Failed to update", "error");
+  }
+};
 
   const handleBulkSubmit = async () => {
     if (!bulkAction || selectedIds.length === 0) return;

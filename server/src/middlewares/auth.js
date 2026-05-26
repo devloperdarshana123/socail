@@ -4,12 +4,12 @@ import asyncHandler from "./asyncHandler.js";
 import AppError from "../utils/AppError.js";
 import User from "../models/user.model.js";
 import logger from "../config/logger.js";
-
+import { ENV } from "../config/env.js";
 export const isAuthenticated = asyncHandler(async (req, res, next) => {
   // CHANGE 1: Authorization header parsing safe kiya
   const authHeader = req.headers?.authorization;
   const accessToken =
-    req.cookies?.accesstoken ||
+    req.cookies?.accessToken ||
     (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
 
   if (!accessToken) {
@@ -19,7 +19,7 @@ export const isAuthenticated = asyncHandler(async (req, res, next) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
+decoded = jwt.verify(accessToken, ENV.ACCESS_TOKEN_SECRET);
   } catch (err) {
     if (err.name === "TokenExpiredError") {
       return next(new AppError("Session expired. Please log in again.", 401));
@@ -46,6 +46,7 @@ export const isAuthenticated = asyncHandler(async (req, res, next) => {
   }
 
   req.user = user;
+  User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).catch(() => {});
 
   // CHANGE 2: info → debug — production mein har request pe info log bahut noise tha
   logger.debug("User authenticated", {

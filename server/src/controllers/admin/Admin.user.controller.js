@@ -6,6 +6,7 @@ import Report from "../../models/report.model.js";
 import logger from "../../config/logger.js";
 import {sendMail} from "../../utils/sendMail.js";
 import { accountSuspended } from "../../mail/templates/accountSuspended.js";
+import mongoose from "mongoose";
 
 // ─────────────────────────────────────────────────────────────
 //  Helpers
@@ -183,12 +184,13 @@ export const getUserById = asyncHandler(async (req, res, next) => {
   .lean(),
 
     Report.aggregate([
-      { $match: { reportedUser: user._id } },
+    { $match: { targetId: new mongoose.Types.ObjectId(id), targetModel: "User" } },
       {
         $group: {
           _id: "$status",
           count: { $sum: 1 },
         },
+
       },
     ]),
   ]);
@@ -259,12 +261,12 @@ export const getUserReports = asyncHandler(async (req, res, next) => {
   const user = await User.findById(id).select("_id username fullName").lean();
   if (!user) return next(new AppError("User not found", 404));
 
-  const filter = { reportedUser: id };
+  const filter = { targetId: id, targetModel: "User" };
 
   const [reports, total] = await Promise.all([
     Report.find(filter)
       .populate("reportedBy", "username fullName avatar")
-      .populate("reportedPost", "content media createdAt")
+      .populate("targetId", "caption media createdAt type")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -451,7 +453,11 @@ export const deletePost = asyncHandler(async (req, res, next) => {
   await post.save({ validateBeforeSave: false });
 
   // Decrement postsCount on user
-  await User.findByIdAndUpdate(post.author._id, { $inc: { postsCount: -1 } });
+// REPLACE:
+await User.findOneAndUpdate(
+  { _id: post.author._id, postsCount: { $gt: 0 } },
+  { $inc: { postsCount: -1 } }
+);
 
   logger.warn("Admin deleted post", {
     adminId: req.user._id,

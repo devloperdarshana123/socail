@@ -7,7 +7,6 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import mongoose from "mongoose";
-
 import authRoute from "./routes/auth/auth.route.js";
 import globalErrorHandler from "./middlewares/globalErrorHandler.js";
 import AppError from "./utils/AppError.js";
@@ -31,9 +30,11 @@ import "./cron/suspensionCron.js";
 
 //admin//
 import adminAuthRoute from "./routes/admin/Admin.auth.route.js";
+import adminSettingsRoute from "./routes/admin/admin.settings.route.js";
 import adminUserRoute from "./routes/admin/Admin.user.routes .js";
 import adminReportRoute from "./routes/admin/Admin.report.routes.js";
 import dashboardRoutes from "./routes/admin/Admin.dashboard.route.js";
+import auditLogRoute from "./routes/admin/Admin.auditlog.route.js";
 
 const app = express();
 
@@ -137,6 +138,8 @@ app.use("/api/v2/admin/auth", adminAuthRoute);
 app.use("/api/v2/admin/dashboard", dashboardRoutes);
 app.use("/api/v2/admin",      adminUserRoute); 
 app.use("/api/v2/admin", adminReportRoute);
+app.use("/api/v2/admin/settings", adminSettingsRoute);
+app.use("/api/v2/admin/audit-logs", auditLogRoute);
 
 
 

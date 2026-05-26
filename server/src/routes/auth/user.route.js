@@ -50,7 +50,7 @@ userRouter
 
 userRouter.get("/blocked", getBlockedUsers); // blocked list
 userRouter.get("/block-status/:userId", getBlockStatus);
-userRouter.post("/report/:userId", submitReport);
+userRouter.post("/report", submitReport);
 
 // ─────────────────────────────────────────────
 //  Map Sellers Route

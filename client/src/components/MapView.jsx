@@ -106,30 +106,33 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
   }, [fetchSellers, searchQuery]);
 
   // ── Follow / Unfollow ─────────────────────────────────────
-  const handleFollow = async (seller, e) => {
-    e.stopPropagation();
+ const handleFollow = async (seller, e) => {
+  e.stopPropagation();
+  const { _id, isFollowing } = seller;
 
-    const { _id, isFollowing } = seller;
-const method = isFollowing ? "DELETE" : "POST";
-
-// Optimistic update
-setSellers((prev) =>
-  prev.map((s) => {
-    if (s._id !== _id) return s;
-    if (isFollowing) return { ...s, isFollowing: false, followersCount: Math.max(0, (s.followersCount || 0) - 1) };
-    return { ...s, isFollowing: true, followersCount: (s.followersCount || 0) + 1 };
-  })
-);
-
-try {
-  await api({ method, url: `/follow/${_id}` });
-} catch {
-  // Rollback on failure
+  // Optimistic update
   setSellers((prev) =>
-    prev.map((s) => s._id === _id ? { ...s, isFollowing } : s)
+    prev.map((s) => {
+      if (s._id !== _id) return s;
+      return isFollowing
+        ? { ...s, isFollowing: false, followersCount: Math.max(0, (s.followersCount || 0) - 1) }
+        : { ...s, isFollowing: true,  followersCount: (s.followersCount || 0) + 1 };
+    })
   );
-}
-  };
+
+  try {
+    if (isFollowing) {
+      await api.delete(`/follow/${_id}`);
+    } else {
+      await api.post(`/follow/${_id}`);
+    }
+  } catch {
+    // Rollback on failure
+    setSellers((prev) =>
+      prev.map((s) => s._id === _id ? { ...s, isFollowing } : s)
+    );
+  }
+};
 
   // ── Message ───────────────────────────────────────────────
 const handleMessage = (seller, e) => {

@@ -13,33 +13,39 @@ export default function EditDraftModal({ post, onClose, onSaved }) {
       ? post.media?.[0]?.thumbnailUrl || post.media?.[0]?.url
       : post.media?.[0]?.url;
 
-  const handleSaveDraft = async () => {
-    setLoading(true);
-    try {
-      await api.patch(`/posts/${post._id}`, { caption, isDraft: true });
-      toast.success("Draft updated! 📝");
-      onSaved();
-    } catch {
-      toast.error("Draft save nahi ho saka.");
-    } finally {
-      setLoading(false);
-    }
-  };
+ // CORRECT — tell the parent to re-sync Redux after save
+const handleSaveDraft = async () => {
+  if (caption === post.caption) { onClose(); return; } // nothing changed
+  setLoading(true);
+  try {
+    await api.patch(`/posts/${post._id}`, { caption, isDraft: true });
+    toast.success("Draft updated! 📝");
+    onSaved({ type: "draft", postId: post._id, caption }); // pass update back
+  } catch {
+    toast.error("Some Error .");
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const handlePublish = async () => {
-    setPublishLoading(true);
-    try {
-      // Caption update + publish ek saath
-      await api.patch(`/posts/${post._id}`, { caption, isDraft: false });
-      await api.patch(`/posts/${post._id}/publish`);
-      toast.success("Post published! 🎉");
-      onSaved();
-    } catch {
-      toast.error("Publish nahi ho saka.");
-    } finally {
-      setPublishLoading(false);
+ // CORRECT — one call, one source of truth
+const handlePublish = async () => {
+  setPublishLoading(true);
+  try {
+    // First update caption if changed
+    if (caption !== post.caption) {
+      await api.patch(`/posts/${post._id}`, { caption, isDraft: true });
     }
-  };
+    // Then publish via the dedicated endpoint
+    await api.patch(`/posts/${post._id}/publish`);
+    toast.success("Post published! 🎉");
+    onSaved({ type: "published", postId: post._id });
+  } catch {
+    toast.error("Some Error Occur.");
+  } finally {
+    setPublishLoading(false);
+  }
+};
 
   return (
     <div

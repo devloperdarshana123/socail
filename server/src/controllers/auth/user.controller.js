@@ -366,29 +366,55 @@ export const getBlockStatus = asyncHandler(async (req, res, next) => {
 
 
 export const submitReport = asyncHandler(async (req, res, next) => {
-  const { userId }     = req.params;
-  const { reason, description } = req.body;
-  const reporterId     = req.user._id;
+  const { targetId, targetModel, reason, description } = req.body;
+  const reporterId = req.user._id;
 
-  if (String(userId) === String(reporterId))
+  // ── Validate targetModel ──────────────────────────────────
+  const ALLOWED_MODELS = ["User", "Post", "Comment"];
+  if (!ALLOWED_MODELS.includes(targetModel)) {
+    return next(new AppError("Invalid target type.", 400));
+  }
+
+  // ── Validate targetId ─────────────────────────────────────
+  if (!targetId) return next(new AppError("targetId is required.", 400));
+  if (!reason?.trim()) return next(new AppError("Reason is required.", 400));
+
+  // ── Self-report guard (only for User) ─────────────────────
+  if (targetModel === "User" && String(targetId) === String(reporterId)) {
     return next(new AppError("You cannot report yourself.", 400));
+  }
 
-  if (!reason?.trim())
-    return next(new AppError("Reason is required.", 400));
+  // ── Target existence check ────────────────────────────────
+  let targetExists = false;
+  if (targetModel === "User") {
+    targetExists = !!(await User.exists({ _id: targetId }));
+  } else if (targetModel === "Post") {
+    const Post = (await import("../../models/post.model.js")).default;
+    targetExists = !!(await Post.exists({ _id: targetId }));
+  } else if (targetModel === "Comment") {
+    const Comment = (await import("../../models/comment.model.js")).default;
+    targetExists = !!(await Comment.exists({ _id: targetId }));
+  }
 
+  if (!targetExists) {
+    return next(new AppError(`${targetModel} not found.`, 404));
+  }
+
+  // ── Submit ────────────────────────────────────────────────
   const { alreadyReported } = await Report.submitReport({
     reportedBy:  reporterId,
-    targetId:    userId,
-    targetModel: "User",
+    targetId,
+    targetModel,
     reason,
     description: description?.trim() || "",
   });
 
-  if (alreadyReported)
-    return next(new AppError("You have already reported this user.", 409));
+  if (alreadyReported) {
+    return next(new AppError(`You have already reported this ${targetModel.toLowerCase()}.`, 409));
+  }
 
-  res.status(201).json({ 
-    success: true, 
-    message: "Report submitted. Our team will review it." 
+  res.status(201).json({
+    success: true,
+    message: "Report submitted. Our team will review it.",
   });
 });

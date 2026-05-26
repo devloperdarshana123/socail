@@ -21,12 +21,13 @@ import Contact from "./pages/Contact";
 import UsersPage from "./pages/UsersPage";
 
 
-// ── baad mein uncomment karo jab ban jayein ──
+
 import DashboardPage from "./pages/DashboardPage";
 import PostsPage from "./pages/PostsPage";
 import ReportsPage from "./pages/Reportspage";
-// import SettingsPage from "./pages/SettingsPage";
+import SettingsPage from "./pages/Settings";
 import UserDetailPage from "./pages/UserDetailPage";
+import AuditLog from "./pages/AuditLog";
 
 // ─────────────────────────────────────────────
 //  Protected Route — sirf super_admin access
@@ -131,14 +132,14 @@ const App = () => {
             path="/reports"
             element={<ReportsPage/> }
           />
+           <Route
+            path="/settings"
+            element={<SettingsPage/>}
+          />
 
           <Route
-            path="/settings"
-            element={
-              <div className="flex items-center justify-center min-h-[calc(100vh-60px)]">
-                <p className="text-white/40 text-sm">Settings — Coming Soon</p>
-              </div>
-            }
+            path="/audit-logs"
+            element={<AuditLog/>}
           />
         </Route>
 

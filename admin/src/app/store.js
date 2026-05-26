@@ -5,6 +5,8 @@ import usersReducer     from "../lib/redux/usersSlice";
 import adminPostsReducer from "../lib/redux/Postsslice";
 import reportsReducer from "../lib/redux/Reportsslice";
 import dashboardReducer from "../lib/redux/dashboardSlice";
+import settingReducer from "../lib/redux/Adminsettingsslice";
+import auditLogReducer from "../lib/redux/auditLogSlice";
 // ─────────────────────────────────────────────
 //  Admin Redux Store
 // ─────────────────────────────────────────────
@@ -16,6 +18,8 @@ const store = configureStore({
      adminPosts: adminPostsReducer,
      reports: reportsReducer,
      dashboard:dashboardReducer,
+     setting:settingReducer,
+     auditLog: auditLogReducer,
 
   },
 

@@ -314,8 +314,9 @@ setPending(state, action) {
         state.pendingUserId = null;
         state.pendingPurpose = null;
         // localStorage sync
-        if (action.payload.accessToken) {
-        }
+      if (action.payload.accessToken) {
+  localStorage.setItem("accessToken", action.payload.accessToken);
+}
       })
       .addCase(verifyOtp.rejected, (state, action) => {
         state.otp.loading = false;
@@ -362,11 +363,12 @@ setPending(state, action) {
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
         // localStorage sync — null/undefined guard
-        const token = action.payload.accessToken;
-        if (token && token !== "null" && token !== "undefined") {
-        } else {
-          localStorage.removeItem("accessToken");
-        }
+const token = action.payload.accessToken;
+if (token && token !== "null" && token !== "undefined") {
+  localStorage.setItem("accessToken", token);
+} else {
+  localStorage.removeItem("accessToken");
+}
         // Agar onboarding incomplete hai toh pendingUserId set karo
         if (action.payload.nextRoute === "/verify-otp") {
           state.pendingUserId = action.payload.data?._id || null;
@@ -453,8 +455,8 @@ setPending(state, action) {
         state.nextRoute = action.payload.nextRoute || "/feed";
         // localStorage sync
         if (action.payload.accessToken) {
-          
-        }
+  localStorage.setItem("accessToken", action.payload.accessToken);
+}
       })
       .addCase(setUsername.rejected, (state, action) => {
         state.onboarding.setLoading = false;

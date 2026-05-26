@@ -4,7 +4,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { motion , AnimatePresence} from "framer-motion";
-import DraftsList from "../components/DraftsList";
 import EditDraftModal from "../components/EditDraftModal";
 import { createPortal } from "react-dom";
 import { resolvePostThumb , isVideoMedia } from "../utils/mediaUtils";
@@ -510,13 +509,13 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
                   <Pencil size={11} /> Edit
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); dispatch(publishDraftPost(post._id)).then(() => dispatch(fetchDraftPosts())); }}
+                  onClick={(e) => { e.stopPropagation(); dispatch(publishDraftPost(post._id)); }}
                   className="flex items-center gap-1.5 bg-[#5a3e2b] text-white text-xs font-bold px-3 py-1.5 rounded-full"
                 >
                   <Play size={11} /> Publish
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); dispatch(deletePost(post._id)).then(() => dispatch(fetchDraftPosts())); }}
+                  onClick={(e) => { e.stopPropagation(); dispatch(deletePost(post._id)); }}
                   className="flex items-center gap-1.5 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full"
                 >
                   <Trash2 size={11} /> Delete
@@ -696,10 +695,13 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
   <EditDraftModal
     post={editingDraft}
     onClose={() => setEditingDraft(null)}
-    onSaved={() => {
-      setEditingDraft(null);
-      dispatch(fetchDraftPosts());
-    }}
+    onSaved={(result) => {
+  setEditingDraft(null);
+  dispatch(fetchDraftPosts());
+  if (result?.type === "published" && user?._id) {
+    dispatch(fetchMyPosts(user._id));
+  }
+}}
   />
 )}
     </div>

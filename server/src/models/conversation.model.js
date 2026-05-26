@@ -1,6 +1,79 @@
+
+
 import mongoose from "mongoose";
 
 const { Schema, model, models } = mongoose;
+
+// ─────────────────────────────────────────────
+//  URL Validator (shared with other models)
+// ─────────────────────────────────────────────
+const isValidUrl = (v) => v === null || /^https?:\/\/.+/.test(v);
+
+// ─────────────────────────────────────────────
+//  HTML char guard (prevent XSS in text fields)
+// ─────────────────────────────────────────────
+const noHtmlChars = (v) => !v || !/[<>"']/.test(v);
+
+// ─────────────────────────────────────────────
+//  ConversationMember Schema  ← FIX #3 #4 #13
+//
+//  Per-user state (unread, archive, delete)
+//  moved OUT of Conversation document into its
+//  own collection. This eliminates the 16MB
+//  ceiling risk for large groups and makes
+//  per-user inbox queries indexable.
+// ─────────────────────────────────────────────
+const conversationMemberSchema = new Schema(
+  {
+    conversationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Conversation",
+      required: true,
+    },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    unreadCount: {
+      type: Number,
+      default: 0,
+      min: 0, // FIX: floor guard — can never go negative
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    // Last seen message — for "X messages since you left" feature
+    lastSeenAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { timestamps: true },
+);
+
+// One membership record per user per conversation
+conversationMemberSchema.index(
+  { conversationId: 1, userId: 1 },
+  { unique: true },
+);
+// Fast inbox query: all active convos for a user, sorted by activity
+conversationMemberSchema.index(
+  { userId: 1, isDeleted: 1, conversationId: 1 },
+);
+
+export const ConversationMember =
+  models.ConversationMember ||
+  model("ConversationMember", conversationMemberSchema);
 
 // ─────────────────────────────────────────────
 //  Sub-schema: Last Message Preview
@@ -15,7 +88,8 @@ const lastMessagePreviewSchema = new Schema(
     text: {
       type: String,
       default: "",
-      maxlength: 100, // preview ke liye truncated
+      trim: true,               // FIX #9 — trim preview text
+      maxlength: 100,
     },
     senderId: {
       type: Schema.Types.ObjectId,
@@ -47,10 +121,27 @@ const conversationSchema = new Schema(
           ref: "User",
         },
       ],
-      validate: {
-        validator: (v) => v.length >= 2,
-        message: "Conversation mein kam se kam 2 participants hone chahiye",
-      },
+      validate: [
+        {
+          // FIX #5 — minimum 2 participants
+          validator: (v) => v.length >= 2,
+          message: "Conversation mein kam se kam 2 participants hone chahiye",
+        },
+        {
+          // FIX #5 — maximum cap: 2 for DM, 500 for groups
+          // Enforced at static level too; this is the DB-layer guard
+          validator: (v) => v.length <= 500,
+          message: "Conversation mein maximum 500 participants ho sakte hain",
+        },
+        {
+          // FIX #10 — no duplicate participants
+          validator: (v) => {
+            const ids = v.map((id) => id.toString());
+            return new Set(ids).size === ids.length;
+          },
+          message: "Duplicate participants not allowed",
+        },
+      ],
     },
 
     // ── Last Message (denormalized for list view) ──
@@ -59,19 +150,10 @@ const conversationSchema = new Schema(
       default: null,
     },
 
-    // ── Unread Count per user ─────────────────
-    // { "userId": count }
-    unreadCount: {
-      type: Map,
-      of: Number,
-      default: {},
-    },
-
     // ── Group Chat ────────────────────────────
     isGroup: {
       type: Boolean,
       default: false,
-      index: true,
     },
 
     groupName: {
@@ -79,10 +161,23 @@ const conversationSchema = new Schema(
       trim: true,
       maxlength: [50, "Group name cannot exceed 50 characters"],
       default: null,
+      // FIX #8 — block HTML injection chars in group name
+      validate: {
+        validator: noHtmlChars,
+        message: "Group name contains invalid characters",
+      },
     },
 
     groupAvatar: {
-      url: { type: String, default: null },
+      // FIX #7 — URL validation
+      url: {
+        type: String,
+        default: null,
+        validate: {
+          validator: isValidUrl,
+          message: "groupAvatar.url must be a valid http/https URL",
+        },
+      },
       publicId: { type: String, default: null },
     },
 
@@ -92,28 +187,19 @@ const conversationSchema = new Schema(
       default: null,
     },
 
-    // ── Soft Delete / Archive per user ────────
-    // Users jo is conversation ko archive kar chuke hain
-    archivedBy: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-
-    // Users jo is conversation ko delete kar chuke hain
-    deletedBy: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-
     // ── Status ────────────────────────────────
+    // FIX #19 — isActive now has defined semantics:
+    // true  = conversation is live
+    // false = all participants have deleted it (DM),
+    //         or group was explicitly disbanded
     isActive: {
       type: Boolean,
       default: true,
-      index: true,
+    },
+
+    disbandedAt: {
+      type: Date,
+      default: null,
     },
   },
   {
@@ -124,12 +210,50 @@ const conversationSchema = new Schema(
 );
 
 // ─────────────────────────────────────────────
-//  Indexes
+//  Indexes  — FIX #14 #15
+//
+//  Removed:
+//    { participants: 1 }          — redundant prefix of compound below
+//    { updatedAt: -1 }            — no solo queries on updatedAt
+//    { isGroup: 1, isActive: 1 } — no static uses this alone
+//
+//  Kept / Added:
+//    { participants: 1, updatedAt: -1 } — primary conversation list query
+//    Unique DM index (below)            — FIX #6
 // ─────────────────────────────────────────────
-conversationSchema.index({ participants: 1 });
-conversationSchema.index({ updatedAt: -1 });
-conversationSchema.index({ participants: 1, updatedAt: -1 }); // conversation list query
-conversationSchema.index({ isGroup: 1, isActive: 1 });
+conversationSchema.index({ participants: 1, updatedAt: -1 });
+
+// FIX #6 — Unique DM index: only one conversation allowed per pair
+// Partial index: only applies to non-group conversations
+// MongoDB partial indexes use a filter expression
+conversationSchema.index(
+  { participants: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isGroup: false },
+    name: "unique_dm_participants",
+    // Note: MongoDB's unique index on array fields ensures the sorted
+    // pair [A,B] is unique. We enforce sorted insertion in createDM.
+  },
+);
+
+// ─────────────────────────────────────────────
+//  Pre-validate Hook
+// ─────────────────────────────────────────────
+
+// FIX #11 — groupAdmin must be one of participants
+conversationSchema.pre("validate", function () {
+  if (
+    this.isGroup &&
+    this.groupAdmin &&
+    this.participants?.length > 0
+  ) {
+    const participantStrs = this.participants.map((p) => p.toString());
+    if (!participantStrs.includes(this.groupAdmin.toString())) {
+      throw new Error("groupAdmin must be one of the participants");
+    }
+  }
+});
 
 // ─────────────────────────────────────────────
 //  Virtuals
@@ -143,62 +267,264 @@ conversationSchema.virtual("participantCount").get(function () {
 // ─────────────────────────────────────────────
 
 /**
- * Do users ke beech existing DM conversation dhundo
+ * FIX #2 — Atomic DM creation
+ * Creates a DM conversation or returns the existing one.
+ * Enforces exactly-2 participants and sorted insertion
+ * so the unique index on participants always matches.
+ *
+ * @param {ObjectId} userAId
+ * @param {ObjectId} userBId
+ * @returns {{ conversation, created: boolean }}
  */
-conversationSchema.statics.findDMBetween = function (userAId, userBId) {
-  return this.findOne({
-    isGroup: false,
-    participants: { $all: [userAId, userBId], $size: 2 },
+conversationSchema.statics.createDM = async function (userAId, userBId) {
+  const a = userAId.toString();
+  const b = userBId.toString();
+
+  // FIX: self-conversation guard
+  if (a === b) throw new Error("Cannot create a conversation with yourself");
+
+  // Sort IDs so [A,B] and [B,A] always produce the same document
+  const sorted = [userAId, userBId].sort((x, y) =>
+    x.toString().localeCompare(y.toString()),
+  );
+
+  try {
+    const conversation = await this.create({
+      participants: sorted,
+      isGroup: false,
+      isActive: true,
+    });
+
+    // Create ConversationMember records for both users
+    await ConversationMember.insertMany([
+      { conversationId: conversation._id, userId: sorted[0] },
+      { conversationId: conversation._id, userId: sorted[1] },
+    ]);
+
+    return { conversation, created: true };
+  } catch (err) {
+    // E11000 = unique index violation → DM already exists
+    if (err.code === 11000) {
+      const existing = await this.findOne({
+        isGroup: false,
+        participants: { $all: sorted, $size: 2 },
+      }).lean();
+      return { conversation: existing, created: false };
+    }
+    throw err;
+  }
+};
+
+/**
+ * FIX #2 — Create a group conversation
+ *
+ * @param {ObjectId}   adminId       — creator becomes groupAdmin
+ * @param {string}     groupName
+ * @param {ObjectId[]} participantIds — must include adminId
+ * @param {string}     [avatarUrl]
+ * @returns {Document} created Conversation
+ */
+conversationSchema.statics.createGroup = async function (
+  adminId,
+  groupName,
+  participantIds,
+  avatarUrl = null,
+) {
+  if (participantIds.length > 500)
+    throw new Error("Group cannot have more than 500 participants");
+
+  const uniqueIds = [
+    ...new Set([adminId.toString(), ...participantIds.map((p) => p.toString())]),
+  ].map((id) => new mongoose.Types.ObjectId(id));
+
+  const conversation = await this.create({
+    participants: uniqueIds,
+    isGroup: true,
+    groupName,
+    groupAdmin: adminId,
+    groupAvatar: avatarUrl ? { url: avatarUrl, publicId: null } : undefined,
     isActive: true,
   });
+
+  // Create ConversationMember records for all participants
+  await ConversationMember.insertMany(
+    uniqueIds.map((uid) => ({
+      conversationId: conversation._id,
+      userId: uid,
+    })),
+  );
+
+  return conversation;
 };
 
 /**
- * User ki saari active conversations fetch karo (list view)
+ * FIX #1 — Cursor-paginated inbox (replaces skip())
+ *
+ * Uses ConversationMember collection for per-user state.
+ * Returns conversations sorted by Conversation.updatedAt DESC.
+ *
+ * @param {ObjectId} userId
+ * @param {object}   opts
+ * @param {string}   [opts.afterId]   — last conversation _id from previous page
+ * @param {Date}     [opts.afterDate] — updatedAt of that conversation
+ * @param {number}   [opts.limit=20]
  */
-conversationSchema.statics.getUserConversations = function (
+conversationSchema.statics.getUserConversations = async function (
   userId,
-  { page = 1, limit = 20 } = {},
+  { afterId = null, afterDate = null, limit = 20 } = {},
 ) {
   const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
-  const skip = (Math.max(parseInt(page) || 1, 1) - 1) * safeLimit;
 
-  return this.find({
-    participants: userId,
-    isActive: true,
-    deletedBy: { $ne: userId },
-  })
-    .sort({ updatedAt: -1 })
-    .skip(skip)
-    .limit(safeLimit)
-    .populate("participants", "username fullName avatar isVerifiedBadge accountStatus")
+  // Step 1: get active (non-deleted) conversation IDs for this user
+  const memberQuery = { userId, isDeleted: false };
+  const members = await ConversationMember.find(memberQuery)
+    .select("conversationId isArchived unreadCount")
     .lean();
+
+  const convIds = members.map((m) => m.conversationId);
+  if (!convIds.length) return { conversations: [], nextCursor: null };
+
+  // Build a lookup map for member state
+  const memberMap = {};
+  for (const m of members) {
+    memberMap[m.conversationId.toString()] = m;
+  }
+
+  // Step 2: cursor filter on the Conversation collection
+  const cursorFilter =
+    afterId && afterDate
+      ? {
+          $or: [
+            { updatedAt: { $lt: new Date(afterDate) } },
+            {
+              updatedAt: new Date(afterDate),
+              _id: { $lt: afterId },
+            },
+          ],
+        }
+      : {};
+
+  // FIX #17 — for groups, only return up to 5 participants for preview
+  // Full participant list is fetched separately via getConversationById
+  const conversations = await this.find({
+    _id: { $in: convIds },
+    isActive: true,
+    ...cursorFilter,
+  })
+    .sort({ updatedAt: -1, _id: -1 })
+    .limit(safeLimit + 1)
+    .select(
+      "participants lastMessage isGroup groupName groupAvatar groupAdmin isActive updatedAt createdAt",
+    )
+    .populate(
+      "participants",
+      "username fullName avatar isVerifiedBadge accountStatus",
+    )
+    .lean();
+
+  const hasMore = conversations.length > safeLimit;
+  if (hasMore) conversations.pop();
+
+  // Attach per-user state from memberMap
+  const enriched = conversations.map((conv) => {
+    const member = memberMap[conv._id.toString()] ?? {};
+    return {
+      ...conv,
+      unreadCount: member.unreadCount ?? 0,
+      isArchived: member.isArchived ?? false,
+    };
+  });
+
+  const last = enriched[enriched.length - 1];
+  const nextCursor = hasMore
+    ? { afterId: last._id, afterDate: last.updatedAt }
+    : null;
+
+  return { conversations: enriched, nextCursor };
 };
 
 /**
- * Unread count increment karo for specific user
+ * FIX #18 — getConversationById with membership check
+ * Prevents non-members from reading conversation data.
+ *
+ * @param {ObjectId} conversationId
+ * @param {ObjectId} requestingUserId
  */
-conversationSchema.statics.incrementUnread = function (conversationId, userId) {
-  return this.findByIdAndUpdate(
+conversationSchema.statics.getConversationById = async function (
+  conversationId,
+  requestingUserId,
+) {
+  const member = await ConversationMember.findOne({
     conversationId,
-    { $inc: { [`unreadCount.${userId}`]: 1 } },
+    userId: requestingUserId,
+    isDeleted: false,
+  }).lean();
+
+  if (!member) return null; // not a participant → caller treats as 403
+
+  const conversation = await this.findById(conversationId)
+    .populate(
+      "participants",
+      "username fullName avatar isVerifiedBadge accountStatus",
+    )
+    .lean();
+
+  if (!conversation) return null;
+
+  return {
+    ...conversation,
+    unreadCount: member.unreadCount,
+    isArchived: member.isArchived,
+  };
+};
+
+/**
+ * FIX #16 — Atomic updateLastMessage + incrementUnread in one round trip
+ *
+ * @param {ObjectId}   conversationId
+ * @param {object}     msgData         — { messageId, text, senderId, sentAt, isDeleted }
+ * @param {ObjectId[]} recipientIds    — all participants EXCEPT the sender
+ */
+conversationSchema.statics.updateLastMessageAndIncrementUnread = async function (
+  conversationId,
+  { messageId, text, senderId, sentAt, isDeleted = false },
+  recipientIds = [],
+) {
+  // One round trip on Conversation document
+  const conversation = await this.findByIdAndUpdate(
+    conversationId,
+    {
+      $set: {
+        lastMessage: {
+          messageId,
+          text: (text ?? "").slice(0, 100),
+          senderId,
+          sentAt: sentAt ?? new Date(),
+          isDeleted,
+        },
+      },
+    },
     { new: true },
   );
+
+  // Bulk increment unread for all recipients (not sender)
+  if (recipientIds.length > 0) {
+    await ConversationMember.bulkWrite(
+      recipientIds.map((uid) => ({
+        updateOne: {
+          filter: { conversationId, userId: uid },
+          update: { $inc: { unreadCount: 1 } },
+        },
+      })),
+    );
+  }
+
+  return conversation;
 };
 
 /**
- * Unread count reset karo jab user messages padhle
- */
-conversationSchema.statics.resetUnread = function (conversationId, userId) {
-  return this.findByIdAndUpdate(
-    conversationId,
-    { $set: { [`unreadCount.${userId}`]: 0 } },
-    { new: true },
-  );
-};
-
-/**
- * lastMessage preview update karo (har naye message ke baad call karo)
+ * Legacy single-update kept for backward compat during migration
+ * @deprecated Use updateLastMessageAndIncrementUnread
  */
 conversationSchema.statics.updateLastMessage = function (
   conversationId,
@@ -210,7 +536,7 @@ conversationSchema.statics.updateLastMessage = function (
       $set: {
         lastMessage: {
           messageId,
-          text: text?.slice(0, 100) ?? "",
+          text: (text ?? "").slice(0, 100),
           senderId,
           sentAt: sentAt ?? new Date(),
           isDeleted,
@@ -221,20 +547,266 @@ conversationSchema.statics.updateLastMessage = function (
   );
 };
 
+/**
+ * FIX #22 — Mark lastMessage preview as deleted
+ * Called when a message is soft-deleted so inbox preview updates.
+ *
+ * @param {ObjectId} conversationId
+ * @param {ObjectId} messageId       — only updates if this matches current lastMessage
+ */
+conversationSchema.statics.markLastMessageDeleted = function (
+  conversationId,
+  messageId,
+) {
+  return this.findOneAndUpdate(
+    { _id: conversationId, "lastMessage.messageId": messageId },
+    { $set: { "lastMessage.isDeleted": true, "lastMessage.text": "" } },
+    { new: true },
+  );
+};
+
+/**
+ * FIX #3 FIX #4 — Unread count management via ConversationMember
+ */
+conversationSchema.statics.incrementUnread = function (conversationId, userId) {
+  return ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $inc: { unreadCount: 1 } },
+    { new: true },
+  );
+};
+
+conversationSchema.statics.resetUnread = function (conversationId, userId) {
+  return ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $set: { unreadCount: 0, lastSeenAt: new Date() } },
+    { new: true },
+  );
+};
+
+/**
+ * Archive / unarchive a conversation for a specific user
+ *
+ * @param {ObjectId}  conversationId
+ * @param {ObjectId}  userId
+ * @param {boolean}   archive
+ */
+conversationSchema.statics.setArchived = function (
+  conversationId,
+  userId,
+  archive,
+) {
+  return ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $set: { isArchived: archive } },
+    { new: true },
+  );
+};
+
+/**
+ * Soft-delete a conversation for a specific user
+ * If ALL members soft-delete a DM, the conversation is deactivated.
+ *
+ * @param {ObjectId} conversationId
+ * @param {ObjectId} userId
+ */
+conversationSchema.statics.softDeleteForUser = async function (
+  conversationId,
+  userId,
+) {
+  await ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $set: { isDeleted: true, deletedAt: new Date() } },
+  );
+
+  // For DMs: if both sides deleted → deactivate conversation
+  const conversation = await this.findById(conversationId)
+    .select("isGroup participants")
+    .lean();
+
+  if (!conversation || conversation.isGroup) return;
+
+  const activeCount = await ConversationMember.countDocuments({
+    conversationId,
+    isDeleted: false,
+  });
+
+  if (activeCount === 0) {
+    await this.findByIdAndUpdate(conversationId, {
+      $set: { isActive: false, disbandedAt: new Date() },
+    });
+  }
+};
+
+/**
+ * FIX #21 — Add participant to group (admin-gated in controller)
+ *
+ * @param {ObjectId} conversationId
+ * @param {ObjectId} newUserId
+ */
+conversationSchema.statics.addParticipant = async function (
+  conversationId,
+  newUserId,
+) {
+  const conversation = await this.findById(conversationId)
+    .select("participants isGroup")
+    .lean();
+
+  if (!conversation) throw new Error("Conversation not found");
+  if (!conversation.isGroup) throw new Error("Cannot add participants to a DM");
+  if (conversation.participants.length >= 500)
+    throw new Error("Group has reached the 500-participant limit");
+
+  const alreadyIn = conversation.participants
+    .map((p) => p.toString())
+    .includes(newUserId.toString());
+  if (alreadyIn) return; // idempotent
+
+  await this.findByIdAndUpdate(conversationId, {
+    $addToSet: { participants: newUserId },
+  });
+
+  // Upsert member record (handles re-add after soft delete)
+  await ConversationMember.findOneAndUpdate(
+    { conversationId, userId: newUserId },
+    { $set: { isDeleted: false, deletedAt: null, unreadCount: 0 } },
+    { upsert: true },
+  );
+};
+
+/**
+ * FIX #21 — Remove participant from group
+ * If the removed user is the admin, auto-transfer to next participant.
+ *
+ * @param {ObjectId} conversationId
+ * @param {ObjectId} userId
+ */
+conversationSchema.statics.removeParticipant = async function (
+  conversationId,
+  userId,
+) {
+  const conversation = await this.findById(conversationId).select(
+    "participants isGroup groupAdmin",
+  );
+
+  if (!conversation) throw new Error("Conversation not found");
+  if (!conversation.isGroup) throw new Error("Cannot remove from a DM");
+
+  await this.findByIdAndUpdate(conversationId, {
+    $pull: { participants: userId },
+  });
+
+  // Soft-delete their member record
+  await ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $set: { isDeleted: true, deletedAt: new Date() } },
+  );
+
+  // FIX #20 — Auto-transfer admin if the admin left
+  if (conversation.groupAdmin?.toString() === userId.toString()) {
+    const remaining = conversation.participants.filter(
+      (p) => p.toString() !== userId.toString(),
+    );
+    if (remaining.length > 0) {
+      await this.findByIdAndUpdate(conversationId, {
+        $set: { groupAdmin: remaining[0] },
+      });
+    } else {
+      // Group is empty — deactivate
+      await this.findByIdAndUpdate(conversationId, {
+        $set: { isActive: false, disbandedAt: new Date() },
+      });
+    }
+  }
+};
+
+/**
+ * FIX #20 — Explicit admin transfer
+ *
+ * @param {ObjectId} conversationId
+ * @param {ObjectId} currentAdminId — must match existing groupAdmin
+ * @param {ObjectId} newAdminId     — must be a participant
+ */
+conversationSchema.statics.transferAdmin = async function (
+  conversationId,
+  currentAdminId,
+  newAdminId,
+) {
+  const conversation = await this.findOne({
+    _id: conversationId,
+    groupAdmin: currentAdminId,
+    participants: newAdminId,
+  })
+    .select("_id")
+    .lean();
+
+  if (!conversation)
+    throw new Error(
+      "Transfer failed: caller is not admin or target is not a participant",
+    );
+
+  return this.findByIdAndUpdate(
+    conversationId,
+    { $set: { groupAdmin: newAdminId } },
+    { new: true },
+  ).lean();
+};
+
+/**
+ * FIX #19 — Explicit disband (admin only, group only)
+ *
+ * @param {ObjectId} conversationId
+ * @param {ObjectId} adminId
+ */
+conversationSchema.statics.disbandGroup = async function (
+  conversationId,
+  adminId,
+) {
+  const updated = await this.findOneAndUpdate(
+    { _id: conversationId, isGroup: true, groupAdmin: adminId },
+    { $set: { isActive: false, disbandedAt: new Date() } },
+    { new: true },
+  ).lean();
+
+  if (!updated) throw new Error("Not found or not authorized to disband");
+  return updated;
+};
+
+/**
+ * Find existing DM between two users (read-only lookup)
+ */
+conversationSchema.statics.findDMBetween = function (userAId, userBId) {
+  const sorted = [userAId, userBId].sort((x, y) =>
+    x.toString().localeCompare(y.toString()),
+  );
+  return this.findOne({
+    isGroup: false,
+    participants: { $all: sorted, $size: 2 },
+    isActive: true,
+  }).lean();
+};
+
 // ─────────────────────────────────────────────
 //  Instance Methods
 // ─────────────────────────────────────────────
 
 /**
- * Safe object for sending to frontend
+ * FIX #12 #23 — toSafeObject strips private fields,
+ * works on Mongoose documents (not lean results).
+ * For lean results, use the enriched objects from getUserConversations.
+ *
+ * @param {ObjectId} currentUserId
+ * @param {number}   [unreadCount=0]  — pass from ConversationMember
  */
-conversationSchema.methods.toSafeObject = function (currentUserId) {
-  const unread = this.unreadCount?.get?.(currentUserId?.toString()) ?? 0;
+conversationSchema.methods.toSafeObject = function (
+  currentUserId,
+  unreadCount = 0,
+) {
   return {
     _id: this._id,
     participants: this.participants,
     lastMessage: this.lastMessage ?? null,
-    unreadCount: unread,
+    unreadCount,                        // FIX #12: passed in, not read via .get()
     isGroup: this.isGroup,
     groupName: this.groupName ?? null,
     groupAvatar: this.groupAvatar?.url ?? null,
@@ -242,8 +814,12 @@ conversationSchema.methods.toSafeObject = function (currentUserId) {
     isActive: this.isActive,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
+    // FIX #23: archivedBy / deletedBy arrays NOT returned — caller passes unreadCount/isArchived
   };
 };
 
-const Conversation = models.Conversation || model("Conversation", conversationSchema);
+// ─────────────────────────────────────────────
+const Conversation =
+  models.Conversation || model("Conversation", conversationSchema);
+
 export default Conversation;

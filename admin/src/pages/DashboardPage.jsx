@@ -488,7 +488,7 @@ export default function DashboardPage() {
                       const badge = TYPE_BADGE[post.type] ?? TYPE_BADGE.text;
                       return (
                         <tr key={post._id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-2.5 pr-3 max-w-[160px]">
+                          <td className="py-2.5 pr-3 max-w-40">
                             <p className="font-medium text-slate-700 truncate">{post.title}</p>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${badge.cls}`}>
                               {badge.label}
@@ -522,22 +522,3 @@ export default function DashboardPage() {
   );
 }
 
-/*
- * ─── API Response Shapes Expected ────────────────────────────────────────────
- *
- * GET /stats → { totalUsers, totalPosts, totalLikes, totalComments, totalViews,
- *                activeToday, newSignups, newSignupsChange, pendingReports, postsChange }
- *
- * GET /user-growth → [{ label:"2025-01", newUsers:120, totalUsers:1500 }, ...]
- *
- * GET /post-growth → [{ label:"2025-01", photo:40, reel:20, text:15, total:75 }, ...]
- *
- * GET /engagement  → [{ label:"2025-05-15", likes:300, comments:80, views:2000 }, ...]
- *
- * GET /top-posts   → [{ _id, title, type:"photo"|"reel"|"text",
- *                       author, views, likes, comments, createdAt }, ...]
- *
- * GET /hourly-activity → [{ hour:"00:00", users:12 }, ... x24 ]
- *
- * ─────────────────────────────────────────────────────────────────────────────
- */

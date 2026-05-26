@@ -2,6 +2,7 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import Conversation from "../../models/conversation.model.js";
+import { ConversationMember } from "../../models/conversation.model.js";
 import Message from "../../models/message.model.js";
 import mongoose from "mongoose";
 
@@ -48,30 +49,29 @@ export const getConversations = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   const skip = (page - 1) * limit;
 
+ const members = await ConversationMember.find({ userId, isDeleted: false })
+    .select("conversationId unreadCount").lean();
+  const convIds = members.map((m) => m.conversationId);
+  const memberMap = {};
+  members.forEach((m) => { memberMap[m.conversationId.toString()] = m; });
+
   const conversations = await Conversation.find({
-    participants: userId,
+    _id: { $in: convIds },
     isActive: true,
-    deletedBy: { $ne: userId },
   })
     .sort({ updatedAt: -1 })
     .skip(skip)
     .limit(limit + 1) // hasMore check ke liye
     .populate("participants", "username fullName avatar isVerifiedBadge accountStatus")
-    .populate("lastMessage")
     .lean();
 
   const hasMore = conversations.length > limit;
   if (hasMore) conversations.pop();
 
   // Unread count — Map field properly extract karo
-  const formatted = conversations.map((conv) => {
-    const raw = conv.unreadCount;
-    const unread =
-      raw instanceof Map
-        ? (raw.get(userId.toString()) ?? 0)
-        : (raw?.[userId.toString()] ?? 0);
-
-    return { ...conv, unreadCount: unread };
+ const formatted = conversations.map((conv) => {
+    const member = memberMap[conv._id.toString()] ?? {};
+    return { ...conv, unreadCount: member.unreadCount ?? 0 };
   });
 
   res.status(200).json({
@@ -107,11 +107,17 @@ export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
   }).populate("participants", "username fullName avatar isVerifiedBadge accountStatus");
 
   // Nahi mila toh create karo
-  if (!conv) {
+ if (!conv) {
+    const sorted = [userId, new mongoose.Types.ObjectId(participantId)]
+      .sort((a, b) => a.toString().localeCompare(b.toString()));
     conv = await Conversation.create({
-      participants: [userId, participantId],
+      participants: sorted,
       isGroup: false,
     });
+    await ConversationMember.insertMany([
+      { conversationId: conv._id, userId: sorted[0] },
+      { conversationId: conv._id, userId: sorted[1] },
+    ]).catch(() => {});
     conv = await conv.populate(
       "participants",
       "username fullName avatar isVerifiedBadge accountStatus",
@@ -128,21 +134,10 @@ export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
 export const getTotalUnreadCount = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  const conversations = await Conversation.find({
-    participants: userId,
-    isActive: true,
-  })
-    .select("unreadCount")
-    .lean();
-
-  const total = conversations.reduce((sum, conv) => {
-    const raw = conv.unreadCount;
-    const count =
-      raw instanceof Map
-        ? (raw.get(userId.toString()) ?? 0)
-        : (raw?.[userId.toString()] ?? 0);
-    return sum + count;
-  }, 0);
+ const members = await ConversationMember.find({ userId, isDeleted: false })
+    .select("unreadCount").lean();
+  const total = members.reduce((sum, m) => sum + (m.unreadCount ?? 0), 0);
+ 
 
   res.status(200).json({ success: true, data: { unreadCount: total } });
 });
@@ -164,27 +159,18 @@ export const markConversationRead = asyncHandler(async (req, res, next) => {
     return next(new AppError("Unauthorized.", 403));
 
   // Unread counter reset
-  await Conversation.findByIdAndUpdate(conversationId, {
-    $set: { [`unreadCount.${userId}`]: 0 },
-  });
+ await ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $set: { unreadCount: 0, lastSeenAt: new Date() } },
+  );
 
   // Saare unread messages — seenBy aur readBy dono update karo (blue tick)
-  await Message.updateMany(
-    {
-      conversation: conversationId,
-      sender: { $ne: userId },
-      isDeleted: false,
-      readBy: { $ne: userId },
-    },
-    {
-      $addToSet: { seenBy: userId, readBy: userId },
-    },
-  );
+  
 
   res.status(200).json({ success: true });
 });
 
-/**
+/**fgetMessages
  * DELETE /api/messages/conversations/:conversationId
  * Conversation soft-delete (sirf apne liye) — doosre ke liye exist karti rahegi.
  */
@@ -200,9 +186,7 @@ export const deleteConversation = asyncHandler(async (req, res, next) => {
   if (!verifyParticipant(conv, userId))
     return next(new AppError("Unauthorized.", 403));
 
-  await Conversation.findByIdAndUpdate(conversationId, {
-    $addToSet: { deletedBy: userId },
-  });
+  await Conversation.softDeleteForUser(conversationId, userId);
 
   res.status(200).json({ success: true });
 });
@@ -255,19 +239,12 @@ export const getMessages = asyncHandler(async (req, res, next) => {
   messages.reverse();
 
   // Background mein read mark karo
-  Message.updateMany(
-    {
-      conversation: conversationId,
-      sender: { $ne: userId },
-      isDeleted: false,
-      readBy: { $ne: userId },
-    },
-    { $addToSet: { seenBy: userId, readBy: userId } },
-  ).catch(() => {}); // fire-and-forget
 
-  await Conversation.findByIdAndUpdate(conversationId, {
-    $set: { [`unreadCount.${userId}`]: 0 },
-  });
+
+  await ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $set: { unreadCount: 0, lastSeenAt: new Date() } },
+  );
 
   res.status(200).json({
     success: true,
@@ -332,15 +309,19 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
   // lastMessage preview + unread increment (doosre participants ke liye)
   await syncLastMessage(conversationId, msg);
 
-  const incUpdate = {};
-  conv.participants.forEach((pid) => {
-    if (pid.toString() !== userId.toString()) {
-      incUpdate[`unreadCount.${pid}`] = 1;
-    }
-  });
+ const recipientIds = conv.participants
+    .map((p) => p.toString())
+    .filter((pid) => pid !== userId.toString());
 
-  if (Object.keys(incUpdate).length) {
-    await Conversation.findByIdAndUpdate(conversationId, { $inc: incUpdate });
+  if (recipientIds.length) {
+    await ConversationMember.bulkWrite(
+      recipientIds.map((pid) => ({
+        updateOne: {
+          filter: { conversationId, userId: pid },
+          update: { $inc: { unreadCount: 1 } },
+        },
+      })),
+    );
   }
 
   res.status(201).json({ success: true, data: msg });

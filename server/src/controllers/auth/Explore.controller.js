@@ -17,7 +17,7 @@ export const getExplorePosts = asyncHandler(async (req, res, next) => {
   const filter = {
     isDeleted:  false,
     isDraft:    false,
-    visibility: "public",
+ visibility: "public",
   };
 
   if (type !== "all") {
@@ -152,7 +152,7 @@ export const getPublicProfile = asyncHandler(async (req, res, next) => {
     posts = await Post.find({
       author:    user._id,
       isDraft:   false,
-      isDeleted: { $ne: true },
+      isDeleted: false,
       visibility: "public",
     })
       .select("type media caption likesCount commentsCount viewsCount commentsDisabled likesHidden createdAt")
