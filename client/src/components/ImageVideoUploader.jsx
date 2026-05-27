@@ -10,13 +10,7 @@ const MAX_IMAGE_SIZE = 10 * 1024 * 1024;  // 10MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_FILES      = 10;
 
-/**
- * Uploads directly to Cloudinary from the browser (unsigned preset).
- * Calls onUploadComplete(mediaItems[]) every time a new file finishes.
- *
- * Each mediaItem shape:
- * { url, publicId, resourceType, width, height, duration, thumbnailUrl, format, bytes, order }
- */
+
 export default function ImageVideoUploader({ onUploadComplete, isDark = false }) {
   const [items,    setItems]    = useState([]); // uploaded items
   const [progress, setProgress] = useState({}); // { filename: 0-100 }

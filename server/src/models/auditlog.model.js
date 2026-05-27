@@ -40,6 +40,12 @@ export const AUDIT_ACTIONS = {
   SETTINGS_PROFILE_UPDATED:       "settings.profile_updated",
   SETTINGS_AVATAR_UPDATED:        "settings.avatar_updated",
   SETTINGS_NOTIFICATIONS_UPDATED: "settings.notifications_updated",
+
+    REPORT_CLAIMED:               "report.claimed",
+  REPORT_RELEASED:              "report.released",
+  REPORT_ESCALATED:             "report.escalated",
+  REPORT_UNDER_REVIEW:          "report.under_review",
+  REPORT_STALE_CLAIMS_RELEASED: "report.stale_claims_released",
 };
 
 export const AUDIT_CATEGORIES = {
@@ -73,6 +79,11 @@ const ACTION_CATEGORY_MAP = {
   [AUDIT_ACTIONS.SETTINGS_PROFILE_UPDATED]:       AUDIT_CATEGORIES.SETTINGS,
   [AUDIT_ACTIONS.SETTINGS_AVATAR_UPDATED]:        AUDIT_CATEGORIES.SETTINGS,
   [AUDIT_ACTIONS.SETTINGS_NOTIFICATIONS_UPDATED]: AUDIT_CATEGORIES.SETTINGS,
+  [AUDIT_ACTIONS.REPORT_CLAIMED]:               AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.REPORT_RELEASED]:              AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.REPORT_ESCALATED]:             AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.REPORT_UNDER_REVIEW]:          AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.REPORT_STALE_CLAIMS_RELEASED]: AUDIT_CATEGORIES.CONTENT,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,7 +142,8 @@ const auditLogSchema = new Schema(
         postId:   String,
         reason:   String,
         duration: Number,       // suspension days
-        status:   String,       // new status after action
+        status:   String, 
+        actionTaken: String,      // new status after action
       },
       default: {},
       _id:     false,

@@ -140,7 +140,7 @@ export default function FollowListModal({ userId, type, onClose, onUnfollow }) {
                         {u.avatar?.url ? (
                           <img src={u.avatar.url} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#d4b896] to-[#c09a6e]">
+                          <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-[#d4b896] to-[#c09a6e]">
                             <span className="text-white font-bold text-sm">
                               {u.fullName?.[0]?.toUpperCase() ?? "?"}
                             </span>

@@ -1,15 +1,3 @@
-/**
- * PostGridItem.jsx — Reusable grid tile
- *
- * Use karo Profile, Explore, Feed — sab jagah.
- * Import:
- *   import PostGridItem from "../components/PostGridItem";
- *
- * Usage:
- *   <PostGridItem post={post} onClick={() => setSelectedPost(post)} />
- *   <PostGridItem post={post} onClick={...} showMenu onDelete={() => dispatch(deletePost(post._id))} />
- *   <PostGridItem post={post} onClick={...} isDraft onEdit={...} onPublish={...} onDelete={...} />
- */
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
@@ -217,7 +205,7 @@ export default function PostGridItem({
                   />
                   <div
                     className="absolute top-8 right-1.5 z-40 bg-white rounded-xl
-                      shadow-xl border border-[#e8d5be] overflow-hidden min-w-[130px]"
+                      shadow-xl border border-[#e8d5be] overflow-hidden min-w-32.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button

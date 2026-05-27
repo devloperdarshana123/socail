@@ -151,7 +151,7 @@ function LogRow({ log, onOpen }) {
       {/* Action */}
       <td className="px-4 py-3 sm:px-6 sm:py-4">
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center shrink-0 ${meta.bg}`}>
+<div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0">
             <Icon size={14} className={`sm:hidden ${meta.color}`} />
             <Icon size={16} className={`hidden sm:block ${meta.color}`} />
           </div>
