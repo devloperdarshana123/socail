@@ -7,7 +7,7 @@ import {
   uploadToCloudinary,
   deleteFromCloudinary,
 } from "../../helper/cloudinaryUpload.js";
-
+import redis from "../../config/redis.js";
 // ─────────────────────────────────────────────
 //  Helper — Multer buffer → Cloudinary
 // ─────────────────────────────────────────────
@@ -224,7 +224,16 @@ if (location?.city || location?.state) {
 //  Map pe real sellers dikhao
 // ─────────────────────────────────────────────
 export const getMapSellers = asyncHandler(async (req, res) => {
-  const { q, category } = req.query;
+  const { q, category } = req.query;  // ← PEHLE destructure karo
+
+  // ── Cache check (60s) ──
+  const cacheKey = `map:sellers:${category || "all"}:${q || ""}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ success: true, users: cached, fromCache: true });
+    }
+  } catch { /* Redis down — DB se serve karo */ }
   const currentUserId = req.user?._id;
 
   // ── Build filter ──────────────────────────────────────────
@@ -273,11 +282,18 @@ if (q) {
     isFollowing: followingSet.has(u._id.toString()),
   }));
 
+// Cache set — 60s TTL
+  try {
+    await redis.set(cacheKey, JSON.stringify(usersWithFollowStatus), { ex: 60 });
+  } catch { /* ignore */ }
+
   return res.status(200).json({
     success: true,
     users: usersWithFollowStatus,
   });
 });
+
+// ── POST /api/v2/user/block/:userId ──
 
 // ─────────────────────────────────────────────
 //  POST /api/v2/user/block/:userId
@@ -413,7 +429,7 @@ export const submitReport = asyncHandler(async (req, res, next) => {
     return next(new AppError(`You have already reported this ${targetModel.toLowerCase()}.`, 409));
   }
 
-  res.status(201).json({
+ res.status(201).json({
     success: true,
     message: "Report submitted. Our team will review it.",
   });

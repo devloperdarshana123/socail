@@ -10,6 +10,14 @@ import PostView from "../../models/postView.model.js";
 import Follow from "../../models/follow.model.js";
 import Saved from "../../models/saved.model.js";
 import User from "../../models/user.model.js";
+
+
+import {
+  getPostFeedCache,
+  setPostFeedCache,
+  invalidatePostFeedCache,
+  isPostAlreadyViewed,
+} from "../../utils/postCache.js";
 const sanitizeMediaItem = (item, index) => ({
   url:          String(item.url          || ""),
   publicId:     String(item.publicId     || ""),
@@ -110,6 +118,9 @@ export const createPost = asyncHandler(async (req, res, next) => {
 if (!newPost.isDraft) {
   await User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } });
 }
+if (!newPost.isDraft) {
+    await invalidatePostFeedCache(authorId.toString());
+  }
   logger.info("Post created", { postId: newPost._id, author: authorId, type });
 
   return res.status(201).json({
@@ -145,6 +156,12 @@ export const getPostInteraction = asyncHandler(async (req, res) => {
 //  GET /api/v2/posts/feed
 // ─────────────────────────────────────────────
 export const getFeedPosts = asyncHandler(async (req, res) => {
+  if (!req.query.beforeId) {
+    const cached = await getPostFeedCache(req.user._id.toString());
+    if (cached) {
+      return res.status(200).json({ ...cached, fromCache: true });
+    }
+  }
   const { beforeId } = req.query;
   const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const userId       = req.user._id;
@@ -154,7 +171,9 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
 
   const { items, hasMore, nextCursor } = await Post.getFeedPosts(authorIds, { beforeId: beforeId || null, limit });
 
-  return res.status(200).json({ success: true, posts: items, hasMore, nextCursor });
+  const responseData = { success: true, posts: items, hasMore, nextCursor };
+  if (!beforeId) await setPostFeedCache(userId.toString(), responseData);
+  return res.status(200).json(responseData);
 });
 // ─────────────────────────────────────────────
 //  GET USER POSTS (Profile Grid)
@@ -205,6 +224,8 @@ await User.findOneAndUpdate(
   { _id: authorId, postsCount: { $gt: 0 } },
   { $inc: { postsCount: -1 } }
 );
+
+await invalidatePostFeedCache(authorId.toString());
   logger.info("Post deleted", { postId, author: authorId });
 
   return res.status(200).json({ success: true, message: "Post deleted successfully" });
@@ -228,6 +249,11 @@ export const recordView = asyncHandler(async (req, res) => {
   // ── 2. Owner ka view count nahi ──
   if (post.author.toString() === userId.toString()) {
     return res.status(200).json({ success: true, skipped: true, reason: "owner" });
+  }
+  // Redis dedup — 24h mein ek baar hi DB write
+  const alreadySeen = await isPostAlreadyViewed(postId, userId.toString());
+  if (alreadySeen) {
+    return res.status(200).json({ success: true, recorded: false });
   }
 
   // ── 3. Valid source check ──
@@ -299,6 +325,7 @@ export const publishDraft = asyncHandler(async (req, res) => {
  const populated = await Post.getPostById(post._id, authorId, false);
 
  await User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } });
+ await invalidatePostFeedCache(authorId.toString());
   logger.info("Draft published", { postId, author: authorId });
 
   return res.status(200).json({

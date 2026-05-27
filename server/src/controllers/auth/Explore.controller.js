@@ -6,6 +6,7 @@ import AppError from "../../utils/AppError.js";
 import Post from "../../models/post.model.js";
 import User from "../../models/user.model.js";
 import Follow from "../../models/follow.model.js";
+import redis from "../../config/redis.js";
 // ─────────────────────────────────────────────
 //  GET /api/v2/explore/posts
 // ─────────────────────────────────────────────
@@ -13,7 +14,15 @@ export const getExplorePosts = asyncHandler(async (req, res, next) => {
   const limit  = Math.min(parseInt(req.query.limit) || 24, 50);
   const cursor = req.query.cursor || null;
   const type   = req.query.type   || "all";
-
+// Cache — sirf first page
+  if (!cursor && type === "all") {
+    try {
+      const cached = await redis.get("explore:posts:first");
+      if (cached) {
+        return res.status(200).json({ success: true, message: "Explore posts fetched successfully.", data: cached, fromCache: true });
+      }
+    } catch { /* ignore */ }
+  }
   const filter = {
     isDeleted:  false,
     isDraft:    false,
@@ -52,7 +61,11 @@ export const getExplorePosts = asyncHandler(async (req, res, next) => {
   const nextCursor = hasMore
     ? finalPosts[finalPosts.length - 1]._id.toString()
     : null;
-
+if (!cursor && type === "all") {
+    try {
+      await redis.set("explore:posts:first", JSON.stringify({ posts: finalPosts, nextCursor, hasMore, count: finalPosts.length }), { ex: 60 });
+    } catch { /* ignore */ }
+  }
   res.status(200).json({
     success: true,
     message: "Explore posts fetched successfully.",
@@ -133,6 +146,14 @@ if (q.length > 100) return next(new AppError("Search query too long.", 400));
 export const getPublicProfile = asyncHandler(async (req, res, next) => {
   const { username } = req.params;
 
+
+  const profileCacheKey = `profile:${username}`;
+  try {
+    const cached = await redis.get(profileCacheKey);
+    if (cached) {
+      return res.status(200).json({ success: true, ...cached, fromCache: true });
+    }
+  } catch { /* ignore */ }
   const user = await User.findOne({ username, accountStatus: "active" })
     .select("fullName username avatar coverPhoto bio designation businessCategory location followersCount followingCount isVerifiedBadge isPrivate");
 
@@ -161,6 +182,10 @@ export const getPublicProfile = asyncHandler(async (req, res, next) => {
       .lean();
   }
 
+  try {
+    const cacheData = { user: { ...user.toObject(), isFollowing, isPending, postsCount: posts.length }, posts };
+    await redis.set(profileCacheKey, JSON.stringify(cacheData), { ex: 30 });
+  } catch { /* ignore */ }
   return res.status(200).json({
     success:   true,
     user:      { ...user.toObject(), isFollowing, isPending, postsCount: posts.length },

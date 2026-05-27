@@ -1,9 +1,8 @@
 
-// src/layouts/AdminLayout.jsx
 import { useState, useEffect, useRef } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { adminLogout } from "../lib/redux/AdminauthSlice";
+import { adminLogout, fetchAdminMe, forceLogout } from "../lib/redux/AdminauthSlice";
 import PageLoader from "../components/PageLoader";
 const NAV_ITEMS = [
   {
@@ -71,13 +70,43 @@ const NAV_ITEMS = [
   },
 ];
 
+
+
 function AdminAvatar({ admin }) {
-  const name = admin?.username || admin?.email || "A";
-  const initials = name.slice(0, 2).toUpperCase();
+  const [imgError, setImgError] = useState(false);
+
+  const name = admin?.fullName || admin?.username || admin?.email || "Admin";
+  const initials = name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  // Priority 1: Real Cloudinary avatar
+  // Priority 2: UI-Avatars API (initials se auto-generate)
+  // Priority 3: Local initials div (fallback)
+  const realUrl = admin?.avatar?.url || admin?.avatarUrl || null;
+  const uiAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6d28d9&color=fff&size=64&bold=true&format=svg`;
+
+  if (realUrl && !imgError) {
+    return (
+      <img
+        src={realUrl}
+        alt={initials}
+        onError={() => setImgError(true)}
+        className="w-8 h-8 rounded-xl object-cover shrink-0"
+      />
+    );
+  }
+
   return (
-    <div className="w-8 h-8 rounded-xl bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-md shadow-violet-200">
-      {initials}
-    </div>
+    <img
+      src={uiAvatarUrl}
+      alt={initials}
+      onError={(e) => { e.currentTarget.style.display = "none"; }}
+      className="w-8 h-8 rounded-xl object-cover shrink-0"
+    />
   );
 }
 
@@ -116,7 +145,8 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
       ref={sidebarRef}
       className={`
         flex flex-col h-full
-        bg-white border-r border-slate-200
+        bg-white
+
         ${isMobile
           ? "w-64"
           : `fixed left-0 top-0 z-30 transition-all duration-300 ease-in-out ${collapsed ? "w-17" : "w-55"}`
@@ -126,7 +156,7 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
       {/* Logo */}
       <div className="flex items-center h-15 px-4 border-b border-slate-100 shrink-0">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md shadow-violet-200">
+          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
           </div>
           {(!collapsed || isMobile) && (
             <div className="overflow-hidden">
@@ -178,19 +208,19 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
                 group relative flex items-center gap-3 rounded-xl px-2.5 py-2.5
                 transition-all duration-150 select-none
                 ${isActive
-                  ? "bg-violet-50 text-violet-700"
+                  ? "bg-blue-950/10 text-blue-900"
                   : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                 }
               `}
             >
               {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-violet-500 rounded-r-full" />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-900 rounded-r-full" />
               )}
-              <span className={`w-5 h-5 shrink-0 transition-colors ${isActive ? "text-violet-600" : "text-slate-400 group-hover:text-slate-600"}`}>
+              <span className={`w-5 h-5 shrink-0 transition-colors ${isActive ? "text-blue-900" : "text-slate-400 group-hover:text-slate-600"}`}>
                 {item.icon}
               </span>
               {(!collapsed || isMobile) && (
-                <span className={`text-[13px] font-semibold tracking-tight truncate ${isActive ? "text-violet-700" : ""}`}>
+                <span className={`text-[13px] font-semibold tracking-tight truncate ${isActive ? "text-blue-900" : ""}`}>
                   {item.label}
                 </span>
               )}
@@ -304,6 +334,25 @@ export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+    const dispatch = useDispatch();   // ← ADD
+  const navigate = useNavigate(); 
+
+
+  useEffect(() => {
+    const onTokenRefreshed = () => {
+      dispatch(fetchAdminMe());
+    };
+    const onLogout = () => {
+      dispatch(forceLogout());
+      navigate("/", { replace: true });
+    };
+    window.addEventListener("admin:tokenRefreshed", onTokenRefreshed);
+    window.addEventListener("admin:logout", onLogout);
+    return () => {
+      window.removeEventListener("admin:tokenRefreshed", onTokenRefreshed);
+      window.removeEventListener("admin:logout", onLogout);
+    };
+  }, [dispatch, navigate]);
   useEffect(() => {
     const saved = localStorage.getItem("adminSidebarCollapsed");
     if (saved === "true") setCollapsed(true);
@@ -343,7 +392,7 @@ export default function AdminLayout() {
           </svg>
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-sm shadow-violet-200">
+          <div className="w-7 h-7 rounded-lg bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
             <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
             </svg>

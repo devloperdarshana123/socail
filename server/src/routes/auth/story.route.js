@@ -8,7 +8,10 @@ import {
   addToHighlight, deleteHighlight,
   toggleStoryLike,createTextStory ,removeSnapFromHighlight
 } from "../../controllers/auth/story.controller.js";
-
+import {
+  storyViewLimiter,
+  storyReactLimiter,
+} from "../../middlewares/rateLimiter.js";
 const storyRouter = express.Router();
 storyRouter.use(isAuthenticated, isActive);
 
@@ -25,8 +28,8 @@ storyRouter.delete("/highlights/:id",                deleteHighlight);
 storyRouter.post("/text",                            createTextStory);
 
 // Dynamic :id routes baad mein
-storyRouter.post("/:id/view",           viewStory);
-storyRouter.post("/:id/react",          reactToStory);
+storyRouter.post("/:id/view",    storyViewLimiter,      viewStory);
+storyRouter.post("/:id/react",   storyReactLimiter,       reactToStory);
 storyRouter.post("/:id/like",           toggleStoryLike);
 storyRouter.delete("/:id",              deleteStory);
 storyRouter.get("/:id/viewers",         getStoryViewers);

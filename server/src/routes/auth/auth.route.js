@@ -11,6 +11,11 @@ import {
   resetPassword,
 } from "../../controllers/auth/auth.controller.js";
 import { isAuthenticated } from "../../middlewares/auth.js";
+import {
+  loginLimiter,
+  otpResendLimiter,
+  forgotPasswordLimiter,
+} from "../../middlewares/rateLimiter.js";
 
 const router = express.Router();
 
@@ -21,9 +26,9 @@ const router = express.Router();
 
 router.post("/register", register);
 router.post("/verify-otp", verifyOtp);
-router.post("/resend-otp", resendOtp);
-router.post("/login", login);
-router.post("/forgot-password", forgotPassword);
+router.post("/resend-otp", otpResendLimiter, resendOtp);
+router.post("/login",loginLimiter, login);
+router.post("/forgot-password",forgotPasswordLimiter, forgotPassword);
 router.post("/refresh-token", refreshToken);
 
 // ─────────────────────────────────────────────

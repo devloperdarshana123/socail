@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { ENV } from "../config/env.js";
+import { nanoid } from "nanoid";
 
 const { Schema, model, models } = mongoose;
 
@@ -233,10 +234,7 @@ const userSchema = new Schema(
 
     isOnboardingComplete: { type: Boolean, default: false },
 
-    // FIX #13 — Number enum is fragile; custom validator is reliable
-    // 1 = registered, waiting for email verify
-    // 2 = email verified, waiting for username
-    // 3 = complete
+   
     onboardingStep: {
       type:    Number,
       default: 1,
@@ -392,59 +390,74 @@ userSchema.methods.isPasswordCorrect = async function (plainPassword) {
   return bcrypt.compare(plainPassword, this.password);
 };
 
-/**
- * Generate short-lived Access Token.
- * FIX #5 — payload contains only _id + role (no PII that can go stale or leak in logs)
- * Controllers must fetch fresh user data from DB/cache — never trust token payload for PII.
- */
+
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
-    { _id: this._id, role: this.role },
+    { _id: this._id, 
+      role: this.role,
+       jti : nanoid(21), 
+     },
    ENV.ACCESS_TOKEN_SECRET,
 { expiresIn: ENV.ACCESS_TOKEN_EXPIRY },
   );
 };
 
 
+
 userSchema.methods.generateRefreshToken = async function (
   deviceInfo = "unknown",
   ipAddress  = null,
 ) {
-  try {
-    const rawToken = jwt.sign(
-      { _id: this._id },
+  const rawToken = jwt.sign(
+    { _id: this._id },
     ENV.REFRESH_TOKEN_SECRET,
-{ expiresIn: ENV.REFRESH_TOKEN_EXPIRY },
-    );
+    { expiresIn: ENV.REFRESH_TOKEN_EXPIRY },
+  );
 
-    const tokenHash = hashToken(rawToken);
-    const now       = new Date();
-    const expiresAt = new Date(now.getTime() + REFRESH_TOKEN_EXPIRY_MS);
+  const tokenHash = hashToken(rawToken);
+  const now       = new Date();
+  const expiresAt = new Date(now.getTime() + REFRESH_TOKEN_EXPIRY_MS);
 
-    await this.constructor.findByIdAndUpdate(this._id, {
-      $pull: { refreshTokens: { expiresAt: { $lte: now } } },
-    });
+  const newEntry = {
+    tokenHash,
+    deviceInfo,
+    ipAddress,
+    isTrusted:  false,
+    lastUsedAt: now,
+    createdAt:  now,
+    expiresAt,
+  };
 
-    await this.constructor.findByIdAndUpdate(this._id, {
+  // Step 1 — expired tokens hatao (separate call — MongoDB restriction)
+  await this.constructor.updateOne(
+    { _id: this._id },
+    { $pull: { refreshTokens: { expiresAt: { $lte: now } } } },
+  );
+
+  // Step 2 — naya token push karo with device limit
+  const result = await this.constructor.updateOne(
+    { _id: this._id },
+    {
       $push: {
         refreshTokens: {
-          $each : [{ tokenHash, deviceInfo, ipAddress, isTrusted: false, lastUsedAt: now, createdAt: now, expiresAt }],
-          $slice: -MAX_DEVICES,
+          $each:  [newEntry],
+          $slice: -MAX_DEVICES, // sirf last MAX_DEVICES rakho
         },
       },
-    });
+    },
+  );
 
-    return rawToken;
-
-  } catch (err) {
-    console.error("=== generateRefreshToken CRASH ===", err.message, err.stack);
-    throw err;
+  if (result.matchedCount === 0) {
+    throw new Error("User not found during token generation");
   }
+
+  return rawToken;
 };
-/**
- * Update lastUsedAt on token use.
- * FIX #1 — atomic positional update; no double-load
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  removeRefreshToken — unchanged, already atomic and correct
+// ─────────────────────────────────────────────────────────────────────────────
+
+
 userSchema.methods.touchRefreshToken = function (rawToken) {
   const tokenHash = hashToken(rawToken);
   return this.constructor.findOneAndUpdate(
@@ -453,10 +466,7 @@ userSchema.methods.touchRefreshToken = function (rawToken) {
   );
 };
 
-/**
- * Remove a single refresh token (logout from one device).
- * FIX #1 — atomic $pull; no double-load
- */
+
 userSchema.methods.removeRefreshToken = function (rawToken) {
   const tokenHash = hashToken(rawToken);
   return this.constructor.findByIdAndUpdate(this._id, {
@@ -486,12 +496,6 @@ userSchema.methods.removeOtherRefreshTokens = function (currentRawToken) {
 };
 
 
-
-/**
- * Safe public object for API responses.
- * FIX #4 — blockedUsers excluded (privacy: blocked user must not know they're blocked)
- * FIX #7 — suspensionHistory excluded (admin-only via select("+suspensionHistory"))
- */
 userSchema.methods.toSafeObject = function () {
   return {
     _id:                  this._id,

@@ -7,7 +7,7 @@ import logger from "../../config/logger.js";
 import {sendMail} from "../../utils/sendMail.js";
 import { accountSuspended } from "../../mail/templates/accountSuspended.js";
 import mongoose from "mongoose";
-
+import redis from "../../config/redis.js";
 // ─────────────────────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────────────────────
@@ -359,7 +359,9 @@ export const updateUserStatus = asyncHandler(async (req, res, next) => {
     });
   }
 
-  await target.save({ validateBeforeSave: false });
+await target.save({ validateBeforeSave: false });
+
+  try { await redis.del("admin:stats"); } catch { /* ignore */ }
 
   if ((status === "suspended" || status === "banned") && target.email) {
     try {
@@ -504,6 +506,12 @@ export const toggleVerifiedBadge = asyncHandler(async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 
 export const getDashboardStats = asyncHandler(async (req, res, next) => {
+  try {
+    const cached = await redis.get("admin:stats");
+    if (cached) {
+      return res.status(200).json({ success: true, data: cached, fromCache: true });
+    }
+  } catch { /* ignore */ }
   const [
     totalUsers,
     activeUsers,
@@ -524,15 +532,17 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     }),
   ]);
 
-  return res.status(200).json({
-    success: true,
-    data: {
-      users: { total: totalUsers, active: activeUsers, suspended: suspendedUsers, banned: bannedUsers },
-      posts: { total: totalPosts },
-      reports: { pending: pendingReports },
-      today: { newUsers: newUsersToday },
-    },
-  });
+ const statsData = {
+    users: { total: totalUsers, active: activeUsers, suspended: suspendedUsers, banned: bannedUsers },
+    posts: { total: totalPosts },
+    reports: { pending: pendingReports },
+    today: { newUsers: newUsersToday },
+  };
+  try {
+    await redis.set("admin:stats", JSON.stringify(statsData), { ex: 300 });
+  } catch { /* ignore */ }
+
+  return res.status(200).json({ success: true, data: statsData });
 });
 
 

@@ -4,6 +4,7 @@ import "dotenv/config";
 
 import app from "./app.js";
 import connectDatabase from "./config/db.js";
+import { connectRedis } from "./config/redis.js";
 import logger from "./config/logger.js";
 
 process.on("uncaughtException", (err) => {
@@ -15,6 +16,7 @@ process.on("uncaughtException", (err) => {
 });
 
 connectDatabase();
+connectRedis();
 
 const server = app.listen(process.env.PORT, () => {
   logger.info(`Server is running on http://localhost:${process.env.PORT}`);

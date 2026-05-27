@@ -7,6 +7,7 @@ import logger from "../../config/logger.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { ENV } from "../../config/env.js";
+import { blacklistToken } from "../../utils/tokenBlacklist.js";
 
 // ─────────────────────────────────────────────
 //  Internal helper — must match User model's hashToken
@@ -62,6 +63,17 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
 export const adminLogout = asyncHandler(async (req, res, next) => {
   const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
 
+  // Access token blacklist karo
+  const accessToken = req.cookies?.[COOKIE_ACCESS];
+  if (accessToken) {
+    try {
+      const decoded = jwt.decode(accessToken);
+      if (decoded?.jti && decoded?.exp) {
+        await blacklistToken(decoded.jti, decoded.exp);
+      }
+    } catch { /* ignore */ }
+  }
+
   if (incomingRefreshToken) {
     const userWithTokens = await User.findById(req.user._id).select("+refreshTokens");
     if (userWithTokens) {
@@ -74,85 +86,123 @@ export const adminLogout = asyncHandler(async (req, res, next) => {
   return clearAuthCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
 });
 
-// ═════════════════════════════════════════════
-//  POST /admin/auth/refresh-token
-// ═════════════════════════════════════════════
 
+
+
+
+  // Access token blacklist karo
 export const adminRefreshToken = asyncHandler(async (req, res, next) => {
   const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
-
+  // ── Step 1: Cookie present? ──────────────────────────────────────────────
   if (!incomingRefreshToken) {
+    logger.warn("Admin refresh: no refresh token cookie", { ip: req.ip });
     return next(new AppError("Refresh token missing. Please log in again.", 401));
   }
 
-  // Step 1 — verify JWT signature + expiry
+  // ── Step 2: JWT signature + expiry valid? ────────────────────────────────
   let decoded;
   try {
-    decoded = jwt.verify(incomingRefreshToken, ENV.REFRESH_TOKEN_SECRET
-);
-  } catch {
+    decoded = jwt.verify(incomingRefreshToken, ENV.REFRESH_TOKEN_SECRET);
+  } catch (err) {
+    logger.warn("Admin refresh: JWT verify failed", {
+      reason: err.message,
+      ip: req.ip,
+    });
     return next(new AppError("Invalid or expired refresh token. Please log in again.", 401));
   }
 
-  // Step 2 — fetch user with refreshTokens
+  // ── Step 3: User exists in DB? ───────────────────────────────────────────
   const user = await User.findById(decoded._id).select("+refreshTokens");
-  if (!user) return next(new AppError("User not found.", 401));
+  if (!user) {
+    logger.warn("Admin refresh: user not found", { userId: decoded._id });
+    return next(new AppError("User not found.", 401));
+  }
 
-  // Step 3 — re-verify role from DB (never trust token payload for authorization)
+  // ── Step 4: Still an admin? (never trust token payload for authz) ────────
   if (user.role !== "super_admin") {
+    logger.warn("Admin refresh: role downgraded", {
+      userId: user._id,
+      role: user.role,
+    });
     return next(new AppError("Access denied.", 403));
   }
 
-  // Step 4 — look up by tokenHash (model stores hash, not raw token)
-  const incomingHash = hashToken(incomingRefreshToken);
+  // ── Step 5: Token hash in DB and not expired? ────────────────────────────
+  const incomingHash = crypto.createHash("sha256").update(incomingRefreshToken).digest("hex");
   const now          = new Date();
   const storedToken  = user.refreshTokens.find(
     (t) => t.tokenHash === incomingHash && t.expiresAt > now,
   );
 
   if (!storedToken) {
-    logger.warn("Admin refresh token reuse or expired", { userId: user._id });
+    logger.warn("Admin refresh: token hash not found or expired", {
+      userId: user._id,
+      // Log first 8 chars of hash for debugging (never log full token)
+      hashPrefix: incomingHash.slice(0, 8),
+      totalTokensInDB: user.refreshTokens.length,
+    });
     return next(new AppError("Session invalid. Please log in again.", 401));
   }
 
-  // Step 5 — rotate tokens
+  // ── Step 6: Rotate tokens (atomic — new method handles cleanup + push) ───
   await user.removeRefreshToken(incomingRefreshToken);
+  // Purana access token blacklist karo
+  const oldAccessToken = req.cookies?.[COOKIE_ACCESS];
+  if (oldAccessToken) {
+    try {
+      const oldDecoded = jwt.decode(oldAccessToken);
+      if (oldDecoded?.jti && oldDecoded?.exp) {
+        await blacklistToken(oldDecoded.jti, oldDecoded.exp);
+      }
+    } catch { /* ignore */ }
+  }
+
   const newAccessToken  = user.generateAccessToken();
   const newRefreshToken = await user.generateRefreshToken(
     storedToken.deviceInfo,
     storedToken.ipAddress,
   );
 
+  // ── Step 7: Set new cookies ──────────────────────────────────────────────
   const isProduction = process.env.NODE_ENV === "production";
 
-  const accessTokenOptions = {
-    maxAge  : 15 * 60 * 1000,
+  const baseCookieOptions = {
     httpOnly: true,
     path    : "/",
     sameSite: isProduction ? "none" : "lax",
     secure  : isProduction,
-  };
-  const refreshTokenOptions = {
-    maxAge  : 7 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    path    : "/",
-    sameSite: isProduction ? "none" : "lax",
-    secure  : isProduction,
+    // In development: NO domain field — browser handles localhost correctly
+    // In production: set domain explicitly e.g. domain: ".yourdomain.com"
+    ...(isProduction && process.env.COOKIE_DOMAIN
+      ? { domain: process.env.COOKIE_DOMAIN }
+      : {}),
   };
 
-  logger.info("Admin access token refreshed", { userId: user._id });
+  logger.info("Admin token refreshed", {
+    userId:     user._id,
+    deviceInfo: storedToken.deviceInfo,
+  });
 
   return res
     .status(200)
-    .cookie(COOKIE_ACCESS,  newAccessToken,  accessTokenOptions)
-    .cookie(COOKIE_REFRESH, newRefreshToken, refreshTokenOptions)
+    .cookie(COOKIE_ACCESS, newAccessToken, {
+      ...baseCookieOptions,
+      maxAge: 15 * 60 * 1000, // 15 min
+    })
+    .cookie(COOKIE_REFRESH, newRefreshToken, {
+      ...baseCookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    })
     .json({
       success: true,
       message: "Token refreshed successfully",
-      ...(process.env.NODE_ENV === "development" && { accessToken: newAccessToken }),
+      // Only expose token in response body during local development
+      // Frontend does NOT need this — it reads from cookie automatically
+      ...(process.env.NODE_ENV === "development" && {
+        _debug: { accessToken: newAccessToken },
+      }),
     });
 });
-
 // ═════════════════════════════════════════════
 //  GET /admin/auth/me  (protected)
 // ═════════════════════════════════════════════

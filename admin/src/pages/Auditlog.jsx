@@ -137,6 +137,24 @@ function StatCard({ icon: Icon, label, value, accent, loading }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Log Row
 // ─────────────────────────────────────────────────────────────────────────────
+function AdminAvatar({ name, avatarUrl }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = (name ?? "A")
+    .split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  const uiAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name ?? "Admin")}&background=1e3a5f&color=fff&size=64&bold=true&format=svg`;
+  if (avatarUrl && !imgError) {
+    return (
+      <img src={avatarUrl} alt={initials}
+        onError={() => setImgError(true)}
+        className="w-7 h-7 rounded-full object-cover shrink-0 ring-1 ring-white" />
+    );
+  }
+  return (
+    <img src={uiAvatar} alt={initials}
+      onError={() => setImgError(true)}
+      className="w-7 h-7 rounded-full object-cover shrink-0" />
+  );
+}
 
 function LogRow({ log, onOpen }) {
   const meta = getActionMeta(log.action);
@@ -169,11 +187,10 @@ function LogRow({ log, onOpen }) {
       {/* Admin */}
       <td className="px-4 py-3 sm:px-6 sm:py-4 hidden sm:table-cell">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-[#1e3a5f] flex items-center justify-center shrink-0">
-            <span className="text-[10px] text-white font-bold">
-              {log.performedByName?.[0]?.toUpperCase() ?? "A"}
-            </span>
-          </div>
+          <AdminAvatar
+  name={log.performedByName}
+  avatarUrl={log.performedBy?.avatar?.url}
+/>
           <div>
             <p className="text-xs font-semibold text-slate-700 leading-tight">{log.performedByName ?? "Unknown"}</p>
             {log.performedBy?.username && (

@@ -9,6 +9,7 @@ import logger from "../../config/logger.js";
 import { sendToken, clearAuthCookies, COOKIE_ACCESS, COOKIE_REFRESH } from "../../utils/sendToken.js";
 import { OTP_PURPOSE } from "../../utils/otpUtils.js";
 import { ENV } from "../../config/env.js";
+import { blacklistToken } from "../../utils/tokenBlacklist.js";
 import {
   generateUsernameSuggestions,
   isValidUsername,
@@ -238,11 +239,41 @@ export const login = asyncHandler(async (req, res, next) => {
 //  POST /auth/logout
 // ═════════════════════════════════════════════
 
+// export const logout = asyncHandler(async (req, res, next) => {
+//   const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
+
+//   if (incomingRefreshToken) {
+//     // User model stores tokenHash, not raw token — removeRefreshToken hashes internally
+//     const userWithTokens = await User.findById(req.user._id).select("+refreshTokens");
+//     if (userWithTokens) {
+//       await userWithTokens.removeRefreshToken(incomingRefreshToken);
+//     }
+//   }
+
+//   logger.info("User logged out", { userId: req.user._id });
+//   return clearAuthCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
+// });
+
+
+
 export const logout = asyncHandler(async (req, res, next) => {
   const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
+  const accessToken          = req.cookies?.[COOKIE_ACCESS];
 
+  // Step 1: Access token blacklist karo — logout ke baad use na ho sake
+  if (accessToken) {
+    try {
+      const decoded = jwt.decode(accessToken);
+      if (decoded?.jti && decoded?.exp) {
+        await blacklistToken(decoded.jti, decoded.exp);
+      }
+    } catch {
+      // malformed token — ignore, logout proceed karo
+    }
+  }
+
+  // Step 2: Refresh token DB se hatao (existing logic same)
   if (incomingRefreshToken) {
-    // User model stores tokenHash, not raw token — removeRefreshToken hashes internally
     const userWithTokens = await User.findById(req.user._id).select("+refreshTokens");
     if (userWithTokens) {
       await userWithTokens.removeRefreshToken(incomingRefreshToken);
@@ -252,7 +283,6 @@ export const logout = asyncHandler(async (req, res, next) => {
   logger.info("User logged out", { userId: req.user._id });
   return clearAuthCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
 });
-
 // ═════════════════════════════════════════════
 //  POST /auth/refresh-token
 // ═════════════════════════════════════════════
@@ -290,7 +320,19 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
 
   // Step 4 — rotate: remove old, issue new
   await user.removeRefreshToken(incomingRefreshToken);
-  const newAccessToken  = user.generateAccessToken();
+ 
+
+  const oldAccessToken = req.cookies?.[COOKIE_ACCESS];
+if (oldAccessToken) {
+  try {
+    const oldDecoded = jwt.decode(oldAccessToken);
+    if (oldDecoded?.jti && oldDecoded?.exp) {
+      await blacklistToken(oldDecoded.jti, oldDecoded.exp);
+    }
+  } catch { /* ignore */ }
+}
+
+ const newAccessToken  = user.generateAccessToken();
   const newRefreshToken = await user.generateRefreshToken(
     storedToken.deviceInfo,
     storedToken.ipAddress,

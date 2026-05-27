@@ -1,6 +1,7 @@
 import express from "express";
 import { isAuthenticated, isActive} from "../../middlewares/auth.js";
 import { uploadSingle } from "../../middlewares/Multer.middleware.js";
+import { generalLimiter } from "../../middlewares/rateLimiter.js";
 import {
   updateAvatar,
   updateCoverPhoto,
@@ -36,21 +37,21 @@ userRouter
 // ─────────────────────────────────────────────
 //  Profile Update
 // ─────────────────────────────────────────────
-userRouter.patch("/profile", updateProfile);
+userRouter.patch("/profile",generalLimiter, updateProfile);
 userRouter
   .route("/cover-photo")
   .patch(uploadSingle("coverPhoto"), updateCoverPhoto)  // upload/replace
   .delete(removeCoverPhoto);                             // remove
 userRouter
   .route("/block/:userId")
-  .post(blockUser)    // block karo
-  .delete(unblockUser); // unblock karo
+  .post(generalLimiter,blockUser)    // block karo
+  .delete(generalLimiter,unblockUser); // unblock karo
 
 
 
 userRouter.get("/blocked", getBlockedUsers); // blocked list
 userRouter.get("/block-status/:userId", getBlockStatus);
-userRouter.post("/report", submitReport);
+userRouter.post("/report",generalLimiter, submitReport);
 
 // ─────────────────────────────────────────────
 //  Map Sellers Route

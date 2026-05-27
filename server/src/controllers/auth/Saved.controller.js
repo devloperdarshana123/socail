@@ -5,7 +5,7 @@ import Saved from "../../models/saved.model.js";
 import Post from "../../models/post.model.js";
 import Follow from "../../models/follow.model.js";
 import logger from "../../config/logger.js";
-
+import redis from "../../config/redis.js";
 // ─────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────
@@ -69,6 +69,8 @@ export const toggleSave = asyncHandler(async (req, res) => {
 
   logger.info(`User ${userId} ${saved ? "saved" : "unsaved"} post ${postId}`);
 
+
+  try { await redis.del(`saved:${userId}`); } catch { /* ignore */ }
   res.status(200).json({ success: true, saved, savedCount });
 });
 
@@ -82,6 +84,16 @@ export const getSavedPosts = asyncHandler(async (req, res) => {
 
   // Model accepts: { limit, beforeId }
   // beforeId = last _id from previous page (cursor)
+
+
+  if (!req.query.beforeId) {
+    try {
+      const cached = await redis.get(`saved:${userId}`);
+      if (cached) {
+        return res.status(200).json({ success: true, data: cached.data, pagination: cached.pagination, fromCache: true });
+      }
+    } catch { /* ignore */ }
+  }
   const beforeId = req.query.beforeId || null;
 
   // Model returns: { items, hasMore, nextCursor }
@@ -98,6 +110,12 @@ export const getSavedPosts = asyncHandler(async (req, res) => {
       post:    s.post,
     }));
 
+
+    if (!beforeId) {
+    try {
+      await redis.set(`saved:${userId}`, JSON.stringify({ data, pagination: { limit, hasMore, nextCursor } }), { ex: 30 });
+    } catch { /* ignore */ }
+  }
   res.status(200).json({
     success: true,
     data,
