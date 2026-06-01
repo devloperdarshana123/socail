@@ -10,6 +10,7 @@ import {
   fetchConversations, fetchMessages, setActiveConversation,
   openOrCreateConversation, selectConversations, selectActiveConvId,
   selectOnlineUsers, selectLoadingConvs,
+  addNewConversation, updateConversation,
 } from "../lib/redux/chatSlice";
 import {
   fetchFollowing, selectFollowing, selectLoadingFollowing,
@@ -361,35 +362,30 @@ export default function Messages() {
     setTimeout(() => setToastMsg(null), duration);
   };
 
-  useEffect(() => { dispatch(fetchConversations()); }, [dispatch]);
+useEffect(() => { 
+  if (!myId) return;
+  dispatch(fetchConversations()); 
+}, [myId, dispatch]);
 
-  useEffect(() => {
-    if (!openUserId) return;
-    if (conversations.length > 0) {
-      const existing = conversations.find((c) =>
-        c.participants?.some((p) => (p._id || p).toString() === openUserId)
-      );
-      if (existing) { dispatch(setActiveConversation(existing._id)); }
-      else {
-        dispatch(openOrCreateConversation(openUserId)).then((action) => {
-          if (action?.payload?._id) dispatch(setActiveConversation(action.payload._id));
-        });
-      }
-      return;
-    }
-    dispatch(fetchConversations()).then((action) => {
-      const loaded = action?.payload?.conversations || action?.payload || [];
-      const existing = loaded.find((c) =>
-        c.participants?.some((p) => (p._id || p).toString() === openUserId)
-      );
-      if (existing) { dispatch(setActiveConversation(existing._id)); }
-      else {
-        dispatch(openOrCreateConversation(openUserId)).then((res) => {
-          if (res?.payload?._id) dispatch(setActiveConversation(res.payload._id));
-        });
-      }
+useEffect(() => {
+  if (!openUserId || loadingConvs) return;
+
+  const existing = conversations.find((c) =>
+    c.participants?.some((p) => (p._id || p).toString() === openUserId)
+  );
+
+  if (existing) {
+    dispatch(setActiveConversation(existing._id));
+    return;
+  }
+
+  // Conversations loaded hain but match nahi — create karo
+  if (conversations.length >= 0 && !loadingConvs) {
+    dispatch(openOrCreateConversation(openUserId)).then((action) => {
+      if (action?.payload?._id) dispatch(setActiveConversation(action.payload._id));
     });
-  }, [openUserId]);
+  }
+}, [openUserId, conversations, loadingConvs]);
 
  useEffect(() => { if (myId) dispatch(fetchFollowing({ userId: myId })); }, [myId, dispatch]);
 
@@ -413,7 +409,7 @@ export default function Messages() {
         const res  = await fetch(`${BASE_URL}/api/v2/user/block-status/${otherId}`, { credentials: "include" });
         const data = await res.json();
         if (data.success) setBlockStatus({ blocked: data.data.blocked, iBlockedThem: data.data.iBlockedThem });
-      } catch (err) { console.error("Block status fetch failed:", err); }
+    } catch { setBlockStatus({ blocked: false, iBlockedThem: false }); }
     };
     fetchBlockStatus();
   }, [activeConvId, otherId]);
@@ -439,6 +435,32 @@ export default function Messages() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
 
+
+
+  // ✅ conversation:new — stranger ya koi bhi pehla message bheje
+// ✅ conversation:updated — har message pe sidebar reorder
+useEffect(() => {
+  const s = getSocket();
+  if (!s) return;
+
+  const onConvNew = ({ conversation }) => {
+    if (!conversation?._id) return;
+    dispatch(addNewConversation({ conversation }));
+  };
+
+  const onConvUpdated = ({ conversation }) => {
+    if (!conversation?._id) return;
+    dispatch(updateConversation({ conversation }));
+  };
+
+  s.on("conversation:new",     onConvNew);
+  s.on("conversation:updated", onConvUpdated);
+
+  return () => {
+    s.off("conversation:new",     onConvNew);
+    s.off("conversation:updated", onConvUpdated);
+  };
+}, [dispatch]);
   useEffect(() => {
     if (!activeConvId || messages.length === 0) return;
     const last = messages[messages.length - 1];
@@ -661,17 +683,24 @@ export default function Messages() {
                   </div>
                 )}
                 {filteredConvs.map((conv) => {
-                  const other    = conv.participants?.find((p) => (p._id || p).toString() !== myId);
-                  const cOtherId = (other?._id || other)?.toString();
-                  const isOnline = onlineUsers.includes(cOtherId);
-                  const isActive = conv._id === activeConvId;
-                  const lastMsg  = conv.lastMessage;
-                  const preview  = lastMsg
-                    ? lastMsg.isDeleted ? "🚫 Deleted"
-                    : lastMsg.audio     ? "🎙️ Voice message"
-                    : lastMsg.image     ? "📷 Image"
-                    : lastMsg.text?.slice(0, 40) || "…"
-                    : "Start a conversation";
+              const other    = conv.participants?.find((p) => (p._id || p).toString() !== myId);
+const cOtherId = (other?._id || other)?.toString();
+const isOnline = onlineUsers.includes(cOtherId);
+const isActive = conv._id === activeConvId;
+const lastMsg  = conv.lastMessage;
+
+// ✅ lastMessage ab object hai — messageId check karo
+const preview  = lastMsg?.messageId || lastMsg?._id
+  ? lastMsg.isDeleted ? "🚫 Deleted"
+  : lastMsg.audio     ? "🎙️ Voice message"
+  : lastMsg.image     ? "📷 Image"
+  : lastMsg.text?.slice(0, 40) || "…"
+  : "Start a conversation";
+
+// ✅ unreadCount normalize — object ya number dono handle karo
+const unread = typeof conv.unreadCount === "object"
+  ? (conv.unreadCount?.[myId] ?? 0)
+  : (conv.unreadCount ?? 0);
                   return (
                     <button key={conv._id} onClick={() => dispatch(setActiveConversation(conv._id))} style={{
                       display: "flex", alignItems: "center", gap: 12,
@@ -687,22 +716,22 @@ export default function Messages() {
                         src={other?.avatar?.url || null} online={isOnline} size={42} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                          <p style={{ fontSize: 14, fontWeight: conv.unreadCount > 0 ? 700 : 500, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>
+                          <p style={{ fontSize: 14, fontWeight: unread > 0 ? 700 : 500, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>
                             {other?.fullName || other?.username}
                           </p>
                           <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
-                            {lastMsg ? fmt(lastMsg.createdAt) : ""}
+                            {lastMsg ? fmt(lastMsg.sentAt || lastMsg.createdAt) : ""}
                           </span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <p style={{ fontSize: 12, color: conv.unreadCount > 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontWeight: conv.unreadCount > 0 ? 600 : 400 }}>
+                          <p style={{ fontSize: 12, color: unread > 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontWeight: unread > 0 ? 600 : 400 }}>
                             {preview}
                           </p>
-                          {conv.unreadCount > 0 && (
-                            <span style={{ background: "#534AB7", color: "#fff", borderRadius: 10, fontSize: 10, padding: "2px 7px", fontWeight: 600, flexShrink: 0, marginLeft: 6 }}>
-                              {conv.unreadCount}
-                            </span>
-                          )}
+                          {unread > 0 && (
+  <span style={{ background: "#534AB7", color: "#fff", borderRadius: 10, fontSize: 10, padding: "2px 7px", fontWeight: 600, flexShrink: 0, marginLeft: 6 }}>
+    {unread}
+  </span>
+)}
                         </div>
                       </div>
                     </button>

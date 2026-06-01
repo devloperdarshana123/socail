@@ -43,10 +43,9 @@ export const updatePassword = createAsyncThunk(
   "settings/updatePassword",
   async ({ oldPassword, newPassword }, { rejectWithValue }) => {
     try {
-      const res = await api.patch(`${BASE}/password`, {
-        oldPassword,
-        newPassword,
-      });
+      const payload = { newPassword };
+      if (oldPassword) payload.oldPassword = oldPassword; // ← Google user ke liye skip
+      const res = await api.patch(`${BASE}/password`, payload);
       return res.data;
     } catch (err) {
       return rejectWithValue(

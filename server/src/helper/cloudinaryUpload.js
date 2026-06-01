@@ -38,7 +38,12 @@ export const uploadToCloudinary = (buffer, options = {}) => {
       },
       (error, result) => {
         if (error) reject(error);
-        else resolve(result);
+       else {
+  if (isVideo && result.eager?.[0]?.secure_url) {
+    result.thumbnailUrl = result.eager[0].secure_url;
+  }
+  resolve(result);
+}
       }
     );
 

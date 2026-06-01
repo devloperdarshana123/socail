@@ -1,8 +1,10 @@
-// chat-server/socket/index.js
+
+// src/socket/index.js
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import chatHandler from "./Chathandler.js";
-import notificationHandler from "./notificationHandler.js";
+import chatHandler from "./handlers/Chathandler.js";
+import notificationHandler from "./handlers/notificationHandler.js";
+import logger from "../utils/logger.js";
 
 let io;
 
@@ -19,43 +21,35 @@ const initSocket = (server) => {
       },
       credentials: true,
     },
-    // ✅ Production: ping timeout badha do — mobile networks ke liye
     pingTimeout: 60000,
     pingInterval: 25000,
   });
 
   // ── JWT Auth Middleware ──────────────────────────────────────────────────
-  // ignoreExpiration: true — kyunki HTTP aur Socket lifecycle alag hain.
-  // Expire hone par disconnect nahi karenge — client apne aap naya token bhejega.
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
-    console.log("🔑 Token received:", token ? "YES" : "NO");
     if (!token) return next(new Error("Unauthorized"));
 
     try {
-      // ✅ ignoreExpiration: true — expire token pe bhi connect karne do
-      // Real auth check har sensitive action pe karenge (Chathandler mein)
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {
         ignoreExpiration: true,
       });
 
-      const now = Math.floor(Date.now() / 1000);
+      const now       = Math.floor(Date.now() / 1000);
       const isExpired = decoded.exp && decoded.exp < now;
 
       if (isExpired) {
-        // ✅ Expired but connected — client ko signal bhejo token refresh karne ka
-        console.log(`⚠️ Token expired for user: ${decoded._id} — allowing connect, signaling refresh`);
-        socket.user = decoded;
-        socket.tokenExpired = true; // flag rakho
+        logger.warn(`⚠️ Token expired for user: ${decoded._id}`);
+        socket.user         = decoded;
+        socket.tokenExpired = true;
       } else {
-        console.log("✅ Token decoded:", decoded);
-        socket.user = decoded;
+        socket.user         = decoded;
         socket.tokenExpired = false;
       }
 
       next();
     } catch (err) {
-      console.log("❌ JWT Error:", err.message);
+      logger.error("❌ JWT Error", { message: err.message });
       return next(new Error("Invalid token"));
     }
   });
@@ -64,29 +58,28 @@ const initSocket = (server) => {
   io.on("connection", (socket) => {
     const userId = (socket.user.id || socket.user._id)?.toString();
     if (!userId) {
-      console.error("❌ No userId in token — disconnecting");
+      logger.error("❌ No userId in token — disconnecting");
       return socket.disconnect(true);
     }
 
-    console.log(`✅ User connected: ${userId}${socket.tokenExpired ? " (token expired — awaiting refresh)" : ""}`);
+    logger.info(`✅ User connected: ${userId}${socket.tokenExpired ? " (token expired)" : ""}`);
 
-    // ✅ Token expire tha — client ko immediately signal karo
     if (socket.tokenExpired) {
-      socket.emit("token:expired"); // frontend handle karega
+      socket.emit("token:expired");
     }
 
-    // ── Token refresh event — client naya token bhejta hai ──────────────
+    // ── Token refresh ────────────────────────────────────────────────────
     socket.on("token:refresh", ({ token: newToken }) => {
       if (!newToken) return;
       try {
-        const decoded = jwt.verify(newToken, process.env.ACCESS_TOKEN_SECRET);
-        socket.user = decoded;
+        const decoded       = jwt.verify(newToken, process.env.ACCESS_TOKEN_SECRET);
+        socket.user         = decoded;
         socket.tokenExpired = false;
-        console.log(`🔄 Token refreshed for user: ${userId}`);
-        socket.emit("token:refreshed"); // ✅ confirm karo client ko
+        logger.info(`🔄 Token refreshed for user: ${userId}`);
+        socket.emit("token:refreshed");
       } catch (err) {
-        console.log("❌ Token refresh failed:", err.message);
-        socket.emit("session_expired"); // ab logout karo
+        logger.error("❌ Token refresh failed", { message: err.message });
+        socket.emit("session_expired");
         socket.disconnect(true);
       }
     });
@@ -96,12 +89,12 @@ const initSocket = (server) => {
       chatHandler(io, socket);
       notificationHandler(io, socket);
     } catch (err) {
-      console.error("Handler init error:", err);
+      logger.error("❌ Handler init error", { err });
       socket.disconnect(true);
     }
 
     socket.on("disconnect", (reason) => {
-      console.log(`❌ User disconnected: ${userId} — reason: ${reason}`);
+      logger.info(`❌ User disconnected: ${userId} — reason: ${reason}`);
     });
   });
 

@@ -1,12 +1,26 @@
 
 
-
 // client/src/lib/services/socketManager.js
 import { io } from "socket.io-client";
+import store from "../../app/store";
+import {
+  receiveMessage,
+  applyMessageEdit,
+  applyMessageDelete,
+  applySeenReceipt,
+  applyReaction,
+  setOnlineUsers,
+  userCameOnline,
+  userWentOffline,
+  setTyping,
+  clearTyping,
+  addNewConversation,
+  updateConversation,
+} from "../redux/chatSlice";
 
 const CHAT_SERVER = import.meta.env.VITE_CHAT_SERVER_URL || "http://localhost:5001";
 
-let socket = null;
+let socket        = null;
 let currentUserId = null;
 let tokenRefreshListener = null;
 
@@ -14,17 +28,86 @@ const getToken = () => localStorage.getItem("accessToken");
 
 export const getSocket = () => socket;
 
+// ── Socket event handlers — store dispatch ────────────────────────────────────
+const registerSocketEvents = (socket) => {
+
+  // ── Online presence ────────────────────────────────────────────────────
+  socket.on("online:list", (userIds) => {
+    store.dispatch(setOnlineUsers(userIds));
+  });
+
+  socket.on("user:online", ({ userId }) => {
+    store.dispatch(userCameOnline({ userId }));
+  });
+
+  socket.on("user:offline", ({ userId }) => {
+    store.dispatch(userWentOffline({ userId }));
+  });
+
+  // ── Messages ───────────────────────────────────────────────────────────
+  socket.on("message:receive", ({ conversationId, message, tempId }) => {
+    store.dispatch(receiveMessage({ conversationId, message, tempId }));
+  });
+
+  // ── Stranger message — sidebar automatically update ────────────────────
+  socket.on("conversation:new", ({ conversation }) => {
+    store.dispatch(addNewConversation({ conversation }));
+  });
+
+socket.on("conversation:updated", ({ conversation }) => {
+  store.dispatch(updateConversation({ conversation }));
+});
+
+  socket.on("message:edited", ({ conversationId, messageId, newText, isEdited, editedAt }) => {
+    store.dispatch(applyMessageEdit({ conversationId, messageId, newText, isEdited, editedAt }));
+  });
+
+  socket.on("message:deleted", ({ conversationId, messageId }) => {
+    store.dispatch(applyMessageDelete({ conversationId, messageId }));
+  });
+
+  socket.on("message:seen", ({ conversationId, messageId, seenBy }) => {
+    store.dispatch(applySeenReceipt({ conversationId, messageId, seenBy }));
+  });
+
+  socket.on("message:reaction", ({ conversationId, messageId, reactions }) => {
+    store.dispatch(applyReaction({ conversationId, messageId, reactions }));
+  });
+
+  // ── Typing ─────────────────────────────────────────────────────────────
+  socket.on("typing:start", ({ conversationId, userId }) => {
+    store.dispatch(setTyping({ conversationId, userId }));
+  });
+
+  socket.on("typing:stop", ({ conversationId, userId }) => {
+    store.dispatch(clearTyping({ conversationId, userId }));
+  });
+
+  // ── Connection lifecycle ───────────────────────────────────────────────
+
+socket.on("connect",       () => {});
+socket.on("disconnect",    () => {});
+socket.on("connect_error", () => {});
+socket.on("token:expired", () => {});
+socket.on("token:refreshed", () => {});
+  
+  socket.on("session_expired", () =>
+    window.dispatchEvent(new CustomEvent("auth:logout"))
+  );
+};
+
+// ── connectSocket ─────────────────────────────────────────────────────────────
 export const connectSocket = (userId) => {
   const token = getToken();
   if (!token || !userId) return null;
 
-  // STRICT SINGLETON — same user ke liye socket already hai toh reuse karo
+  // Same user — reuse existing socket
   if (socket && currentUserId === userId) {
     if (!socket.connected) socket.connect();
     return socket;
   }
 
-  // Alag user — pehle disconnect karo
+  // Alag user — pehle cleanup karo
   if (socket) {
     socket.removeAllListeners();
     socket.disconnect();
@@ -49,13 +132,10 @@ export const connectSocket = (userId) => {
     pingInterval: 25000,
   });
 
-  socket.on("connect", () => console.log("🟢 Socket connected:", userId));
-  socket.on("disconnect", (reason) => console.log("🔴 Disconnected:", reason));
-  socket.on("connect_error", (err) => console.log("⚠️ Connect error:", err.message));
-  socket.on("token:expired", () => console.log("⚠️ Token expired — waiting for refresh"));
-  socket.on("token:refreshed", () => console.log("✅ Token refreshed"));
-  socket.on("session_expired", () => window.dispatchEvent(new CustomEvent("auth:logout")));
+  // Saare events ek jagah register karo
+  registerSocketEvents(socket);
 
+  // Token refresh handler
   tokenRefreshListener = (e) => {
     const newToken = e.detail?.token || getToken();
     if (!newToken || !socket) return;
@@ -68,6 +148,7 @@ export const connectSocket = (userId) => {
   return socket;
 };
 
+// ── disconnectSocket ──────────────────────────────────────────────────────────
 export const disconnectSocket = () => {
   if (tokenRefreshListener) {
     window.removeEventListener("auth:tokenRefreshed", tokenRefreshListener);
@@ -76,7 +157,7 @@ export const disconnectSocket = () => {
   if (socket) {
     socket.removeAllListeners();
     socket.disconnect();
-    socket = null;
+    socket        = null;
     currentUserId = null;
   }
 };

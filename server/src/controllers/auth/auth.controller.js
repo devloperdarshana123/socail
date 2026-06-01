@@ -16,7 +16,14 @@ import {
 } from "../../utils/usernameUtils.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { getAuth } from "firebase-admin/auth";
+import { initializeApp, getApps } from "firebase-admin/app";
 
+
+
+if (!getApps().length) {
+  initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID });
+}
 // ─────────────────────────────────────────────
 //  Internal helper — must match User model's hashToken
 // ─────────────────────────────────────────────
@@ -364,7 +371,7 @@ if (oldAccessToken) {
     .json({
       success: true,
       message: "Token refreshed successfully",
-      ...(process.env.NODE_ENV === "development" && { accessToken: newAccessToken }),
+      accessToken: newAccessToken,
     });
 });
 
@@ -498,4 +505,91 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
   return clearAuthCookies(res)
     .status(200)
     .json({ success: true, message: "Password reset successfully. Please log in again." });
+});
+
+
+export const googleAuth = asyncHandler(async (req, res, next) => {
+  const { idToken } = req.body;
+ 
+  if (!idToken) {
+    return next(new AppError("Google ID token is required", 400));
+  }
+ 
+  // ── Step 1: Firebase Admin se token verify karo ───────────────────────────
+  let decoded;
+  try {
+    decoded = await getAuth().verifyIdToken(idToken);
+  } catch (err) {
+    logger.warn("Google ID token verification failed", { error: err.message });
+    return next(new AppError("Invalid or expired Google token. Please try again.", 401));
+  }
+ 
+  const { email, name, picture, uid: googleId } = decoded;
+ 
+  if (!email) {
+    return next(new AppError("Google account mein email nahi hai.", 400));
+  }
+ 
+  // ── Step 2: User dhundho ya banao ─────────────────────────────────────────
+ let user = await User.findOne({
+  $or: [{ firebaseUid: googleId }, { email: email.toLowerCase() }],
+});
+ 
+  let isNewUser = false;
+ 
+  if (!user) {
+    // Naya user — create karo
+    isNewUser = true;
+    user = await User.create({
+      fullName      : name || "Google User",
+      email         : email.toLowerCase(),
+     firebaseUid: googleId,
+      authProvider  : "google",
+      isEmailVerified: true,          // Google ne already verify kiya hua hai
+      accountStatus : "pending",      // Username set hone tak pending
+      onboardingStep: 2,              // Email verified, username baaki hai
+      avatar: picture ? { url: picture, publicId: null } : null,
+    });
+    logger.info("New user via Google OAuth", { userId: user._id, email });
+ 
+  } else {
+    // Existing user — agar pehle email se register kiya tha toh googleId link karo
+    if (!user.firebaseUid) {
+  user.firebaseUid = googleId;
+      if (!user.avatar && picture) user.avatar = { url: picture, publicId: null };
+      await user.save({ validateBeforeSave: false });
+      logger.info("Google account linked to existing user", { userId: user._id });
+    }
+  }
+ 
+  // ── Step 3: Account status check ──────────────────────────────────────────
+  if (user.accountStatus === "banned") {
+    return next(new AppError("Your account has been permanently banned.", 403));
+  }
+  if (user.accountStatus === "suspended") {
+    return next(new AppError("Your account is temporarily suspended.", 403));
+  }
+  if (user.accountStatus === "deactivated") {
+    return next(new AppError("Your account has been deactivated.", 403));
+  }
+ 
+  // ── Step 4: nextRoute decide karo ─────────────────────────────────────────
+  let nextRoute = "/feed";
+  if (!user.isOnboardingComplete) {
+    if (user.onboardingStep === 2) nextRoute = "/onboarding/username";
+  }
+ 
+  // ── Step 5: Token issue karo (same sendToken jo baaki routes use karte hain)
+  await sendToken(
+    user,
+    isNewUser ? 201 : 200,
+    res,
+    {
+      message   : isNewUser ? "Welcome to Erovians! 🎉" : "Signed in with Google!",
+      nextRoute,
+      deviceInfo: req.headers["user-agent"] || "unknown",
+      ipAddress : req.ip,
+    },
+    next,
+  );
 });

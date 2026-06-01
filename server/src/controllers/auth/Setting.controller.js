@@ -105,35 +105,50 @@ if (bio !== undefined) {
 export const updatePassword = asyncHandler(async (req, res, next) => {
   const { oldPassword, newPassword } = req.body;
 
-  if (!oldPassword || !newPassword) {
-    return next(new AppError("Old and new password are required.", 400));
+  if (!newPassword) {
+    return next(new AppError("New password is required.", 400));
   }
-
   if (newPassword.length < 8) {
-    return next(
-      new AppError("New password must be at least 8 characters long.", 400)
-    );
+    return next(new AppError("New password must be at least 8 characters long.", 400));
   }
 
-  if (oldPassword === newPassword) {
-    return next(
-      new AppError("The new password must be different from the old password.", 400)
-    );
-  }
-
-  // +password explicitly select karo (model mein select:false hoga)
   const user = await User.findById(req.user._id).select("+password");
   if (!user) return next(new AppError("User not found.", 404));
 
-  // Model ka isPasswordCorrect method use karo (bcrypt.compare internally)
-  const isMatch = await user.isPasswordCorrect(oldPassword);
-  if (!isMatch) return next(new AppError("The old password is incorrect.", 401));
+  const isGoogleUser = user.authProvider === "google" && !user.password;
 
-  // Directly assign karo — pre-save hook khud bcrypt.genSalt(12) se hash karega
+  if (isGoogleUser) {
+    // Google user — no old password needed, sirf naya set karo
+    user.password = newPassword;
+    await user.save({ validateBeforeSave: false });
+
+    // authProvider update karo — ab email se bhi login kar sakta hai
+    await User.findByIdAndUpdate(user._id, {
+      $set: { authProvider: "google" }, // google raho — email bhi kaam karega
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Password created successfully. You can now login with email too.",
+      data: {},
+    });
+  }
+
+  // Normal user — old password required
+  if (!oldPassword) {
+    return next(new AppError("Current password is required.", 400));
+  }
+  if (oldPassword === newPassword) {
+    return next(new AppError("New password must be different from old password.", 400));
+  }
+
+  const isMatch = await user.isPasswordCorrect(oldPassword);
+  if (!isMatch) return next(new AppError("The current password is incorrect.", 401));
+
   user.password = newPassword;
   await user.save({ validateBeforeSave: false });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     message: "Password updated successfully.",
     data: {},

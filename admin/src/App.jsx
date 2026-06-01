@@ -19,7 +19,7 @@ import Legal from "./pages/Legal";
 import Location from "./pages/Location";
 import Contact from "./pages/Contact";
 import UsersPage from "./pages/UsersPage";
-
+import CommentsPage from "./pages/Commentspage";
 
 
 import DashboardPage from "./pages/DashboardPage";
@@ -135,6 +135,10 @@ const App = () => {
            <Route
             path="/settings"
             element={<SettingsPage/>}
+          />
+           <Route
+            path="/comments"
+            element={<CommentsPage/>}
           />
 
           <Route

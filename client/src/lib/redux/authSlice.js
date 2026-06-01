@@ -50,6 +50,21 @@ export const verifyOtp = createAsyncThunk(
   },
 );
 
+
+export const googleLogin = createAsyncThunk(
+  "auth/googleLogin",
+  async (idToken, { rejectWithValue }) => {
+    try {
+      const { data } = await api.post("/auth/google", { idToken });
+      return data;
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || "Google sign-in failed"
+      );
+    }
+  }
+);
+
 export const fetchMe = createAsyncThunk(
   "auth/fetchMe",
   async (_, { rejectWithValue }) => {
@@ -478,6 +493,32 @@ builder
     if (state.user) {
       state.user.followingCount = Math.max(0, (state.user.followingCount || 0) - 1);
     }
+  });
+
+  // ── Google Login ──
+builder
+  .addCase(googleLogin.pending, (state) => {
+    state.login.loading = true;
+    state.login.error   = null;
+  })
+  .addCase(googleLogin.fulfilled, (state, action) => {
+    state.login.loading   = false;
+    state.login.success   = true;
+    state.accessToken     = action.payload.accessToken || null;
+    state.user            = action.payload.data || null;
+    state.isAuthenticated = !!action.payload.data;
+    state.nextRoute       = action.payload.nextRoute || "/feed";
+
+    const token = action.payload.accessToken;
+    if (token && token !== "null" && token !== "undefined") {
+      localStorage.setItem("accessToken", token);
+    } else {
+      localStorage.removeItem("accessToken");
+    }
+  })
+  .addCase(googleLogin.rejected, (state, action) => {
+    state.login.loading = false;
+    state.login.error   = action.payload;
   });
 
   },

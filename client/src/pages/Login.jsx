@@ -2,10 +2,13 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useDispatch, useSelector } from "react-redux";
-import { loginUser, clearLoginState } from "../lib/redux/authSlice";
+import { loginUser, clearLoginState, googleLogin  } from "../lib/redux/authSlice";
 import AnimatedCollage from "../components/AnimatedCollage";
 import Footer from "../components/Footer";
 import ero_logo from "../assets/seller_logo.png";
+
+import { signInWithGoogle, firebaseSignOut } from "../config/firebase";
+
 
 // ─────────────────────────────────────────────
 //  FloatingInput
@@ -250,7 +253,22 @@ if (
       }),
     );
   };
-
+const handleGoogleLogin = async () => {
+  try {
+    const { idToken } = await signInWithGoogle();
+    const result = await dispatch(googleLogin(idToken)).unwrap();
+    toast.success(result.message || "Signed in with Google!");
+    navigate(result.nextRoute || "/feed", { replace: true });
+  } catch (err) {
+    if (
+      err?.code === "auth/popup-closed-by-user" ||
+      err?.code === "auth/cancelled-popup-request"
+    ) return;
+    toast.error(err?.message || "Google sign-in failed. Please try again.");
+  } finally {
+    await firebaseSignOut().catch(() => {});
+  }
+};
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[3fr_1px_2fr]">
@@ -370,6 +388,7 @@ if (
               <button
                 type="button"
                 disabled={loading}
+                 onClick={handleGoogleLogin}
                 className="
                   w-full h-12 rounded-xl
                   border-2 border-[#e2e6ef]

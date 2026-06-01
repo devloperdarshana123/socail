@@ -95,6 +95,12 @@ const ACTION_META = {
   "settings.profile_updated":      { icon: User,         label: "Profile Updated",          color: "text-[#1e3a5f]",  bg: "bg-[#e8eef5] border-[#c5d3e0]" },
   "settings.avatar_updated":       { icon: User,         label: "Avatar Updated",           color: "text-[#1e3a5f]",  bg: "bg-[#e8eef5] border-[#c5d3e0]" },
   "settings.notifications_updated":{ icon: Settings,     label: "Notifications Updated",    color: "text-[#1e3a5f]",  bg: "bg-[#e8eef5] border-[#c5d3e0]" },
+   "comment.viewed":       { icon: Eye,          label: "Comment Viewed",       color: "text-slate-500",   bg: "bg-slate-50 border-slate-200"     },
+  "comment.approved":     { icon: CheckCircle,  label: "Comment Approved",     color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
+  "comment.flagged":      { icon: AlertTriangle,label: "Comment Flagged",      color: "text-amber-600",   bg: "bg-amber-50 border-amber-100"     },
+  "comment.removed":      { icon: Trash2,       label: "Comment Removed",      color: "text-red-600",     bg: "bg-red-50 border-red-100"         },
+  "comment.deleted":      { icon: Trash2,       label: "Comment Deleted",      color: "text-red-700",     bg: "bg-red-50 border-red-200"         },
+  "comment.bulk_updated": { icon: Activity,     label: "Comments Bulk Action", color: "text-[#1e3a5f]",   bg: "bg-[#e8eef5] border-[#c5d3e0]"   },
 };
 
 const CATEGORY_META = {
@@ -357,14 +363,67 @@ function DetailModal({ log, loading, onClose }) {
               <div className="pt-2 border-t border-slate-100">
                 <p className="text-[11px] font-bold text-slate-400 mb-2">Target Info</p>
                 <div className="bg-[#f8fafc] border border-slate-100 rounded-xl p-3 space-y-2">
-                  {Object.entries(log.targetMeta).map(([k, v]) =>
-                    v != null && v !== "" ? (
-                      <div key={k} className="flex gap-3">
-                        <p className="text-[10px] font-semibold text-slate-400 w-20 shrink-0 capitalize pt-0.5">{k}</p>
-                        <p className="text-[11px] text-slate-700 font-medium break-all">{String(v)}</p>
-                      </div>
-                    ) : null
+ 
+                  {/* Comment text */}
+                  {log.targetMeta.commentText && (
+                    <div className="flex gap-3">
+                      <p className="text-[10px] font-semibold text-slate-400 w-20 shrink-0 capitalize pt-0.5">Comment</p>
+                      <p className="text-[11px] text-slate-700 font-medium italic">"{log.targetMeta.commentText}"</p>
+                    </div>
                   )}
+ 
+                  {/* Post info */}
+                  {log.targetMeta.postCaption && (
+                    <div className="flex gap-3">
+                      <p className="text-[10px] font-semibold text-slate-400 w-20 shrink-0 capitalize pt-0.5">Post</p>
+                      <div>
+                        <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full mr-1.5 ${
+                          log.targetMeta.postType === "reel"
+                            ? "bg-violet-100 text-violet-600"
+                            : "bg-sky-100 text-sky-600"
+                        }`}>
+                          {log.targetMeta.postType ?? "post"}
+                        </span>
+                        <span className="text-[11px] text-slate-700">{log.targetMeta.postCaption}</span>
+                      </div>
+                    </div>
+                  )}
+ 
+                  {/* New status */}
+                  {log.targetMeta.newStatus && (
+                    <div className="flex gap-3">
+                      <p className="text-[10px] font-semibold text-slate-400 w-20 shrink-0 capitalize pt-0.5">New Status</p>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        log.targetMeta.newStatus === "active"  ? "bg-emerald-100 text-emerald-700" :
+                        log.targetMeta.newStatus === "flagged" ? "bg-amber-100 text-amber-700"    :
+                        log.targetMeta.newStatus === "removed" ? "bg-red-100 text-red-700"        :
+                                                                  "bg-slate-100 text-slate-600"
+                      }`}>
+                        {log.targetMeta.newStatus}
+                      </span>
+                    </div>
+                  )}
+ 
+                  {/* Reason */}
+                  {log.targetMeta.reason && (
+                    <div className="flex gap-3">
+                      <p className="text-[10px] font-semibold text-slate-400 w-20 shrink-0 capitalize pt-0.5">Reason</p>
+                      <p className="text-[11px] text-slate-700">{log.targetMeta.reason}</p>
+                    </div>
+                  )}
+ 
+                  {/* Fallback: baaki koi bhi fields */}
+                  {Object.entries(log.targetMeta)
+                    .filter(([k]) => !["commentText","postCaption","postType","newStatus","reason","commentId","postId"].includes(k))
+                    .map(([k, v]) =>
+                      v != null && v !== "" ? (
+                        <div key={k} className="flex gap-3">
+                          <p className="text-[10px] font-semibold text-slate-400 w-20 shrink-0 capitalize pt-0.5">{k}</p>
+                          <p className="text-[11px] text-slate-700 font-medium break-all">{String(v)}</p>
+                        </div>
+                      ) : null
+                    )
+                  }
                 </div>
               </div>
             )}

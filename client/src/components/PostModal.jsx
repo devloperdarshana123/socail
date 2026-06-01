@@ -372,24 +372,26 @@ const isText   = post?.type === "text";
           maxHeight: "90vh",
           display: "flex",
           flexDirection: "row",
-          overflow: "hidden",
+          overflow: "visible",
           boxShadow: "0 32px 80px rgba(0,0,0,0.45)",
           animation: "slideUpModal 0.25s cubic-bezier(0.34,1.56,0.64,1)",
           position: "relative",
         }}
       >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          style={{
-            position: "absolute", top: 12, right: 12, zIndex: 10,
-            background: "rgba(0,0,0,0.35)", border: "none", borderRadius: "50%",
-            width: 34, height: 34, display: "flex", alignItems: "center",
-            justifyContent: "center", cursor: "pointer", color: "#fff",
-          }}
-        >
-          <X size={18} />
-        </button>
+      {/* Close button */}
+<button
+  onClick={onClose}
+  style={{
+    position: "absolute", top: -17, left: "50%", transform: "translateX(-50%)", zIndex: 10,
+    background: "rgba(0,0,0,0.35)", border: "none", borderRadius: "50%",
+    width: 34, height: 34, display: "flex", alignItems: "center",
+    justifyContent: "center", cursor: "pointer", color: "#fff",
+  }}
+>
+  <X size={18} />
+</button>
+
+<div style={{ display:"flex", flexDirection:"row", width:"100%", height:"100%", borderRadius:20, overflow:"hidden" }}>
 
         {/* ══ LEFT — Media or Text ══ */}
         <div
@@ -675,7 +677,7 @@ Report post
           )}
 
 </div>
-      
+     </div> 
 {showReport && (
           <ReportModal
             targetModel="Post"

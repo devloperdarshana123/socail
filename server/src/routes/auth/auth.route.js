@@ -9,6 +9,7 @@ import {
   getMe,
    forgotPassword,  
   resetPassword,
+   googleAuth, 
 } from "../../controllers/auth/auth.controller.js";
 import { isAuthenticated } from "../../middlewares/auth.js";
 import {
@@ -28,6 +29,7 @@ router.post("/register", register);
 router.post("/verify-otp", verifyOtp);
 router.post("/resend-otp", otpResendLimiter, resendOtp);
 router.post("/login",loginLimiter, login);
+router.post("/google", googleAuth); 
 router.post("/forgot-password",forgotPasswordLimiter, forgotPassword);
 router.post("/refresh-token", refreshToken);
 

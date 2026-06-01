@@ -35,7 +35,7 @@ import adminUserRoute from "./routes/admin/Admin.user.routes .js";
 import adminReportRoute from "./routes/admin/Admin.report.routes.js";
 import dashboardRoutes from "./routes/admin/Admin.dashboard.route.js";
 import auditLogRoute from "./routes/admin/Admin.auditlog.route.js";
-
+import commentRoutes from "./routes/admin/admin.comment.routes.js"
 const app = express();
 
 // ── Security ──
@@ -136,6 +136,7 @@ app.use("/api/v2/transcribe", transcribeRoute);
 app.use("/api/v2/admin/login", adminAuthLimiter);
 app.use("/api/v2/admin/auth", adminAuthRoute);
 app.use("/api/v2/admin/dashboard", dashboardRoutes);
+app.use("/api/v2/admin/comments", commentRoutes);
 app.use("/api/v2/admin",      adminUserRoute); 
 app.use("/api/v2/admin", adminReportRoute);
 app.use("/api/v2/admin/settings", adminSettingsRoute);

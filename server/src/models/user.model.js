@@ -23,7 +23,7 @@ const COUNTABLE_FIELDS        = new Set(["followersCount", "followingCount", "po
 const cloudinaryMediaSchema = new Schema(
   {
     url:      { type: String, required: true },
-    publicId: { type: String, required: true },
+    publicId: { type: String, default: null },  // ← required: true → default: null
   },
   { _id: false },
 );

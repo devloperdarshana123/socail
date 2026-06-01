@@ -46,6 +46,13 @@ export const AUDIT_ACTIONS = {
   REPORT_ESCALATED:             "report.escalated",
   REPORT_UNDER_REVIEW:          "report.under_review",
   REPORT_STALE_CLAIMS_RELEASED: "report.stale_claims_released",
+
+    COMMENT_VIEWED:        "comment.viewed",
+  COMMENT_APPROVED:      "comment.approved",
+  COMMENT_FLAGGED:       "comment.flagged",
+  COMMENT_REMOVED:       "comment.removed",
+  COMMENT_DELETED:       "comment.deleted",
+  COMMENT_BULK_UPDATED:  "comment.bulk_updated",
 };
 
 export const AUDIT_CATEGORIES = {
@@ -84,6 +91,13 @@ const ACTION_CATEGORY_MAP = {
   [AUDIT_ACTIONS.REPORT_ESCALATED]:             AUDIT_CATEGORIES.CONTENT,
   [AUDIT_ACTIONS.REPORT_UNDER_REVIEW]:          AUDIT_CATEGORIES.CONTENT,
   [AUDIT_ACTIONS.REPORT_STALE_CLAIMS_RELEASED]: AUDIT_CATEGORIES.CONTENT,
+
+    [AUDIT_ACTIONS.COMMENT_VIEWED]:       AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.COMMENT_APPROVED]:     AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.COMMENT_FLAGGED]:      AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.COMMENT_REMOVED]:      AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.COMMENT_DELETED]:      AUDIT_CATEGORIES.CONTENT,
+  [AUDIT_ACTIONS.COMMENT_BULK_UPDATED]: AUDIT_CATEGORIES.CONTENT,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,7 +144,7 @@ const auditLogSchema = new Schema(
 
     targetType: {
       type:    String,
-      enum:    ["user", "post", "report", null],
+      enum:    ["user", "post", "report","comment", null],
       default: null,
     },
 
@@ -143,7 +157,12 @@ const auditLogSchema = new Schema(
         reason:   String,
         duration: Number,       // suspension days
         status:   String, 
-        actionTaken: String,      // new status after action
+        actionTaken: String, 
+        commentId:   String,   // comment._id (string form)
+        postCaption: String,   // post caption (truncated)
+        postType:    String,   // "image" | "reel"
+        commentText: String,   // comment content (truncated)
+        newStatus:   String,     // new status after action
       },
       default: {},
       _id:     false,
@@ -177,11 +196,10 @@ const auditLogSchema = new Schema(
 //  Pre-save: auto-set category from action
 // ─────────────────────────────────────────────────────────────────────────────
 
-auditLogSchema.pre("save", function (next) {
+auditLogSchema.pre("save", function () {
   if (this.action && !this.category) {
     this.category = ACTION_CATEGORY_MAP[this.action] ?? null;
   }
-  next();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

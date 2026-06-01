@@ -163,18 +163,23 @@ export default function useChat() {
       setRecordingTime(0);
 
       // Timer
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime((t) => {
-          if (t >= 120) { stopRecording(); return t; } // max 2 min
-          return t + 1;
-        });
-      }, 1000);
+recordingTimerRef.current = setInterval(() => {
+  setRecordingTime((t) => {
+    if (t >= 120) {
+      mediaRecorderRef.current?.stop();
+      clearInterval(recordingTimerRef.current);
+      setIsRecording(false);
+      setRecordingTime(0);
+      return t;
+    }
+    return t + 1;
+  });
+}, 1000);
 
       return { success: true };
-    } catch (err) {
-      console.error("Mic access denied:", err);
-      return { success: false, error: "Microphone access denied" };
-    }
+   } catch {
+  return { success: false, error: "Microphone access denied" };
+}
   }, []);
 
   const stopRecording = useCallback(() => {

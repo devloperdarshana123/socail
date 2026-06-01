@@ -7,6 +7,9 @@ import reportsReducer from "../lib/redux/Reportsslice";
 import dashboardReducer from "../lib/redux/dashboardSlice";
 import settingReducer from "../lib/redux/Adminsettingsslice";
 import auditLogReducer from "../lib/redux/auditLogSlice";
+import commentsReducer from "../lib/redux/Commentsslice";
+
+
 // ─────────────────────────────────────────────
 //  Admin Redux Store
 // ─────────────────────────────────────────────
@@ -20,6 +23,7 @@ const store = configureStore({
      dashboard:dashboardReducer,
      setting:settingReducer,
      auditLog: auditLogReducer,
+     comments: commentsReducer,
 
   },
 

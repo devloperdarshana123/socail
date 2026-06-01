@@ -241,6 +241,64 @@ const chatSlice = createSlice({
       delete state.messages[conversationId];
       delete state.pagination[conversationId];
     },
+addNewConversation(state, { payload: { conversation } }) {
+  if (!conversation?._id) return;
+
+  // Duplicate guard
+  const exists = state.conversations.some((c) => c._id === conversation._id);
+  if (exists) return;
+
+  // Sidebar mein top pe add karo
+  state.conversations.unshift(conversation);
+
+  // Unread badge update
+  if (conversation.unreadCount > 0) {
+    state.realtimeUnreadMap[conversation._id] =
+      (state.realtimeUnreadMap[conversation._id] || 0) + conversation.unreadCount;
+    state.totalUnread = (state.totalUnread || 0) + conversation.unreadCount;
+  }
+},
+updateConversation(state, { payload: { conversation } }) {
+  if (!conversation?._id) return;
+
+  const idx = state.conversations.findIndex((c) => c._id === conversation._id);
+
+  if (idx !== -1) {
+    // ✅ Existing — update karo aur top pe le aao
+    const existing = state.conversations[idx];
+
+    // Active conversation open hai toh unread 0 rakho
+    const unread = state.activeConvId === conversation._id
+      ? 0
+      : (conversation.unreadCount ?? existing.unreadCount ?? 0);
+
+    state.conversations[idx] = {
+      ...existing,
+      ...conversation,
+      unreadCount: unread,
+    };
+
+    // Top pe le aao — latest message wali conversation upar
+    const updated = state.conversations.splice(idx, 1)[0];
+    state.conversations.unshift(updated);
+  } else {
+    // ✅ Nahi hai — add karo top pe (stranger ka pehla message)
+    state.conversations.unshift({
+      ...conversation,
+      unreadCount: state.activeConvId === conversation._id
+        ? 0
+        : (conversation.unreadCount ?? 0),
+    });
+
+    // Badge update
+    if (conversation.unreadCount > 0 && state.activeConvId !== conversation._id) {
+      state.realtimeUnreadMap[conversation._id] =
+        (state.realtimeUnreadMap[conversation._id] || 0) + conversation.unreadCount;
+      state.totalUnread = (state.totalUnread || 0) + conversation.unreadCount;
+    }
+  }
+},
+
   },
 
   // ── Extra Reducers ────────────────────────────────────────────────────────
@@ -329,7 +387,8 @@ export const {
   setActiveConversation, receiveMessage, addOptimisticMessage,
   applyMessageEdit, applyMessageDelete, applySeenReceipt, applyReaction,
   setOnlineUsers, userCameOnline, userWentOffline,
-  setTyping, clearTyping, clearMessages,
+  setTyping, clearTyping, clearMessages, addNewConversation,
+  updateConversation,
 } = chatSlice.actions;
 
 export const selectConversations = (s) => s.chat.conversations;

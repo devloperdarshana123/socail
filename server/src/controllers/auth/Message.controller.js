@@ -69,11 +69,20 @@ export const getConversations = asyncHandler(async (req, res) => {
   if (hasMore) conversations.pop();
 
   // Unread count — Map field properly extract karo
- const formatted = conversations.map((conv) => {
-    const member = memberMap[conv._id.toString()] ?? {};
-    return { ...conv, unreadCount: member.unreadCount ?? 0 };
-  });
-
+const formatted = conversations.map((conv) => {
+  const member = memberMap[conv._id.toString()] ?? {};
+  return {
+    ...conv,
+    unreadCount: member.unreadCount ?? 0,
+    // ✅ avatar normalize — frontend avatar.url expect karta hai
+    participants: (conv.participants || []).map((p) => ({
+      ...p,
+      avatar: p.avatar?.url !== undefined
+        ? p.avatar
+        : { url: p.avatar || null, publicId: null },
+    })),
+  };
+});
   res.status(200).json({
     success: true,
     data: formatted,
@@ -106,6 +115,25 @@ export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
     isActive: true,
   }).populate("participants", "username fullName avatar isVerifiedBadge accountStatus");
 
+
+  if (conv) {
+  await ConversationMember.bulkWrite([
+    {
+      updateOne: {
+        filter: { conversationId: conv._id, userId },
+        update: { $setOnInsert: { conversationId: conv._id, userId, unreadCount: 0, isDeleted: false } },
+        upsert: true,
+      },
+    },
+    {
+      updateOne: {
+        filter: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId) },
+        update: { $setOnInsert: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId), unreadCount: 0, isDeleted: false } },
+        upsert: true,
+      },
+    },
+  ]);
+}
   // Nahi mila toh create karo
  if (!conv) {
     const sorted = [userId, new mongoose.Types.ObjectId(participantId)]
@@ -165,6 +193,15 @@ export const markConversationRead = asyncHandler(async (req, res, next) => {
   );
 
   // Saare unread messages — seenBy aur readBy dono update karo (blue tick)
+
+  await Message.updateMany(
+  {
+    conversation: conversationId,
+    seenBy: { $ne: userId },
+    isDeleted: false,
+  },
+  { $addToSet: { seenBy: userId } },
+);
   
 
   res.status(200).json({ success: true });
