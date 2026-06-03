@@ -8,7 +8,7 @@ import {
   getTopPosts,
   getHourlyActivity,
 } from "../../controllers/admin/Admin.dashboard.controller.js";
-import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 
 const router = express.Router();
 
@@ -16,11 +16,11 @@ const router = express.Router();
 //  Protected Routes — isAuthenticated + isAdmin
 // ─────────────────────────────────────────────
 
-router.get("/stats",           isAuthenticated, isAdmin, getDashboardStats);
-router.get("/user-growth",     isAuthenticated, isAdmin, getUserGrowth);
-router.get("/post-growth",     isAuthenticated, isAdmin, getPostGrowth);
-router.get("/engagement",      isAuthenticated, isAdmin, getEngagementTrend);
-router.get("/top-posts",       isAuthenticated, isAdmin, getTopPosts);
-router.get("/hourly-activity", isAuthenticated, isAdmin, getHourlyActivity);
+router.get("/stats",           isAdminAuthenticated, getDashboardStats);
+router.get("/user-growth",     isAdminAuthenticated, getUserGrowth);
+router.get("/post-growth",     isAdminAuthenticated, getPostGrowth);
+router.get("/engagement",      isAdminAuthenticated, getEngagementTrend);
+router.get("/top-posts",       isAdminAuthenticated, getTopPosts);
+router.get("/hourly-activity", isAdminAuthenticated, getHourlyActivity);
 
 export default router;

@@ -43,18 +43,39 @@ app.use(helmet());
 
 // ── CORS ──
 // CHANGE 1: Single URL ki jagah array — multiple origins support
+// const allowedOrigins = process.env.FRONTEND_URL
+//   ? process.env.FRONTEND_URL.split(",").map((o) => o.trim())
+//   : ["http://localhost:5173"];
+
+// app.use(
+//   cors({
+//     origin: allowedOrigins,
+//     credentials: true,
+//     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+//   }),
+// );
+
+
+
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",").map((o) => o.trim())
-  : ["http://localhost:5173"];
+  : ["http://localhost:5173", "http://localhost:5174"];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS blocked: ${origin}`));
+      }
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-platform"],
+    exposedHeaders: ["set-cookie"],
   }),
 );
-
 // ── Body Parsers ──
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));

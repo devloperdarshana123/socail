@@ -15,7 +15,8 @@ import { fetchNotifications, markAllRead } from "../lib/redux/notificationSlice"
 const selectUser          = (s) => s.auth.user;
 const selectLogoutLoading = (s) => s.auth.logout?.loading ?? false;
 const selectAvatar        = (s) => s.userProfile?.avatar?.url || null;
-const selectNotifications = (s) => s.notifications.notifications;
+// const selectNotifications = (s) => s.notifications.notifications;
+const selectNotifications = (s) => s.notifications?.notifications ?? [];
 const selectUnreadCount   = (s) => s.notifications.unreadCount;
 
 // ── Notification helpers ──────────────────────────────────────────────────────

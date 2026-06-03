@@ -353,15 +353,13 @@ setPending(state, action) {
   state.user = action.payload.data?.user || action.payload.data || null;
   state.isAuthenticated = !!state.user;
 })
-      .addCase(fetchMe.rejected, (state, action) => {
-        state.fetchMe.loading = false;
-        state.fetchMe.error = action.payload;
-        state.user = null;
-        state.isAuthenticated = false;
-        // Token invalid — localStorage bhi clear karo
-       
-        
-      });
+    .addCase(fetchMe.rejected, (state, action) => {
+  state.fetchMe.loading  = false;
+  state.fetchMe.error    = action.payload;
+  state.user             = null;
+  state.isAuthenticated  = false;
+  localStorage.removeItem("accessToken"); // ← stale token clear
+})
 
     // ── Login ──
     builder

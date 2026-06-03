@@ -107,7 +107,7 @@ const adminAuthSlice = createSlice({
 
     // Interceptor se logout event aane pe
     forceLogout: () => {
-      return initialState;
+       return loggedOutState
     },
 
     // Admin data manually update karna ho toh

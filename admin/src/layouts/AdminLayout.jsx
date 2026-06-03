@@ -167,8 +167,6 @@ function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
       {/* Logo */}
       <div className="flex items-center h-15 px-4 border-b border-slate-100 shrink-0">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
-          </div>
           {(!collapsed || isMobile) && (
             <div className="overflow-hidden">
               <p className="text-sm font-bold text-slate-800 tracking-tight leading-none">Admin</p>
@@ -403,11 +401,6 @@ export default function AdminLayout() {
           </svg>
         </button>
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-linear-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
-            <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
-            </svg>
-          </div>
           <span className="text-sm font-bold text-slate-800 tracking-tight">Admin Panel</span>
         </div>
       </header>

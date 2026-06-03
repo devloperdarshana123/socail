@@ -2,7 +2,9 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import User from "../../models/user.model.js";
-import { sendToken, clearAuthCookies, COOKIE_REFRESH, COOKIE_ACCESS } from "../../utils/sendToken.js";
+import { sendAdminToken }             from "../../utils/sendAdminToken.js";
+import { clearAdminCookies }          from "../../utils/authCookies.js";
+import { ADMIN_COOKIE_ACCESS, ADMIN_COOKIE_REFRESH } from "../../utils/authCookies.js";
 import logger from "../../config/logger.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -48,7 +50,7 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
 
   logger.info("Admin logged in", { userId: user._id, email: user.email, role: user.role });
 
-  await sendToken(user, 200, res, {
+  await sendAdminToken(user, 200, res, {
     message   : "Admin login successful",
     nextRoute : "/dashboard",
     deviceInfo: req.headers["user-agent"] || "unknown",
@@ -61,10 +63,8 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
 // ═════════════════════════════════════════════
 
 export const adminLogout = asyncHandler(async (req, res, next) => {
-  const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
-
-  // Access token blacklist karo
-  const accessToken = req.cookies?.[COOKIE_ACCESS];
+  const incomingRefreshToken = req.cookies?.[ADMIN_COOKIE_REFRESH];
+const accessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];
   if (accessToken) {
     try {
       const decoded = jwt.decode(accessToken);
@@ -83,7 +83,7 @@ export const adminLogout = asyncHandler(async (req, res, next) => {
   }
 
   logger.info("Admin logged out", { userId: req.user._id });
-  return clearAuthCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
+  return clearAdminCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
 });
 
 
@@ -92,7 +92,7 @@ export const adminLogout = asyncHandler(async (req, res, next) => {
 
   // Access token blacklist karo
 export const adminRefreshToken = asyncHandler(async (req, res, next) => {
-  const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
+  const incomingRefreshToken = req.cookies?.[ADMIN_COOKIE_REFRESH];
   // ── Step 1: Cookie present? ──────────────────────────────────────────────
   if (!incomingRefreshToken) {
     logger.warn("Admin refresh: no refresh token cookie", { ip: req.ip });
@@ -102,7 +102,7 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
   // ── Step 2: JWT signature + expiry valid? ────────────────────────────────
   let decoded;
   try {
-    decoded = jwt.verify(incomingRefreshToken, ENV.REFRESH_TOKEN_SECRET);
+   decoded = jwt.verify(incomingRefreshToken, ENV.ADMIN_REFRESH_TOKEN_SECRET);
   } catch (err) {
     logger.warn("Admin refresh: JWT verify failed", {
       reason: err.message,
@@ -147,7 +147,7 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
   // ── Step 6: Rotate tokens (atomic — new method handles cleanup + push) ───
   await user.removeRefreshToken(incomingRefreshToken);
   // Purana access token blacklist karo
-  const oldAccessToken = req.cookies?.[COOKIE_ACCESS];
+const oldAccessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];
   if (oldAccessToken) {
     try {
       const oldDecoded = jwt.decode(oldAccessToken);
@@ -157,11 +157,11 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
     } catch { /* ignore */ }
   }
 
-  const newAccessToken  = user.generateAccessToken();
-  const newRefreshToken = await user.generateRefreshToken(
-    storedToken.deviceInfo,
-    storedToken.ipAddress,
-  );
+  const newAccessToken  = user.generateAdminAccessToken();
+const newRefreshToken = await user.generateAdminRefreshToken(
+  storedToken.deviceInfo,
+  storedToken.ipAddress,
+);
 
   // ── Step 7: Set new cookies ──────────────────────────────────────────────
   const isProduction = process.env.NODE_ENV === "production";
@@ -185,11 +185,11 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
 
   return res
     .status(200)
-    .cookie(COOKIE_ACCESS, newAccessToken, {
+    .cookie(ADMIN_COOKIE_ACCESS, newAccessToken, {
       ...baseCookieOptions,
       maxAge: 15 * 60 * 1000, // 15 min
     })
-    .cookie(COOKIE_REFRESH, newRefreshToken, {
+    .cookie(ADMIN_COOKIE_REFRESH, newRefreshToken, {
       ...baseCookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     })

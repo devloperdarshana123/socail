@@ -101,72 +101,142 @@ const chatSlice = createSlice({
     },
 
     // ── receiveMessage ────────────────────────────────────────────────────
-    receiveMessage(state, { payload: { conversationId, message, tempId } }) {
+   
 
-      // ── 1. Message list update ────────────────────────────────────────
-      if (!state.messages[conversationId]) state.messages[conversationId] = [];
-      const msgId = message._id?.toString();
+  //   receiveMessage(state, { payload: { conversationId, message, tempId } }) {
+  // if (!state.messages[conversationId]) state.messages[conversationId] = [];
 
-      if (tempId) {
-        const idx = state.messages[conversationId].findIndex(
-          (m) => m._id === tempId || m._id?.toString() === tempId
-        );
-        if (idx !== -1) {
-          state.messages[conversationId][idx] = {
-            ...message,
-            isOptimistic: false,
-            sender: normalizeSender(message.sender),
-          };
-          // Apna hi message — conversation update, unread nahi
-          const conv = state.conversations.find((c) => c._id === conversationId);
-          if (conv) {
-            conv.lastMessage = message;
-            conv.updatedAt   = message.createdAt || new Date().toISOString();
-          }
-          return;
-        }
-      }
+  // const msgId       = message._id?.toString();
+  // const normalizedMsg = {
+  //   ...message,
+  //   isOptimistic: false,
+  //   sender: normalizeSender(message.sender),
+  // };
 
-      // Duplicate check
-      const exists = state.messages[conversationId].some(
+  // // ── Optimistic replace — sirf jab tempId ho aur match mile ──
+  // if (tempId) {
+  //   const idx = state.messages[conversationId].findIndex(
+  //     (m) => m._id === tempId || m._id?.toString() === tempId
+  //   );
+  //   if (idx !== -1) {
+  //     // In-place replace — position maintain karo
+  //     state.messages[conversationId][idx] = normalizedMsg;
+  //     const conv = state.conversations.find((c) => c._id === conversationId);
+  //     if (conv) {
+  //       conv.lastMessage = message;
+  //       conv.updatedAt   = message.createdAt || new Date().toISOString();
+  //     }
+  //     return;
+  //   }
+  // }
+
+  // // ── Duplicate guard — real _id se check karo ──
+  // const alreadyExists = state.messages[conversationId].some(
+  //   (m) => !m.isOptimistic && m._id?.toString() === msgId
+  // );
+  // if (alreadyExists) return;
+
+  // // ── Stale optimistic cleanup — agar tempId replace nahi hua ──
+  // // (network delay ya reconnect case) — orphan optimistic hatao
+  // if (tempId) {
+  //   state.messages[conversationId] = state.messages[conversationId].filter(
+  //     (m) => !(m.isOptimistic && (m._id === tempId || m._id?.toString() === tempId))
+  //   );
+  // }
+
+  // state.messages[conversationId].push(normalizedMsg);
+
+  //     // ── 2. Active conversation check ──────────────────────────────────
+  //     // Agar yeh conversation abhi screen pe open hai toh badge mat badhao
+  //     if (state.activeConvId === conversationId) {
+  //       // Sirf lastMessage update karo
+  //       const conv = state.conversations.find((c) => c._id === conversationId);
+  //       if (conv) {
+  //         conv.lastMessage = message;
+  //         conv.updatedAt   = message.createdAt || new Date().toISOString();
+  //       }
+  //       return;
+  //     }
+
+  //     // ── 3. Badge increment — real-time track karo ─────────────────────
+  //     // realtimeUnreadMap mein store karo — fetchConversations se race nahi hogi
+  //     state.realtimeUnreadMap[conversationId] =
+  //       (state.realtimeUnreadMap[conversationId] || 0) + 1;
+  //     state.totalUnread = (state.totalUnread || 0) + 1;
+
+  //     // ── 4. Conversation list update ───────────────────────────────────
+  //     const conv = state.conversations.find((c) => c._id === conversationId);
+  //     if (conv) {
+  //       conv.lastMessage = message;
+  //       conv.updatedAt   = message.createdAt || new Date().toISOString();
+  //       conv.unreadCount = (conv.unreadCount || 0) + 1;
+  //     }
+  //     // Conversation list mein nahi hai — badge already upar badh gaya
+  //     // fetchConversations complete hone pe merge ho jaayega
+  //   },
+
+  receiveMessage(state, { payload: { conversationId, message, tempId } }) {
+  if (!state.messages[conversationId]) state.messages[conversationId] = [];
+
+  const msgId         = message._id?.toString();
+  const normalizedMsg = {
+    ...message,
+    isOptimistic: false,
+    sender: normalizeSender(message.sender),
+  };
+
+  // ── Step 1: Message list update ───────────────────────────────────────
+
+  // Optimistic replace — tempId match hone pe in-place replace
+  if (tempId) {
+    const idx = state.messages[conversationId].findIndex(
+      (m) => m._id === tempId || m._id?.toString() === tempId
+    );
+    if (idx !== -1) {
+      state.messages[conversationId][idx] = normalizedMsg;
+      // Step 2 pe jaao — badge/conv update abhi bhi hona chahiye
+    } else {
+      // tempId tha lekin match nahi — stale optimistic cleanup + push
+      state.messages[conversationId] = state.messages[conversationId].filter(
+        (m) => !(m.isOptimistic && (m._id === tempId || m._id?.toString() === tempId))
+      );
+      const alreadyExists = state.messages[conversationId].some(
         (m) => m._id?.toString() === msgId
       );
-      if (!exists) {
-        state.messages[conversationId].push({
-          ...message,
-          isOptimistic: false,
-          sender: normalizeSender(message.sender),
-        });
-      }
+      if (!alreadyExists) state.messages[conversationId].push(normalizedMsg);
+    }
+  } else {
+    // No tempId — duplicate check karke push
+    const alreadyExists = state.messages[conversationId].some(
+      (m) => !m.isOptimistic && m._id?.toString() === msgId
+    );
+    if (!alreadyExists) state.messages[conversationId].push(normalizedMsg);
+  }
 
-      // ── 2. Active conversation check ──────────────────────────────────
-      // Agar yeh conversation abhi screen pe open hai toh badge mat badhao
-      if (state.activeConvId === conversationId) {
-        // Sirf lastMessage update karo
-        const conv = state.conversations.find((c) => c._id === conversationId);
-        if (conv) {
-          conv.lastMessage = message;
-          conv.updatedAt   = message.createdAt || new Date().toISOString();
-        }
-        return;
-      }
+  // ── Step 2: Conversation + badge update ──────────────────────────────
 
-      // ── 3. Badge increment — real-time track karo ─────────────────────
-      // realtimeUnreadMap mein store karo — fetchConversations se race nahi hogi
-      state.realtimeUnreadMap[conversationId] =
-        (state.realtimeUnreadMap[conversationId] || 0) + 1;
-      state.totalUnread = (state.totalUnread || 0) + 1;
+  const conv = state.conversations.find((c) => c._id === conversationId);
 
-      // ── 4. Conversation list update ───────────────────────────────────
-      const conv = state.conversations.find((c) => c._id === conversationId);
-      if (conv) {
-        conv.lastMessage = message;
-        conv.updatedAt   = message.createdAt || new Date().toISOString();
-        conv.unreadCount = (conv.unreadCount || 0) + 1;
-      }
-      // Conversation list mein nahi hai — badge already upar badh gaya
-      // fetchConversations complete hone pe merge ho jaayega
-    },
+  if (state.activeConvId === conversationId) {
+    // Conversation open hai — sirf lastMessage update, badge nahi
+    if (conv) {
+      conv.lastMessage = message;
+      conv.updatedAt   = message.createdAt || new Date().toISOString();
+    }
+    return;
+  }
+
+  // Conversation background mein hai — badge badhao
+  state.realtimeUnreadMap[conversationId] =
+    (state.realtimeUnreadMap[conversationId] || 0) + 1;
+  state.totalUnread = (state.totalUnread || 0) + 1;
+
+  if (conv) {
+    conv.lastMessage = message;
+    conv.updatedAt   = message.createdAt || new Date().toISOString();
+    conv.unreadCount = (conv.unreadCount || 0) + 1;
+  }
+},
 
     addOptimisticMessage(state, { payload: { conversationId, message } }) {
       if (!state.messages[conversationId]) state.messages[conversationId] = [];

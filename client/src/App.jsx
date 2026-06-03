@@ -59,17 +59,17 @@ const App = () => {
   // App load pe user fetch
   useEffect(() => {
     dispatch(fetchMe());
-  }, [dispatch]);
+  }, []);
 
   // Force logout handler
   useEffect(() => {
-    const handleForceLogout = () => {
-      dispatch(resetAuth());
-      dispatch(resetProfile());
-      navigate("/");
-    };
-    window.addEventListener("auth:logout", handleForceLogout);
-    return () => window.removeEventListener("auth:logout", handleForceLogout);
+  const handleForceLogout = () => {
+  dispatch(resetAuth());
+  dispatch(resetProfile());
+  navigate("/login", { replace: true });
+};
+window.addEventListener("auth:logout", handleForceLogout);
+return () => window.removeEventListener("auth:logout", handleForceLogout);
   }, [dispatch, navigate]);
 
   // Token refresh — localStorage update

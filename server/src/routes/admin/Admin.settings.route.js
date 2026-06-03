@@ -1,6 +1,6 @@
 // import { Router }      from "express";
 // import multer          from "multer";
-// import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+// import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 // import {
 //   getAdminProfile,
 //   updateAdminProfile,
@@ -25,7 +25,7 @@
 // });
 
 // // All admin settings routes require authentication + admin role
-// router.use(isAuthenticated, isAdmin);
+// router.use(isAdminAuthenticated);
 
 // // ── Profile ────────────────────────────────────────────────────────────────
 // router.get  ("/profile",        getAdminProfile);
@@ -50,7 +50,7 @@
 // server/src/routes/admin/admin.settings.route.js
 import { Router }   from "express";
 import multer       from "multer";
-import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {
   getAdminProfile, updateAdminProfile, updateAdminAvatar,
   changeAdminPassword, updateNotificationSettings,
@@ -70,7 +70,7 @@ const upload = multer({
   },
 });
 
-router.use(isAuthenticated, isAdmin);
+router.use(isAdminAuthenticated);
 
 // ── READ (no audit) ───────────────────────────────────────────────────────────
 router.get("/profile",  getAdminProfile);

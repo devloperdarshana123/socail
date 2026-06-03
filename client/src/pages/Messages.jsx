@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback,useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import EmojiPicker from "emoji-picker-react";
@@ -11,6 +11,10 @@ import {
   openOrCreateConversation, selectConversations, selectActiveConvId,
   selectOnlineUsers, selectLoadingConvs,
   addNewConversation, updateConversation,
+  receiveMessage, applyMessageEdit, applyMessageDelete,
+  applySeenReceipt, applyReaction,
+  setOnlineUsers, userCameOnline, userWentOffline,
+  setTyping, clearTyping,
 } from "../lib/redux/chatSlice";
 import {
   fetchFollowing, selectFollowing, selectLoadingFollowing,
@@ -56,19 +60,56 @@ function useIsMobile(bp = 768) {
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
+// function Avatar({ name = "", userId = "", size = 38, online = false, src = null }) {
+//   const st = avatarStyle(userId);
+//   return (
+//     <div style={{ position: "relative", flexShrink: 0, display: "inline-flex" }}>
+//       {src ? (
+//         <img src={src} alt={name}
+//           style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />
+//       ) : (
+//         <div style={{
+//           ...st, width: size, height: size, borderRadius: "50%",
+//           display: "flex", alignItems: "center", justifyContent: "center",
+//           fontSize: size * 0.34, fontWeight: 500,
+//         }}>{initials(name)}</div>
+//       )}
+//       {online && (
+//         <span style={{
+//           position: "absolute", bottom: 1, right: 1, width: 9, height: 9,
+//           borderRadius: "50%", background: "#1D9E75",
+//           border: "2px solid var(--color-background-primary, #fff)",
+//         }} />
+//       )}
+//     </div>
+//   );
+// }
+
+
+
 function Avatar({ name = "", userId = "", size = 38, online = false, src = null }) {
-  const st = avatarStyle(userId);
+  const [imgFailed, setImgFailed] = useState(false);
+  const st      = avatarStyle(userId);
+  const validSrc = src && typeof src === "string" && src.startsWith("http") ? src : null;
+  const showImg  = validSrc && !imgFailed;
+
   return (
     <div style={{ position: "relative", flexShrink: 0, display: "inline-flex" }}>
-      {src ? (
-        <img src={src} alt={name}
-          style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />
+      {showImg ? (
+        <img
+          src={validSrc}
+          alt={name}
+          onError={() => setImgFailed(true)}
+          style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }}
+        />
       ) : (
         <div style={{
           ...st, width: size, height: size, borderRadius: "50%",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: size * 0.34, fontWeight: 500,
-        }}>{initials(name)}</div>
+        }}>
+          {initials(name)}
+        </div>
       )}
       {online && (
         <span style={{
@@ -344,15 +385,32 @@ export default function Messages() {
   const msgListRef   = useRef(null);
   const fileInputRef = useRef(null);
 
-  const activeConv = conversations.find((c) => c._id === activeConvId);
-  const otherParticipant = activeConv?.participants?.find(
+const activeConv = useMemo(
+  () => conversations.find((c) => c._id === activeConvId),
+  [conversations, activeConvId]
+);
+
+const otherParticipant = useMemo(
+  () => activeConv?.participants?.find(
     (p) => (p._id || p).toString() !== myId
-  );
-  const participantIds = (activeConv?.participants || []).map(
-    (p) => (p._id || p).toString()
-  );
-  const otherId     = (otherParticipant?._id || otherParticipant)?.toString();
-  const otherOnline = onlineUsers.includes(otherId);
+  ) ?? null,
+  [activeConv, myId]
+);
+
+const participantIds = useMemo(
+  () => (activeConv?.participants ?? []).map((p) => (p._id || p).toString()),
+  [activeConv]
+);
+
+const otherId = useMemo(
+  () => (otherParticipant?._id || otherParticipant)?.toString() ?? "",
+  [otherParticipant]
+);
+
+const otherOnline = useMemo(
+  () => onlineUsers.includes(otherId),
+  [onlineUsers, otherId]
+);
 
   const showSidebar  = !isMobile || !activeConvId;
   const showChatArea = !isMobile || !!activeConvId;
@@ -439,28 +497,92 @@ useEffect(() => {
 
   // ✅ conversation:new — stranger ya koi bhi pehla message bheje
 // ✅ conversation:updated — har message pe sidebar reorder
-useEffect(() => {
-  const s = getSocket();
-  if (!s) return;
+// useEffect(() => {
+//   const s = getSocket();
+//   if (!s) return;
 
-  const onConvNew = ({ conversation }) => {
-    if (!conversation?._id) return;
-    dispatch(addNewConversation({ conversation }));
-  };
+//   const onConvNew = ({ conversation }) => {
+//     if (!conversation?._id) return;
+//     dispatch(addNewConversation({ conversation }));
+//   };
 
-  const onConvUpdated = ({ conversation }) => {
-    if (!conversation?._id) return;
-    dispatch(updateConversation({ conversation }));
-  };
+//   const onConvUpdated = ({ conversation }) => {
+//     if (!conversation?._id) return;
+//     dispatch(updateConversation({ conversation }));
+//   };
 
-  s.on("conversation:new",     onConvNew);
-  s.on("conversation:updated", onConvUpdated);
+//   s.on("conversation:new",     onConvNew);
+//   s.on("conversation:updated", onConvUpdated);
 
-  return () => {
-    s.off("conversation:new",     onConvNew);
-    s.off("conversation:updated", onConvUpdated);
-  };
-}, [dispatch]);
+//   return () => {
+//     s.off("conversation:new",     onConvNew);
+//     s.off("conversation:updated", onConvUpdated);
+//   };
+// }, [dispatch]);
+
+
+// useEffect(() => {
+//   const s = getSocket();
+//   if (!s) return;
+
+//   const onConvNew      = ({ conversation }) => {
+//     if (!conversation?._id) return;
+//     dispatch(addNewConversation({ conversation }));
+//   };
+//   const onConvUpdated  = ({ conversation }) => {
+//     if (!conversation?._id) return;
+//     dispatch(updateConversation({ conversation }));
+//   };
+//   const onMsgReceive   = ({ conversationId, message, tempId }) => {
+//     if (!conversationId || !message) return;
+//     dispatch(receiveMessage({ conversationId, message, tempId: tempId ?? null }));
+//   };
+//   const onMsgEdited    = ({ conversationId, messageId, newText, isEdited, editedAt }) => {
+//     dispatch(applyMessageEdit({ conversationId, messageId, newText, isEdited, editedAt }));
+//   };
+//   const onMsgDeleted   = ({ conversationId, messageId }) => {
+//     dispatch(applyMessageDelete({ conversationId, messageId }));
+//   };
+//   const onMsgSeen      = ({ conversationId, messageId, seenBy }) => {
+//     dispatch(applySeenReceipt({ conversationId, messageId, seenBy }));
+//   };
+//   const onReaction     = ({ conversationId, messageId, reactions }) => {
+//     dispatch(applyReaction({ conversationId, messageId, reactions }));
+//   };
+//   const onOnlineList   = (userIds) => dispatch(setOnlineUsers(userIds));
+//   const onUserOnline   = ({ userId }) => dispatch(userCameOnline({ userId }));
+//   const onUserOffline  = ({ userId }) => dispatch(userWentOffline({ userId }));
+//   const onTypingStart  = ({ conversationId, userId }) => dispatch(setTyping({ conversationId, userId }));
+//   const onTypingStop   = ({ conversationId, userId }) => dispatch(clearTyping({ conversationId, userId }));
+
+//   s.on("conversation:new",     onConvNew);
+//   s.on("conversation:updated", onConvUpdated);
+//   s.on("message:receive",      onMsgReceive);
+//   s.on("message:edited",       onMsgEdited);
+//   s.on("message:deleted",      onMsgDeleted);
+//   s.on("message:seen",         onMsgSeen);
+//   s.on("message:reaction",     onReaction);
+//   s.on("online:list",          onOnlineList);
+//   s.on("user:online",          onUserOnline);
+//   s.on("user:offline",         onUserOffline);
+//   s.on("typing:start",         onTypingStart);
+//   s.on("typing:stop",          onTypingStop);
+
+//   return () => {
+//     s.off("conversation:new",     onConvNew);
+//     s.off("conversation:updated", onConvUpdated);
+//     s.off("message:receive",      onMsgReceive);
+//     s.off("message:edited",       onMsgEdited);
+//     s.off("message:deleted",      onMsgDeleted);
+//     s.off("message:seen",         onMsgSeen);
+//     s.off("message:reaction",     onReaction);
+//     s.off("online:list",          onOnlineList);
+//     s.off("user:online",          onUserOnline);
+//     s.off("user:offline",         onUserOffline);
+//     s.off("typing:start",         onTypingStart);
+//     s.off("typing:stop",          onTypingStop);
+//   };
+// }, [dispatch]);
   useEffect(() => {
     if (!activeConvId || messages.length === 0) return;
     const last = messages[messages.length - 1];

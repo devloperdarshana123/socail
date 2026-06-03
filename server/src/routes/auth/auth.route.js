@@ -10,6 +10,7 @@ import {
    forgotPassword,  
   resetPassword,
    googleAuth, 
+    getSocketToken,
 } from "../../controllers/auth/auth.controller.js";
 import { isAuthenticated } from "../../middlewares/auth.js";
 import {
@@ -41,5 +42,6 @@ router.post("/refresh-token", refreshToken);
 router.get("/me", isAuthenticated, getMe);
 router.post("/reset-password", isAuthenticated, resetPassword);
 router.post("/logout", isAuthenticated, logout);
+router.get("/socket-token", isAuthenticated, getSocketToken);
 
 export default router;

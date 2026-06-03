@@ -20,8 +20,11 @@ export const fetchMyPosts = createAsyncThunk(
   "posts/fetchMyPosts",
   async (userId, { rejectWithValue }) => {
     try {
-      const res = await api.get(`/posts/user/${userId}`);
-      return res.data.data || res.data.posts || res.data;
+      const res = await api.get(`/posts/user/${userId}?limit=500`);
+      return {
+        posts:      res.data.data || res.data.posts || [],
+        postsCount: res.data.postsCount ?? null,
+      };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Posts fetch nahi hue");
     }
@@ -223,6 +226,7 @@ const postSlice = createSlice({
     savedPostsHasMore:    false,
 savedPostsNextCursor: null,
     createError: null,
+    serverPostsCount: null,
     interactions: {},
   },
 
@@ -266,10 +270,13 @@ savedPostsNextCursor: null,
 
     builder
       .addCase(fetchMyPosts.pending,    (state) => { state.myPostsLoading = true; })
-      .addCase(fetchMyPosts.fulfilled,  (state, action) => {
-        state.myPostsLoading = false;
-        state.myPosts = Array.isArray(action.payload) ? action.payload : [];
-      })
+ .addCase(fetchMyPosts.fulfilled, (state, action) => {
+  state.myPostsLoading = false;
+  state.myPosts        = Array.isArray(action.payload.posts) ? action.payload.posts : [];
+  if (action.payload.postsCount !== null) {
+    state.serverPostsCount = action.payload.postsCount;
+  }
+})
       .addCase(fetchMyPosts.rejected,   (state, action) => { state.myPostsLoading = false; state.myPostsError = action.payload; });
 
     builder.addCase(togglePostLike.fulfilled, (state, action) => {

@@ -1,5 +1,5 @@
 // import express from "express";
-// import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+// import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 // import {
 //   getAllUsers,
 //   getUserById,
@@ -23,7 +23,7 @@
 // const router = express.Router();
 
 // // ── All routes protected: must be logged in + super_admin ────
-// router.use(isAuthenticated, isAdmin);
+// router.use(isAdminAuthenticated);
 
 // // ── Dashboard ────────────────────────────────────────────────
 // router.get("/stats", getDashboardStats);
@@ -54,7 +54,7 @@
 
 
 import express from "express";
-import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {
   getAllUsers,
   getUserById,
@@ -86,7 +86,7 @@ import {
 const router = express.Router();
 
 // ── All routes protected: must be logged in + super_admin ────
-router.use(isAuthenticated, isAdmin);
+router.use(isAdminAuthenticated);
 
 // ── Dashboard ────────────────────────────────────────────────
 router.get("/stats", getDashboardStats);

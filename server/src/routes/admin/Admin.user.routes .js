@@ -1,7 +1,7 @@
 
 // server/src/routes/admin/Admin.user.routes.js
 import express from "express";
-import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {
   getAllUsers, getUserById, getUserPosts, getUserReports,
   updateUserStatus, deleteUserAccount, deletePost,
@@ -12,7 +12,7 @@ import { auditLog } from "../../middlewares/auditMiddleware.js";
 import { AUDIT_ACTIONS } from "../../utils/auditLogger.js";
 
 const router = express.Router();
-router.use(isAuthenticated, isAdmin);
+router.use(isAdminAuthenticated);
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 router.get("/stats", getDashboardStats);

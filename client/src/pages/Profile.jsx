@@ -121,7 +121,7 @@ export default function Profile() {
     (state) => state.userProfile
   );
 
-  const { myPosts, myPostsLoading, savedPosts, savedPostsLoading, draftPosts, draftPostsLoading } = useSelector((state) => state.posts);
+  const { myPosts, myPostsLoading, savedPosts, savedPostsLoading, draftPosts, draftPostsLoading, serverPostsCount } = useSelector((state) => state.posts);
   const { user } = useSelector((state) => state.auth);
  
   const { highlights, highlightLoading } = useSelector((state) => state.stories);
@@ -331,7 +331,7 @@ const isLoadingPosts = activeTab === "saved" ? savedPostsLoading : activeTab ===
         {/* Stats */}
         <div className="flex gap-3 mb-6">
           {[
-            { label: "Posts", value: myPosts.length },
+{ label: "Posts", value: serverPostsCount ?? myPosts.length },
             { label: "Followers", value: user?.followersCount ?? 0, onClick: () => setFollowModal("followers") },
 { label: "Following", value: user?.followingCount ?? 0, onClick: () => setFollowModal("following") },
           ].map((stat) => (

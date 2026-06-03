@@ -1,5 +1,5 @@
 import express from "express";
-import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {
   getAuditLogs,
   getAuditLogById,
@@ -10,7 +10,7 @@ import {
 const router = express.Router();
 
 // ── All audit routes: must be logged-in admin ─────────────────────────────
-router.use(isAuthenticated, isAdmin);
+router.use(isAdminAuthenticated);
 
 // Order matters — specific routes before :id
 

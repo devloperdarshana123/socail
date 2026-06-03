@@ -38,13 +38,39 @@ const syncLastMessage = async (conversationId, msg) => {
   }
 };
 
-const normalizeParticipants = (conv) => ({
-  ...conv,
-  participants: (conv.participants || []).map((p) => ({
-    ...p,
-    avatar: p.avatar?.url ? p.avatar : { url: null, publicId: null },
-  })),
-});
+// const normalizeParticipants = (conv) => ({
+//   ...conv,
+//   participants: (conv.participants || []).map((p) => ({
+//     ...p,
+//     avatar: p.avatar?.url ? p.avatar : { url: null, publicId: null },
+//   })),
+// });
+
+
+
+const PARTICIPANT_SELECT = "_id fullName username avatar isVerifiedBadge accountStatus";
+
+const normalizeParticipants = (conv) => {
+  if (!conv) return null;
+  return {
+    ...conv,
+    participants: (conv.participants || [])
+      .map((p) => {
+        if (!p || typeof p !== "object" || !p._id) return null;
+        return {
+          _id:             p._id.toString(),
+          fullName:        p.fullName        ?? null,
+          username:        p.username        ?? null,
+          avatar:          p.avatar?.url
+            ? { url: p.avatar.url, publicId: p.avatar.publicId ?? null }
+            : { url: null, publicId: null },
+          isVerifiedBadge: p.isVerifiedBadge ?? false,
+          accountStatus:   p.accountStatus   ?? "active",
+        };
+      })
+      .filter(Boolean),
+  };
+};
 const aggregateReactions = (reactions = []) => {
   const map = {};
   reactions.forEach(({ emoji, user }) => {
@@ -102,10 +128,22 @@ export default async (io, socket) => {
     }
   };
 
-  const getParticipants = async (conversationId) => {
-    const conv = await Conversation.findById(conversationId).lean();
-    return conv?.participants?.map((p) => p.toString()) || [];
-  };
+  // const getParticipants = async (conversationId) => {
+  //   const conv = await Conversation.findById(conversationId).lean();
+  //   return conv?.participants?.map((p) => p.toString()) || [];
+  // };
+
+  const getPopulatedConversation = async (conversationId) => {
+  const conv = await Conversation.findById(conversationId)
+    .populate("participants", PARTICIPANT_SELECT)
+    .lean();
+  return normalizeParticipants(conv);
+};
+
+const getParticipantIds = (conv) =>
+  (conv?.participants || []).map((p) =>
+    typeof p === "object" ? p._id.toString() : p.toString()
+  );
 
   // ── Conversation join / leave ──────────────────────────────────────────────
   socket.on("conversation:join", ({ conversationId }) =>
@@ -127,10 +165,15 @@ export default async (io, socket) => {
       return socket.emit("error", { message: "Message too long." });
 
     try {
-      const conv = await Conversation.findById(conversationId).lean();
-      if (!conv) return socket.emit("error", { message: "Conversation not found." });
+      // const conv = await Conversation.findById(conversationId).lean();
+      // if (!conv) return socket.emit("error", { message: "Conversation not found." });
 
-      const participants = conv.participants.map((p) => p.toString());
+      // const participants = conv.participants.map((p) => p.toString());
+
+      const conv = await getPopulatedConversation(conversationId);
+if (!conv) return socket.emit("error", { message: "Conversation not found." });
+
+const participants = getParticipantIds(conv);
       if (!participants.includes(userId))
         return socket.emit("error", { message: "Unauthorized." });
 
@@ -205,30 +248,62 @@ if (recipientIds.length) {
 }
 
       // message:receive — sab participants ko
+      // for (const pid of participants) {
+      //   if (pid !== userId) {
+      //     const blocked = await isBlocked(userId, pid);
+      //     if (blocked) continue;
+      //   }
+      //   await notifyUser(pid, "message:receive", {
+      //     conversationId,
+      //     message: msgToEmit,
+      //     tempId:  message.tempId || null,
+      //   });
+      // }
+
+
       for (const pid of participants) {
-        if (pid !== userId) {
-          const blocked = await isBlocked(userId, pid);
-          if (blocked) continue;
-        }
-        await notifyUser(pid, "message:receive", {
-          conversationId,
-          message: msgToEmit,
-          tempId:  message.tempId || null,
-        });
-      }
-
+  if (pid !== userId) {
+    const blocked = await isBlocked(userId, pid);
+    if (blocked) continue;
+  }
+  await notifyUser(pid, "message:receive", {
+    conversationId,
+    message: msgToEmit,
+    tempId: pid === userId ? (message.tempId || null) : null,
+  });
+}
       // conversation:new — stranger ka pehla message
-     if (isNewConversation) {
-  const populatedConv = await Conversation.findById(conversationId)
-    .populate("participants", "_id fullName username avatar isVerifiedBadge accountStatus")
-    .lean();
+//      if (isNewConversation) {
+//   const populatedConv = await Conversation.findById(conversationId)
+//     .populate("participants", "_id fullName username avatar isVerifiedBadge accountStatus")
+//     .lean();
 
-  const safeNewConv = normalizeParticipants(populatedConv);
+//   const safeNewConv = normalizeParticipants(populatedConv);
 
+//   for (const pid of participants) {
+//     await notifyUser(pid, "conversation:new", {
+//       conversation: {
+//         ...safeNewConv,
+//         lastMessage: {
+//           messageId: newMsg._id,
+//           text:      newMsg.text?.slice(0, 100) ?? "",
+//           senderId:  userId,
+//           sentAt:    newMsg.createdAt,
+//           isDeleted: false,
+//         },
+//         unreadCount: pid === userId ? 0 : 1,
+//         updatedAt:   new Date().toISOString(),
+//       },
+//     });
+//   }
+// }
+
+
+if (isNewConversation) {
   for (const pid of participants) {
     await notifyUser(pid, "conversation:new", {
       conversation: {
-        ...safeNewConv,
+        ...conv,
         lastMessage: {
           messageId: newMsg._id,
           text:      newMsg.text?.slice(0, 100) ?? "",
@@ -243,23 +318,51 @@ if (recipientIds.length) {
   }
 }
 // ✅ Har message pe sidebar update — stranger ho ya follow kiya ho
-const updatedConv = await Conversation.findById(conversationId)
-  .populate("participants", "_id fullName username avatar isVerifiedBadge accountStatus")
-  .lean();
+// const updatedConv = await Conversation.findById(conversationId)
+//   .populate("participants", "_id fullName username avatar isVerifiedBadge accountStatus")
+//   .lean();
 
-// ✅ avatar nested object fix — frontend ko sahi structure chahiye
+// // ✅ avatar nested object fix — frontend ko sahi structure chahiye
 
 
-const safeConv = normalizeParticipants(updatedConv);
+// const safeConv = normalizeParticipants(updatedConv);
+
+// for (const pid of participants) {
+//   const member = await ConversationMember.findOne({
+//     conversationId, userId: pid,
+//   }).lean();
+
+//   await notifyUser(pid, "conversation:updated", {
+//   conversation: {
+//     ...safeConv,
+//       lastMessage: {
+//         messageId: newMsg._id,
+//         text:      newMsg.text?.slice(0, 100) ?? "",
+//         senderId:  userId,
+//         sentAt:    newMsg.createdAt,
+//         isDeleted: false,
+//       },
+//       unreadCount: pid === userId ? 0 : (member?.unreadCount ?? 0),
+//       updatedAt:   new Date().toISOString(),
+//     },
+//   });
+// }
+      // notification:message — online users ko toast
+
+
+      const members = await ConversationMember.find({
+  conversationId,
+  userId: { $in: participants },
+}).lean();
+
+const unreadMap = Object.fromEntries(
+  members.map((m) => [m.userId.toString(), m.unreadCount ?? 0])
+);
 
 for (const pid of participants) {
-  const member = await ConversationMember.findOne({
-    conversationId, userId: pid,
-  }).lean();
-
   await notifyUser(pid, "conversation:updated", {
-  conversation: {
-    ...safeConv,
+    conversation: {
+      ...conv,
       lastMessage: {
         messageId: newMsg._id,
         text:      newMsg.text?.slice(0, 100) ?? "",
@@ -267,12 +370,11 @@ for (const pid of participants) {
         sentAt:    newMsg.createdAt,
         isDeleted: false,
       },
-      unreadCount: pid === userId ? 0 : (member?.unreadCount ?? 0),
+      unreadCount: pid === userId ? 0 : (unreadMap[pid] ?? 0),
       updatedAt:   new Date().toISOString(),
     },
   });
 }
-      // notification:message — online users ko toast
       const preview = newMsg.audio
         ? "🎙️ Voice message"
         : newMsg.text
@@ -321,7 +423,12 @@ await ConversationMember.findOneAndUpdate(
   { conversationId, userId },
   { $set: { unreadCount: 0, lastSeenAt: new Date() } },
 );
-      const participants = await getParticipants(conversationId);
+      // const participants = await getParticipants(conversationId);
+
+      const seenConv = await Conversation.findById(conversationId)
+  .select("participants")
+  .lean();
+const participants = (seenConv?.participants || []).map((p) => p.toString());
       for (const pid of participants) {
         if (pid !== userId)
           await notifyUser(pid, "message:seen", { conversationId, messageId, seenBy: userId });
@@ -354,7 +461,12 @@ await ConversationMember.findOneAndUpdate(
       await msg.save();
       await syncLastMessage(conversationId, msg);
 
-      const participants = await getParticipants(conversationId);
+      // const participants = await getParticipants(conversationId);
+
+      const editConv = await Conversation.findById(conversationId)
+  .select("participants")
+  .lean();
+const participants = (editConv?.participants || []).map((p) => p.toString());
       for (const pid of participants) {
         await notifyUser(pid, "message:edited", {
           conversationId, messageId,
@@ -384,7 +496,11 @@ await ConversationMember.findOneAndUpdate(
       await msg.save();
       await syncLastMessage(conversationId, msg);
 
-      const participants = await getParticipants(conversationId);
+      // const participants = await getParticipants(conversationId);
+      const reactConv = await Conversation.findById(conversationId)
+  .select("participants")
+  .lean();
+const participants = (reactConv?.participants || []).map((p) => p.toString());
       for (const pid of participants) {
         await notifyUser(pid, "message:deleted", { conversationId, messageId, deletedBy: userId });
       }
@@ -414,8 +530,15 @@ await ConversationMember.findOneAndUpdate(
       }
       await msg.save();
 
-      const aggregated   = aggregateReactions(msg.reactions);
-      const participants = await getParticipants(conversationId);
+      // const aggregated   = aggregateReactions(msg.reactions);
+      // const participants = await getParticipants(conversationId);
+
+
+      const aggregated = aggregateReactions(msg.reactions);
+const reactConv  = await Conversation.findById(conversationId)
+  .select("participants")
+  .lean();
+const participants = (reactConv?.participants || []).map((p) => p.toString());
       for (const pid of participants) {
         await notifyUser(pid, "message:reaction", {
           conversationId, messageId,

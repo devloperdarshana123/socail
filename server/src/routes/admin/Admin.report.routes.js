@@ -1,5 +1,5 @@
 // // import express from "express";
-// // import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+// // import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 // // import {
 // //   getAllReports,
 // //   getReportById,
@@ -10,7 +10,7 @@
 
 // // const router = express.Router();
 
-// // router.use(isAuthenticated, isAdmin);
+// // router.use(isAdminAuthenticated);
 
 // // router.get("/reports/stats",        getReportStats);
 // // router.get("/reports",              getAllReports);
@@ -24,7 +24,7 @@
 
 // // server/src/routes/admin/Admin.report.routes.js
 // import express from "express";
-// import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+// import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 // import {
 //   getAllReports, getReportById, updateReportStatus,
 //   bulkUpdateReports, getReportStats,
@@ -33,7 +33,7 @@
 // import { AUDIT_ACTIONS } from "../../utils/auditLogger.js";
 
 // const router = express.Router();
-// router.use(isAuthenticated, isAdmin);
+// router.use(isAdminAuthenticated);
 
 // // ── READ (no audit) ───────────────────────────────────────────────────────────
 // router.get("/reports/stats", getReportStats);
@@ -80,7 +80,7 @@
 // server/src/routes/admin/Admin.report.routes.js
 
 import express from "express";
-import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {
   getAllReports,
   getReportById,
@@ -98,7 +98,7 @@ import { AUDIT_ACTIONS } from "../../utils/auditLogger.js";
 
 const router = express.Router();
 
-router.use(isAuthenticated, isAdmin);
+router.use(isAdminAuthenticated);
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  READ — no audit

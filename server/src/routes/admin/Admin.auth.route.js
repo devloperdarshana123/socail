@@ -4,7 +4,9 @@ import express from "express";
 import {
   adminLogin, adminLogout, adminRefreshToken, getAdminMe,
 } from "../../controllers/admin/admin.auth.controller.js";
-import { isAdmin, isAuthenticated } from "../../middlewares/auth.js";
+
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
+// import { isAdmin, isAuthenticated } from "../../middlewares/auth.js";
 import { auditLog } from "../../middlewares/auditMiddleware.js";
 import { AUDIT_ACTIONS } from "../../utils/auditLogger.js";
 
@@ -26,13 +28,12 @@ router.post(
 );
 
 // ── Protected ─────────────────────────────────────────────────────────────────
-router.get("/me", isAuthenticated, isAdmin, getAdminMe);
+router.get("/me", isAdminAuthenticated, getAdminMe);
 
 // Logout — audit on success
 router.post(
   "/logout",
-  isAuthenticated,
-  isAdmin,
+  isAdminAuthenticated,
   auditLog({ action: AUDIT_ACTIONS.ADMIN_LOGOUT }),
   adminLogout,
 );

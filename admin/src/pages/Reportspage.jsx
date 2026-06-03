@@ -182,28 +182,44 @@ function Spinner({ size = 20, className = "text-[#1e3a5f]" }) {
   );
 }
 
+
 function TargetPreview({ report }) {
   const { targetModel, targetId } = report;
   if (!targetId) return <span className="text-slate-400 text-xs">—</span>;
+
   if (targetModel === "Post") {
-    const media = targetId.media?.[0];
+    const media      = targetId.media?.[0];
+    const isVideo    = media?.resourceType === "video";
+    const previewUrl = isVideo ? (media?.thumbnailUrl || media?.url) : media?.url;
+
     return (
       <div className="flex items-center gap-2">
-        {media?.url
-          ? <img src={media.url} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0 border border-slate-100" />
-          : <div className="w-8 h-8 rounded-lg bg-slate-100 shrink-0 flex items-center justify-center text-slate-400">
+        <div className="relative shrink-0">
+          {previewUrl ? (
+            <>
+              <img src={previewUrl} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-100" />
+              {isVideo && (
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-violet-500 rounded-full flex items-center justify-center">
+                  <svg className="w-2 h-2 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </span>
+              )}
+            </>
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
               </svg>
             </div>
-        }
+          )}
+        </div>
         <div className="min-w-0">
           <p className="text-xs font-medium text-slate-700 truncate max-w-[120px]">{targetId.caption || "(no caption)"}</p>
-          <p className="text-[10px] text-slate-400">Post</p>
+          <p className="text-[10px] text-slate-400">{targetId.type === "reel" ? "Reel" : "Post"}</p>
         </div>
       </div>
     );
   }
+
   if (targetModel === "User") {
     return (
       <div className="flex items-center gap-2">
@@ -215,9 +231,9 @@ function TargetPreview({ report }) {
       </div>
     );
   }
+
   return <span className="text-xs text-slate-500">{targetModel}</span>;
 }
-
 // ─────────────────────────────────────────────────────────────
 //  Confirm Dialog
 // ─────────────────────────────────────────────────────────────
@@ -564,12 +580,56 @@ function DetailPanel({
                       </p>
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                         {report.targetModel === "Post" && report.targetId ? (
-                          <div className="space-y-2">
-                            {report.targetId.media?.[0]?.url && (
-                              <img src={report.targetId.media[0].url} alt="" className="w-full h-36 md:h-40 object-cover rounded-lg" />
-                            )}
+  <div className="space-y-2">
+    {/* {(() => {
+      const m = report.targetId.media?.[0];
+      if (!m) return null;
+      const isVideo  = m.resourceType === "video";
+      const thumbSrc = isVideo ? (m.thumbnailUrl || m.url) : m.url;
+      return (
+        <div className="relative">
+          <img src={thumbSrc} alt="" className="w-full h-36 md:h-40 object-cover rounded-lg" />
+          {isVideo && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center">
+                <svg className="w-5 h-5 text-white ml-0.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    })()} */}
+
+    {(() => {
+  const m = report.targetId.media?.[0];
+  if (!m) return null;
+  const isVideo = m.resourceType === "video";
+
+  if (isVideo) {
+    return (
+      <video
+        src={m.url}
+        controls
+        controlsList="nodownload"
+        className="w-full h-36 md:h-40 rounded-lg bg-black"
+        preload="metadata"
+        poster={m.thumbnailUrl || undefined}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={m.url}
+      alt=""
+      className="w-full h-36 md:h-40 object-cover rounded-lg"
+    />
+  );
+})()}
                             {report.targetId.caption && (
-                              <p className="text-xs text-slate-700 leading-relaxed line-clamp-4">{report.targetId.caption}</p>
+                              <p className="text-xs text-slate-700 leading-relaxed ">{report.targetId.caption}</p>
                             )}
                             {report.targetId.author && (
                               <div className="flex items-center gap-2 pt-1">

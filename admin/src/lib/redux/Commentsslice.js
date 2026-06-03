@@ -65,6 +65,18 @@ export const fetchComments = createAsyncThunk(
   }
 );
 
+export const fetchCommentStats = createAsyncThunk(
+  "comments/fetchStats",
+  async (_, { rejectWithValue }) => {
+    try {
+      const { data: body } = await adminApi.get("/admin/comments/stats");
+      return body.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message ?? "Failed to fetch stats");
+    }
+  }
+);
+
 export const fetchCommentById = createAsyncThunk(
   "comments/fetchById",
   async (commentId, { rejectWithValue }) => {
@@ -77,21 +89,45 @@ export const fetchCommentById = createAsyncThunk(
   }
 );
 
+// export const updateCommentStatus = createAsyncThunk(
+//   "comments/updateStatus",
+//   async ({ commentId, status, reason }, { rejectWithValue }) => {
+//     try {
+//       const { data: body } = await commentsAPI.updateStatus(commentId, { status, reason });
+//       return {
+//         commentId,
+//         status: body.data?.status ?? status,
+//       };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message ?? "Failed to update comment status");
+//     }
+//   }
+// );
+
+
+
+// REPLACE KARO
 export const updateCommentStatus = createAsyncThunk(
   "comments/updateStatus",
-  async ({ commentId, status, reason }, { rejectWithValue }) => {
+  async ({ commentId, status, reason }, { rejectWithValue, getState }) => {
+    const prev = getState().comments.comments.find((c) => c._id === commentId);
+    const prevStatus = prev?.status ?? null;
     try {
       const { data: body } = await commentsAPI.updateStatus(commentId, { status, reason });
       return {
         commentId,
-        status: body.data?.status ?? status,
+        status:     body.data?.status ?? status,
+        prevStatus,
       };
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message ?? "Failed to update comment status");
+      return rejectWithValue({
+        message:    err.response?.data?.message ?? "Failed to update comment status",
+        commentId,
+        prevStatus, // rollback ke liye
+      });
     }
   }
 );
-
 export const deleteComment = createAsyncThunk(
   "comments/delete",
   async (commentId, { rejectWithValue }) => {
@@ -103,20 +139,6 @@ export const deleteComment = createAsyncThunk(
     }
   }
 );
-
-// export const bulkUpdateComments = createAsyncThunk(
-//   "comments/bulkAction",
-//   async ({ commentIds, action, reason }, { rejectWithValue }) => {
-//     try {
-//       const { data: body } = await commentsAPI.bulkAction({ commentIds, action, reason });
-//       return body;
-//     } catch (err) {
-//       return rejectWithValue(err.response?.data?.message ?? "Bulk action failed");
-//     }
-//   }
-// );
-
-// ── Slice ─────────────────────────────────────────────────────────────────────
 
 
 
@@ -199,17 +221,49 @@ const commentsSlice = createSlice({
       .addCase(fetchCommentById.rejected,  (s, { payload }) => { s.detailLoading = false; s.detailError = payload; })
 
       // ── updateCommentStatus ─────────────────────────────────────────────────
-      .addCase(updateCommentStatus.pending,   (s, { meta })    => { s.actionLoading = meta.arg.commentId; })
-      .addCase(updateCommentStatus.fulfilled, (s, { payload }) => {
-        s.actionLoading = null;
-        const c = s.comments.find((x) => x._id === payload.commentId);
-        if (c) c.status = payload.status;
-        if (s.detail?._id === payload.commentId) s.detail.status = payload.status;
-      })
-      .addCase(updateCommentStatus.rejected,  (s, { payload }) => {
-        s.actionLoading = null;
-        s.actionError   = payload;
-      })
+  // REPLACE KARO
+.addCase(updateCommentStatus.pending, (s, { meta }) => {
+  s.actionLoading = meta.arg.commentId;
+
+  // Optimistic update — server response ka wait nahi
+  const c = s.comments.find((x) => x._id === meta.arg.commentId);
+  if (c && c.status !== meta.arg.status) {
+    const oldStatus = c.status;
+    c.status = meta.arg.status;
+
+    // Stats instantly reflect karo
+    if (s.stats[oldStatus] !== undefined)       s.stats[oldStatus]       = Math.max(0, s.stats[oldStatus] - 1);
+    if (s.stats[meta.arg.status] !== undefined) s.stats[meta.arg.status] += 1;
+  }
+  if (s.detail?._id === meta.arg.commentId) s.detail.status = meta.arg.status;
+})
+.addCase(updateCommentStatus.fulfilled, (s, { payload }) => {
+  s.actionLoading = null;
+  // Server se confirmed status set karo (edge case: server ne alag status diya)
+  const c = s.comments.find((x) => x._id === payload.commentId);
+  if (c && c.status !== payload.status) {
+    // Correction — optimistic status galat tha
+    if (s.stats[c.status]      !== undefined) s.stats[c.status]      = Math.max(0, s.stats[c.status] - 1);
+    if (s.stats[payload.status] !== undefined) s.stats[payload.status] += 1;
+    c.status = payload.status;
+  }
+  if (s.detail?._id === payload.commentId) s.detail.status = payload.status;
+})
+.addCase(updateCommentStatus.rejected, (s, { payload }) => {
+  s.actionLoading = null;
+  s.actionError   = payload?.message ?? payload;
+
+  // Rollback — optimistic update wapas karo
+  if (payload?.commentId && payload?.prevStatus) {
+    const c = s.comments.find((x) => x._id === payload.commentId);
+    if (c && c.status !== payload.prevStatus) {
+      if (s.stats[c.status]          !== undefined) s.stats[c.status]          = Math.max(0, s.stats[c.status] - 1);
+      if (s.stats[payload.prevStatus] !== undefined) s.stats[payload.prevStatus] += 1;
+      c.status = payload.prevStatus;
+    }
+    if (s.detail?._id === payload.commentId) s.detail.status = payload.prevStatus;
+  }
+})
 
       // ── deleteComment ───────────────────────────────────────────────────────
       .addCase(deleteComment.pending,   (s, { meta })    => { s.actionLoading = meta.arg; })
@@ -235,10 +289,21 @@ const commentsSlice = createSlice({
           successIds.has(c._id) ? { ...c, status: newStatus } : c
         );
       })
+    
       .addCase(bulkUpdateComments.rejected,  (s, { payload }) => {
         s.actionLoading = null;
         s.actionError   = payload;
-      });
+      })                                     // ← sirf ) — semicolon nahi
+      .addCase(fetchCommentStats.fulfilled, (s, { payload }) => {
+        s.stats = {
+          total:   payload.total   ?? 0,
+          active:  payload.active  ?? 0,
+          flagged: payload.flagged ?? 0,
+          removed: payload.removed ?? 0,
+          pending: payload.pending ?? 0,
+        };
+      });                                    // ← yahan semicolon sahi hai
+
   },
 });
 

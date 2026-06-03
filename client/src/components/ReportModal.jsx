@@ -1,229 +1,3 @@
-// import { useState } from "react";
-
-// const REASONS = [
-//   {
-//     label: "Spam",
-//     value: "spam",
-//     svg: (
-//       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-//         <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-//       </svg>
-//     ),
-//   },
-//   {
-//     label: "Harassment or bullying",
-//     value: "harassment_or_bullying",
-//     svg: (
-//       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-//         <circle cx="12" cy="12" r="10"/>
-//         <path d="M16 16s-1.5-2-4-2-4 2-4 2"/>
-//         <line x1="9" y1="9" x2="9.01" y2="9"/>
-//         <line x1="15" y1="9" x2="15.01" y2="9"/>
-//       </svg>
-//     ),
-//   },
-//   {
-//     label: "Inappropriate content",
-//     value: "nudity_or_sexual_content",
-//     svg: (
-//       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-//         <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-//         <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-//         <line x1="1" y1="1" x2="23" y2="23"/>
-//       </svg>
-//     ),
-//   },
-//   {
-//     label: "Fake account",
-//     value: "false_information",
-//     svg: (
-//       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-//         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-//         <circle cx="12" cy="7" r="4"/>
-//         <line x1="1" y1="1" x2="23" y2="23"/>
-//       </svg>
-//     ),
-//   },
-//   {
-//     label: "Scam or fraud",
-//     value: "scam_or_fraud",
-//     svg: (
-//       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-//         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-//         <line x1="12" y1="9" x2="12" y2="13"/>
-//         <line x1="12" y1="17" x2="12.01" y2="17"/>
-//       </svg>
-//     ),
-//   },
-//   {
-//     label: "Other",
-//     value: "other",
-//     svg: (
-//       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-//         <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
-//       </svg>
-//     ),
-//   },
-// ];
-
-// export default function ReportModal({ onSubmit, onClose , targetModel = "User" }) {
-//   const [selected, setSelected] = useState("");
-
-//   return (
-//     <div
-//       onClick={onClose}
-//       style={{
-//         position: "fixed", inset: 0, zIndex: 99999,
-//         background: "rgba(0,0,0,0.85)",
-//         display: "flex", alignItems: "center", justifyContent: "center",
-//         padding: 16,
-//       }}
-//     >
-//       <div
-//         onClick={(e) => e.stopPropagation()}
-//         style={{
-//           background: "var(--color-background-primary)",
-//           borderRadius: 20,
-//           width: "100%", maxWidth: 380,
-//           border: "0.5px solid var(--color-border-tertiary)",
-//           overflow: "hidden",
-//           boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-//         }}
-//       >
-//         {/* ── Header ── */}
-//         <div style={{
-//           padding: "18px 16px 14px",
-//           borderBottom: "0.5px solid var(--color-border-tertiary)",
-//           display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10,
-//         }}>
-//           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-//             <div style={{
-//               width: 36, height: 36, borderRadius: "50%",
-//               background: "#FCEBEB", flexShrink: 0,
-//               display: "flex", alignItems: "center", justifyContent: "center",
-//             }}>
-//               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A32D2D" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-//                 <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-//                 <line x1="4" y1="22" x2="4" y2="15"/>
-//               </svg>
-//             </div>
-//             <div>
-//               <p style={{ fontSize: 14, fontWeight: 500, margin: 0, color: "var(--color-text-primary)" }}>
-//               {targetModel === "Post" ? "Report post" : "Report account"}
-//               </p>
-//               <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0, marginTop: 2 }}>
-//                 Our team will review within 24 hours
-//               </p>
-//             </div>
-//           </div>
-//           <button
-//             onClick={onClose}
-//             style={{
-//               background: "var(--color-background-secondary)",
-//               border: "none", cursor: "pointer",
-//               color: "var(--color-text-secondary)",
-//               display: "flex", padding: 6, borderRadius: 8, flexShrink: 0,
-//             }}
-//           >
-//             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-//               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-//             </svg>
-//           </button>
-//         </div>
-
-//         {/* ── Reasons ── */}
-//         <div style={{ padding: "10px 12px 8px", display: "flex", flexDirection: "column", gap: 3 }}>
-//           {REASONS.map((r) => {
-//             const isSelected = selected === r.value;
-//             return (
-//               <button
-//                 key={r.value}
-//                 onClick={() => setSelected(r.value)}
-//                 style={{
-//                   display: "flex", alignItems: "center", gap: 12,
-//                   padding: "10px 12px", borderRadius: 10, textAlign: "left",
-//                   border: `0.5px solid ${isSelected ? "var(--color-border-secondary)" : "var(--color-border-tertiary)"}`,
-//                   background: isSelected ? "var(--color-background-secondary)" : "var(--color-background-primary)",
-//                   cursor: "pointer", width: "100%", transition: "all 0.12s",
-//                 }}
-//               >
-//                 {/* Icon box — always visible */}
-//                 <div style={{
-//                   width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-//                   background: isSelected ? "#EEEDFE" : "var(--color-background-secondary)",
-//                   display: "flex", alignItems: "center", justifyContent: "center",
-//                   color: isSelected ? "#534AB7" : "var(--color-text-secondary)",
-//                   transition: "all 0.12s",
-//                 }}>
-//                   {r.svg}
-//                 </div>
-
-//                 {/* Label */}
-//                 <span style={{
-//                   fontSize: 13, flex: 1,
-//                   color: isSelected ? "#3C3489" : "var(--color-text-primary)",
-//                   fontWeight: isSelected ? 500 : 400,
-//                 }}>
-//                   {r.label}
-//                 </span>
-
-//                 {/* Radio */}
-//                 <div style={{
-//                   width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
-//                   border: isSelected ? "none" : "1.5px solid var(--color-border-secondary)",
-//                   background: isSelected ? "#534AB7" : "transparent",
-//                   display: "flex", alignItems: "center", justifyContent: "center",
-//                   transition: "all 0.12s",
-//                 }}>
-//                   {isSelected && (
-//                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-//                       <polyline points="20 6 9 17 4 12"/>
-//                     </svg>
-//                   )}
-//                 </div>
-//               </button>
-//             );
-//           })}
-//         </div>
-
-//         {/* ── Footer ── */}
-//         <div style={{
-//           padding: "10px 12px 16px",
-//           display: "flex", gap: 8,
-//           borderTop: "0.5px solid var(--color-border-tertiary)",
-//         }}>
-//           <button
-//             onClick={onClose}
-//             style={{
-//               flex: 1, padding: "10px 0", borderRadius: 10,
-//               border: "0.5px solid var(--color-border-secondary)",
-//               background: "transparent", fontSize: 13,
-//               cursor: "pointer", color: "var(--color-text-secondary)",
-//             }}
-//           >
-//             Cancel
-//           </button>
-//           <button
-//             disabled={!selected}
-//             onClick={() => selected && onSubmit(selected)}
-//             style={{
-//               flex: 1, padding: "10px 0", borderRadius: 10, border: "none",
-//               background: selected ? "#A32D2D" : "var(--color-background-secondary)",
-//               color: selected ? "#fff" : "var(--color-text-tertiary)",
-//               fontSize: 13, fontWeight: 500,
-//               cursor: selected ? "pointer" : "default",
-//               transition: "background 0.15s",
-//             }}
-//           >
-//             Submit report
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
@@ -338,13 +112,13 @@ export default function ReportModal({ onSubmit, onClose, targetModel = "User" })
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "var(--color-background-primary)",
+          background: "#ffffff",
           borderRadius: "20px",
           width: "100%",
           maxWidth: "400px",
           maxHeight: "90vh",
           overflowY: "auto",
-          border: "1px solid var(--color-border-tertiary)",
+          border: "1px solid #e5e7eb",
           boxShadow: "0 24px 64px rgba(0,0,0,0.35), 0 4px 16px rgba(0,0,0,0.2)",
           display: "flex",
           flexDirection: "column",
@@ -440,12 +214,13 @@ export default function ReportModal({ onSubmit, onClose, targetModel = "User" })
         {/* ── Reason List ── */}
         <div
           style={{
-            padding: "12px 12px 8px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
-            flex: 1,
-            overflowY: "auto",
+           padding: "12px 12px 8px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          flex: 1,
+          overflowY: "auto",
+          background: "#ffffff",
           }}
         >
           {REASONS.map((r) => {
@@ -464,7 +239,7 @@ export default function ReportModal({ onSubmit, onClose, targetModel = "User" })
                   border: `1px solid ${isSelected ? "rgba(83,74,183,0.4)" : "var(--color-border-tertiary)"}`,
                   background: isSelected
                     ? "rgba(83,74,183,0.07)"
-                    : "var(--color-background-primary)",
+                    : "#ffffff",
                   cursor: "pointer",
                   width: "100%",
                   transition: "all 0.15s ease",
@@ -478,9 +253,9 @@ export default function ReportModal({ onSubmit, onClose, targetModel = "User" })
                     height: 36,
                     borderRadius: "10px",
                     flexShrink: 0,
-                    background: isSelected
+                   background: isSelected
                       ? "rgba(83,74,183,0.12)"
-                      : "var(--color-background-secondary)",
+                      : "#f3f4f6",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",

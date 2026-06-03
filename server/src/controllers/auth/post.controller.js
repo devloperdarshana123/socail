@@ -1,7 +1,8 @@
 
-
+import mongoose from "mongoose";
 import Post from "../../models/post.model.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../../helper/cloudinaryUpload.js";
+import cloudinary from "../../config/cloudinaryConfig.js";
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import logger from "../../config/logger.js";
 import Like from "../../models/like.model.js";
@@ -47,13 +48,14 @@ export const createPost = asyncHandler(async (req, res, next) => {
     media            = [],
   } = req.body;
 
-  const authorId = req.user._id;
+ const authorId    = req.user._id;
+const isDraftBool = Boolean(isDraft);
 
   // ── Validation ──
   if (!["text", "image", "reel"].includes(type)) {
     return next(new AppError("Invalid post type.", 400));
   }
- if (!Boolean(isDraft)) {
+ if (!isDraftBool) {
   if (type === "image" && (!media || media.length < 1)) {
     return next(new AppError("Image post requires at least one image.", 400));
   }
@@ -76,7 +78,34 @@ export const createPost = asyncHandler(async (req, res, next) => {
 }
 
   // ── Sanitize ──
+// ── Sanitize ──
   const sanitized = media.map(sanitizeMediaItem);
+
+  // ── Thumbnail generation for reels ──
+  if (type === "reel" && sanitized[0]?.resourceType === "video" && !sanitized[0]?.thumbnailUrl) {
+    try {
+      const result = await cloudinary.uploader.explicit(sanitized[0].publicId, {
+        type:          "upload",
+        resource_type: "video",
+        eager: [
+          {
+            format: "jpg",
+            transformation: [
+              { start_offset: "0" },
+              { width: 600, crop: "scale" },
+              { quality: "auto:good" },
+            ],
+          },
+        ],
+        eager_async: false,
+      });
+      sanitized[0].thumbnailUrl = result.eager?.[0]?.secure_url ?? null;
+    } catch (err) {
+      logger.warn("Thumbnail generation failed", { error: err.message });
+    }
+  }
+
+
 
 
   // ── Parse location ──
@@ -105,7 +134,7 @@ export const createPost = asyncHandler(async (req, res, next) => {
     visibility,
     commentsDisabled: Boolean(commentsDisabled),
     likesHidden:      Boolean(likesHidden),
-    isDraft:          Boolean(isDraft),
+   isDraft: isDraftBool,
     ...(locationData && { location: locationData }),
   });
 
@@ -113,14 +142,14 @@ export const createPost = asyncHandler(async (req, res, next) => {
   newPost._id,
   authorId,
   false,
-  { allowDraft: Boolean(isDraft) },
+ { allowDraft: isDraftBool },
 );
-if (!newPost.isDraft) {
-  await User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } });
+if (!isDraftBool) {
+  await Promise.all([
+    User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } }),
+    invalidatePostFeedCache(authorId.toString()),
+  ]);
 }
-if (!newPost.isDraft) {
-    await invalidatePostFeedCache(authorId.toString());
-  }
   logger.info("Post created", { postId: newPost._id, author: authorId, type });
 
   return res.status(201).json({
@@ -182,7 +211,13 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
 export const getUserPosts = asyncHandler(async (req, res) => {
   const { userId }   = req.params;
   const { beforeId } = req.query;
-  const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
+ const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 500));
+
+const postsCount = await Post.countDocuments({
+  author:    new mongoose.Types.ObjectId(userId),
+  isDeleted: false,
+  isDraft:   false,
+});
   const viewerId     = req.user._id.toString();
 
   const isOwner    = viewerId === userId;
@@ -194,7 +229,7 @@ export const getUserPosts = asyncHandler(async (req, res) => {
     userId, isFollower, isOwner, { beforeId: beforeId || null, limit }
   );
 
-  return res.status(200).json({ success: true, data: items, hasMore, nextCursor });
+  return res.status(200).json({ success: true, data: items, hasMore, nextCursor, postsCount });
 });
 
 // ─────────────────────────────────────────────
@@ -220,12 +255,15 @@ export const deletePost = asyncHandler(async (req, res) => {
   await Post.softDelete(postId, authorId);
 
 
-await User.findOneAndUpdate(
-  { _id: authorId, postsCount: { $gt: 0 } },
-  { $inc: { postsCount: -1 } }
-);
-
-await invalidatePostFeedCache(authorId.toString());
+if (!post.isDraft) {
+  await Promise.all([
+    User.findOneAndUpdate(
+      { _id: authorId, postsCount: { $gt: 0 } },
+      { $inc: { postsCount: -1 } },
+    ),
+    invalidatePostFeedCache(authorId.toString()),
+  ]);
+}
   logger.info("Post deleted", { postId, author: authorId });
 
   return res.status(200).json({ success: true, message: "Post deleted successfully" });
@@ -322,10 +360,11 @@ export const publishDraft = asyncHandler(async (req, res) => {
   post.isDraft = false;
   await post.save();
 
- const populated = await Post.getPostById(post._id, authorId, false);
-
- await User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } });
- await invalidatePostFeedCache(authorId.toString());
+ const [populated] = await Promise.all([
+  Post.getPostById(post._id, authorId, false),
+  User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } }),
+  invalidatePostFeedCache(authorId.toString()),
+]);
   logger.info("Draft published", { postId, author: authorId });
 
   return res.status(200).json({

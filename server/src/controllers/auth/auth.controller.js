@@ -6,7 +6,14 @@ import User from "../../models/user.model.js";
 import OTP from "../../models/otp.model.js";
 import { sendTemplateMail } from "../../mail/index.js";
 import logger from "../../config/logger.js";
-import { sendToken, clearAuthCookies, COOKIE_ACCESS, COOKIE_REFRESH } from "../../utils/sendToken.js";
+import { sendUserToken }              from "../../utils/sendUserToken.js";
+import { 
+  clearUserCookies, 
+  buildCookieOptions,
+  USER_COOKIE_ACCESS, 
+  USER_COOKIE_REFRESH 
+} from "../../utils/authCookies.js";
+// import { sendToken, clearAuthCookies, COOKIE_ACCESS, COOKIE_REFRESH } from "../../utils/sendToken.js";
 import { OTP_PURPOSE } from "../../utils/otpUtils.js";
 import { ENV } from "../../config/env.js";
 import { blacklistToken } from "../../utils/tokenBlacklist.js";
@@ -154,7 +161,7 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
   await user.save({ validateBeforeSave: false });
   logger.info("OTP verified", { userId, purpose });
 
-  await sendToken(user, 200, res, {
+  await sendUserToken(user, 200, res, {
     message   : "OTP verified successfully",
     nextRoute,
     deviceInfo: req.headers["user-agent"] || "unknown",
@@ -234,7 +241,7 @@ export const login = asyncHandler(async (req, res, next) => {
 
   logger.info("User logged in", { userId: user._id, onboardingStep: user.onboardingStep });
 
-  await sendToken(user, 200, res, {
+  await sendUserToken(user, 200, res, {
     message   : "Logged in successfully",
     nextRoute,
     deviceInfo: req.headers["user-agent"] || "unknown",
@@ -242,30 +249,13 @@ export const login = asyncHandler(async (req, res, next) => {
   }, next);
 });
 
-// ═════════════════════════════════════════════
-//  POST /auth/logout
-// ═════════════════════════════════════════════
 
-// export const logout = asyncHandler(async (req, res, next) => {
-//   const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
-
-//   if (incomingRefreshToken) {
-//     // User model stores tokenHash, not raw token — removeRefreshToken hashes internally
-//     const userWithTokens = await User.findById(req.user._id).select("+refreshTokens");
-//     if (userWithTokens) {
-//       await userWithTokens.removeRefreshToken(incomingRefreshToken);
-//     }
-//   }
-
-//   logger.info("User logged out", { userId: req.user._id });
-//   return clearAuthCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
-// });
 
 
 
 export const logout = asyncHandler(async (req, res, next) => {
-  const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
-  const accessToken          = req.cookies?.[COOKIE_ACCESS];
+  const incomingRefreshToken = req.cookies?.[USER_COOKIE_REFRESH];
+  const accessToken          = req.cookies?.[USER_COOKIE_ACCESS];
 
   // Step 1: Access token blacklist karo — logout ke baad use na ho sake
   if (accessToken) {
@@ -288,14 +278,14 @@ export const logout = asyncHandler(async (req, res, next) => {
   }
 
   logger.info("User logged out", { userId: req.user._id });
-  return clearAuthCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
+  return clearUserCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
 });
 // ═════════════════════════════════════════════
 //  POST /auth/refresh-token
 // ═════════════════════════════════════════════
 
 export const refreshToken = asyncHandler(async (req, res, next) => {
-  const incomingRefreshToken = req.cookies?.[COOKIE_REFRESH];
+  const incomingRefreshToken = req.cookies?.[USER_COOKIE_REFRESH];
 
   if (!incomingRefreshToken) {
     return next(new AppError("Refresh token missing. Please log in again.", 401));
@@ -304,7 +294,7 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
   // Step 1 — verify JWT signature + expiry
   let decoded;
   try {
-    decoded = jwt.verify(incomingRefreshToken, ENV.REFRESH_TOKEN_SECRET);
+    decoded = jwt.verify(incomingRefreshToken, ENV.USER_REFRESH_TOKEN_SECRET);
   } catch {
     return next(new AppError("Invalid or expired refresh token. Please log in again.", 401));
   }
@@ -326,10 +316,19 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
   }
 
   // Step 4 — rotate: remove old, issue new
-  await user.removeRefreshToken(incomingRefreshToken);
  
+// Step 4 — pehle naya generate karo, phir purana hatao
+// Agar generate fail ho toh purana token safe rahega
+const newAccessToken  = user.generateAccessToken();
+const newRefreshToken = await user.generateRefreshToken(
+  storedToken.deviceInfo,
+  storedToken.ipAddress,
+);
 
-  const oldAccessToken = req.cookies?.[COOKIE_ACCESS];
+// Generate successful — ab purana hatao aur blacklist karo
+await user.removeRefreshToken(incomingRefreshToken);
+
+const oldAccessToken = req.cookies?.[USER_COOKIE_ACCESS];
 if (oldAccessToken) {
   try {
     const oldDecoded = jwt.decode(oldAccessToken);
@@ -338,41 +337,22 @@ if (oldAccessToken) {
     }
   } catch { /* ignore */ }
 }
+ 
 
- const newAccessToken  = user.generateAccessToken();
-  const newRefreshToken = await user.generateRefreshToken(
-    storedToken.deviceInfo,
-    storedToken.ipAddress,
-  );
-
-  const isProduction = process.env.NODE_ENV === "production";
-
-  const accessTokenOptions = {
-    maxAge  : 15 * 60 * 1000,
-    httpOnly: true,
-    path    : "/",
-    sameSite: isProduction ? "none" : "lax",
-    secure  : isProduction,
-  };
-  const refreshTokenOptions = {
-    maxAge  : 7 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    path    : "/",
-    sameSite: isProduction ? "none" : "lax",
-    secure  : isProduction,
-  };
+ const accessTokenOptions  = buildCookieOptions({ maxAge: 15 * 60 * 1000,          path: "/" });
+const refreshTokenOptions = buildCookieOptions({ maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
+ 
 
   logger.info("Access token refreshed", { userId: user._id });
 
-  return res
-    .status(200)
-    .cookie(COOKIE_ACCESS,  newAccessToken,  accessTokenOptions)
-    .cookie(COOKIE_REFRESH, newRefreshToken, refreshTokenOptions)
-    .json({
-      success: true,
-      message: "Token refreshed successfully",
-      accessToken: newAccessToken,
-    });
+ return res
+  .status(200)
+  .cookie(USER_COOKIE_ACCESS,  newAccessToken,  accessTokenOptions)
+  .cookie(USER_COOKIE_REFRESH, newRefreshToken, refreshTokenOptions)
+  .json({
+    success: true,
+    message: "Token refreshed successfully",
+  });
 });
 
 // ═════════════════════════════════════════════
@@ -446,7 +426,7 @@ export const setUsername = asyncHandler(async (req, res, next) => {
 
   logger.info("Username set, onboarding complete", { userId: user._id, username: trimmed });
 
-  await sendToken(user, 200, res, {
+  await sendUserToken(user, 200, res, {
     message   : "Welcome to Erovians! 🎉",
     nextRoute : "/feed",
     deviceInfo: req.headers["user-agent"] || "unknown",
@@ -502,7 +482,7 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
 
   logger.info("Password reset successful, all sessions cleared", { userId: user._id });
 
-  return clearAuthCookies(res)
+  return clearUserCookies(res)
     .status(200)
     .json({ success: true, message: "Password reset successfully. Please log in again." });
 });
@@ -554,12 +534,21 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
  
   } else {
     // Existing user — agar pehle email se register kiya tha toh googleId link karo
-    if (!user.firebaseUid) {
+  if (!user.firebaseUid) {
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        firebaseUid: googleId,
+        ...(!user.avatar && picture
+          ? { avatar: { url: picture, publicId: null } }
+          : {}),
+      },
+    },
+  );
   user.firebaseUid = googleId;
-      if (!user.avatar && picture) user.avatar = { url: picture, publicId: null };
-      await user.save({ validateBeforeSave: false });
-      logger.info("Google account linked to existing user", { userId: user._id });
-    }
+  logger.info("Google account linked to existing user", { userId: user._id });
+}
   }
  
   // ── Step 3: Account status check ──────────────────────────────────────────
@@ -580,7 +569,7 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
   }
  
   // ── Step 5: Token issue karo (same sendToken jo baaki routes use karte hain)
-  await sendToken(
+  await sendUserToken(
     user,
     isNewUser ? 201 : 200,
     res,
@@ -592,4 +581,18 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
     },
     next,
   );
+});
+
+
+// ═════════════════════════════════════════════
+//  GET /auth/socket-token
+// ═════════════════════════════════════════════
+
+export const getSocketToken = asyncHandler(async (req, res) => {
+  const token = jwt.sign(
+    { _id: req.user._id, id: req.user._id },
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: "1m" }
+  );
+  return res.status(200).json({ success: true, data: { token } });
 });

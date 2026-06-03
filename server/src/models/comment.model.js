@@ -250,6 +250,7 @@ commentSchema.statics.getTopLevelComments = async function (
     parentComment: null,
     isDeleted: false,
     isPinned: false,
+    status: { $ne: "removed" },
     ...cursorFilter,
   })
     .sort({ createdAt: -1, _id: -1 })
@@ -273,7 +274,8 @@ commentSchema.statics.getTopLevelComments = async function (
  * Get the pinned comment for a post (if any).
  */
 commentSchema.statics.getPinnedComment = function (postId) {
-  return this.findOne({ post: postId, isPinned: true, isDeleted: false })
+ // REPLACE KARO
+  return this.findOne({ post: postId, isPinned: true, isDeleted: false, status: { $ne: "removed" } })
     .populate("author", "username fullName avatar isVerifiedBadge")
     .populate("mentions", "username")
     .lean();
@@ -301,6 +303,7 @@ commentSchema.statics.getReplies = async function (
   const replies = await this.find({
     rootComment: rootCommentId,
     isDeleted: false,
+    status: { $ne: "removed" },
     ...cursorFilter,
   })
     .sort({ createdAt: 1, _id: 1 })
@@ -342,6 +345,7 @@ commentSchema.statics.getDirectReplies = async function (
   const replies = await this.find({
     parentComment: parentCommentId,
     isDeleted: false,
+    status: { $ne: "removed" },
     ...cursorFilter,
   })
     .sort({ createdAt: 1, _id: 1 })

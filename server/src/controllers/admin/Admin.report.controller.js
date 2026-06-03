@@ -137,11 +137,15 @@ export const getAllReports = asyncHandler(async (req, res, next) => {
       .sort(sort)
       .skip(skip)
       .limit(limit)
-      .populate("reportedBy", "username fullName avatar")
-      .populate("targetId",   "username fullName avatar caption media type author accountStatus")
-      .populate("reviewedBy", "username fullName")
-      .populate("claimedBy",  "username fullName avatar")
-      .populate("escalatedBy","username fullName")
+.populate("reportedBy",  "username fullName avatar")
+.populate({
+  path:    "targetId",
+  select:  "username fullName avatar caption media type author accountStatus likesCount commentsCount",
+  populate: { path: "author", select: "username fullName avatar isVerifiedBadge", strictPopulate: false },
+})
+.populate("reviewedBy",  "username fullName")
+.populate("claimedBy",   "username fullName avatar")
+.populate("escalatedBy", "username fullName")
       .select("-moderatorNote")
       .lean(),
 

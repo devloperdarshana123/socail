@@ -397,21 +397,81 @@ userSchema.methods.generateAccessToken = function () {
       role: this.role,
        jti : nanoid(21), 
      },
-   ENV.ACCESS_TOKEN_SECRET,
+  ENV.USER_ACCESS_TOKEN_SECRET,
 { expiresIn: ENV.ACCESS_TOKEN_EXPIRY },
   );
 };
 
 
+// ── Admin Token Methods ───────────────────────────────────────────────────────
 
+userSchema.methods.generateAdminAccessToken = function () {
+  return jwt.sign(
+    {
+      _id : this._id,
+      role: this.role,
+      jti : nanoid(21),
+    },
+    ENV.ADMIN_ACCESS_TOKEN_SECRET,
+    { expiresIn: ENV.ACCESS_TOKEN_EXPIRY },
+  );
+};
+
+userSchema.methods.generateAdminRefreshToken = async function (
+  deviceInfo = "unknown",
+  ipAddress  = null,
+) {
+  const rawToken = jwt.sign(
+    { _id: this._id },
+    ENV.ADMIN_REFRESH_TOKEN_SECRET,
+    { expiresIn: ENV.REFRESH_TOKEN_EXPIRY },
+  );
+
+  const tokenHash = hashToken(rawToken);
+  const now       = new Date();
+  const expiresAt = new Date(now.getTime() + REFRESH_TOKEN_EXPIRY_MS);
+
+  const newEntry = {
+    tokenHash,
+    deviceInfo,
+    ipAddress,
+    isTrusted:  false,
+    lastUsedAt: now,
+    createdAt:  now,
+    expiresAt,
+  };
+
+  await this.constructor.updateOne(
+    { _id: this._id },
+    { $pull: { refreshTokens: { expiresAt: { $lte: now } } } },
+  );
+
+  const result = await this.constructor.updateOne(
+    { _id: this._id },
+    {
+      $push: {
+        refreshTokens: {
+          $each:  [newEntry],
+          $slice: -MAX_DEVICES,
+        },
+      },
+    },
+  );
+
+  if (result.matchedCount === 0) {
+    throw new Error("User not found during token generation");
+  }
+
+  return rawToken;
+};
 userSchema.methods.generateRefreshToken = async function (
   deviceInfo = "unknown",
   ipAddress  = null,
 ) {
   const rawToken = jwt.sign(
     { _id: this._id },
-    ENV.REFRESH_TOKEN_SECRET,
-    { expiresIn: ENV.REFRESH_TOKEN_EXPIRY },
+    ENV.USER_REFRESH_TOKEN_SECRET,
+{ expiresIn: ENV.REFRESH_TOKEN_EXPIRY },
   );
 
   const tokenHash = hashToken(rawToken);

@@ -6,6 +6,7 @@ import CustomSelect from "../components/CustomSelect";
 import PostPreviewModal from "../components/Postpreviewmodal";
 import {
   fetchComments,
+  fetchCommentStats,
   updateCommentStatus,
   deleteComment,
   bulkUpdateComments,
@@ -553,6 +554,7 @@ export default function CommentsPage() {
       page:      filters.page,
       limit:     filters.limit,
     }));
+    dispatch(fetchCommentStats());
   }, [dispatch, filters]);
 
   useEffect(() => {
@@ -668,13 +670,12 @@ export default function CommentsPage() {
             </button>
           </div>
 
-          {/* Stat Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-7">
-            <StatCard label="Total Comments" value={loading ? "—" : totalComments.toLocaleString()} accent="blue" icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
-            <StatCard label="Flagged"        value={loading ? "—" : (stats.flagged ?? comments.filter(c => c.status === "flagged").length)} accent="amber"   icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6H13l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>} />
-            <StatCard label="Removed"        value={loading ? "—" : (stats.removed ?? comments.filter(c => c.status === "removed").length)} accent="red"     icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>} />
-            <StatCard label="Pending Review" value={loading ? "—" : (stats.pending ?? comments.filter(c => c.status === "pending").length)} accent="emerald" icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
-          </div>
+  <StatCard label="Total Comments" value={loading ? "—" : (stats.total || totalComments).toLocaleString()} accent="blue"    icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
+  <StatCard label="Flagged"        value={loading ? "—" : stats.flagged}                                   accent="amber"   icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6H13l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>} />
+  <StatCard label="Removed"        value={loading ? "—" : stats.removed}                                   accent="red"     icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>} />
+  <StatCard label="Pending Review" value={loading ? "—" : stats.pending}                                   accent="emerald" icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
+</div>
 
           {/* Filters */}
           <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5 mb-5 shadow-sm">

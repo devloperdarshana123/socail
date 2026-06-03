@@ -1,6 +1,6 @@
 // server/src/routes/admin/Admin.comment.routes.js
 import express from "express";
-import { isAuthenticated, isAdmin } from "../../middlewares/auth.js";
+import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {
   getAllComments,
   getCommentStats,
@@ -13,7 +13,7 @@ import {
 const router = express.Router();
 
 // ── All routes protected: must be logged in + super_admin ────
-router.use(isAuthenticated, isAdmin);
+router.use(isAdminAuthenticated);
 
 // ── Stats ─────────────────────────────────────────────────────
 router.get("/stats", getCommentStats);          // GET  /admin/comments/stats

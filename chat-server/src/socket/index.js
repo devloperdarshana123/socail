@@ -2,6 +2,7 @@
 // src/socket/index.js
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import cookie from "cookie";
 import chatHandler from "./handlers/Chathandler.js";
 import notificationHandler from "./handlers/notificationHandler.js";
 import logger from "../utils/logger.js";
@@ -27,8 +28,16 @@ const initSocket = (server) => {
 
   // ── JWT Auth Middleware ──────────────────────────────────────────────────
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error("Unauthorized"));
+  // 1. auth.token se try karo (backward compat)
+  let token = socket.handshake.auth?.token;
+
+  // 2. Cookie se try karo — httpOnly accessToken
+  if (!token) {
+    const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+    token = cookies.accessToken;
+  }
+
+  if (!token) return next(new Error("Unauthorized"));
 
     try {
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {

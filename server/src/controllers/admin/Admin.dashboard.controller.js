@@ -5,7 +5,7 @@ import User         from "../../models/user.model.js";
 import Post         from "../../models/post.model.js";
 import Report       from "../../models/report.model.js";
 import logger       from "../../config/logger.js";
-
+import { REGULAR_USER_FILTER } from "../../utils/adminQueryFilters.js";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const monthsAgo = (n) => {
@@ -51,12 +51,12 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     commentsAgg,
     viewsAgg,
   ] = await Promise.all([
-    User.countDocuments(),
+    User.countDocuments({ ...REGULAR_USER_FILTER }),
     Post.countDocuments({ isDeleted: { $ne: true } }),
     Report.countDocuments({ status: "pending" }),
-    User.countDocuments({ lastActiveAt: { $gte: startOfToday } }),
-    User.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-    User.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
+    User.countDocuments({ ...REGULAR_USER_FILTER, lastActiveAt: { $gte: startOfToday } }),
+    User.countDocuments({ ...REGULAR_USER_FILTER, createdAt: { $gte: startOfThisMonth } }),
+    User.countDocuments({ ...REGULAR_USER_FILTER, createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
     Post.countDocuments({ createdAt: { $gte: startOfThisMonth }, isDeleted: { $ne: true } }),
     Post.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth }, isDeleted: { $ne: true } }),
     Post.aggregate([{ $group: { _id: null, total: { $sum: "$likesCount" } } }]),
@@ -97,7 +97,7 @@ export const getUserGrowth = asyncHandler(async (req, res, next) => {
 
   const [newUsers, cumulativeStart] = await Promise.all([
     User.aggregate([
-      { $match: { createdAt: { $gte: startDate } } },
+      { $match: { ...REGULAR_USER_FILTER, createdAt: { $gte: startDate } } },
       {
         $group: {
           _id:      { $dateToString: { format: groupFormat, date: "$createdAt" } },
@@ -106,7 +106,7 @@ export const getUserGrowth = asyncHandler(async (req, res, next) => {
       },
       { $sort: { _id: 1 } },
     ]),
-    User.countDocuments({ createdAt: { $lt: startDate } }),
+    User.countDocuments({ ...REGULAR_USER_FILTER, createdAt: { $lt: startDate } }),
   ]);
 
   let running = cumulativeStart;
@@ -236,7 +236,7 @@ export const getHourlyActivity = asyncHandler(async (req, res, next) => {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const raw = await User.aggregate([
-    { $match: { lastActiveAt: { $gte: since } } },
+    { $match: { ...REGULAR_USER_FILTER, lastActiveAt: { $gte: since } } },
     {
       $group: {
         _id:   { $hour: "$lastActiveAt" },
