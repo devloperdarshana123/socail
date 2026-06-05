@@ -10,11 +10,6 @@ import {
   fetchConversations, fetchMessages, setActiveConversation,
   openOrCreateConversation, selectConversations, selectActiveConvId,
   selectOnlineUsers, selectLoadingConvs,
-  addNewConversation, updateConversation,
-  receiveMessage, applyMessageEdit, applyMessageDelete,
-  applySeenReceipt, applyReaction,
-  setOnlineUsers, userCameOnline, userWentOffline,
-  setTyping, clearTyping,
 } from "../lib/redux/chatSlice";
 import {
   fetchFollowing, selectFollowing, selectLoadingFollowing,

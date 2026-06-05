@@ -101,9 +101,9 @@ export const fetchUserPosts = createAsyncThunk(
 
 export const adminDeletePost = createAsyncThunk(
   "users/adminDeletePost",
-  async (postId, { rejectWithValue }) => {
+  async ({ postId, reason }, { rejectWithValue }) => {
     try {
-      await adminApi.delete(`/admin/posts/${postId}`);
+      await adminApi.patch(`/admin/posts/${postId}/remove`, { reason });
       return { postId };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message ?? "Failed to delete post");

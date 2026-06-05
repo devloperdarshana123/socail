@@ -183,27 +183,43 @@ function PostTile({ post, onDelete, onClick }) {
 
       {/* Delete confirm overlay */}
       {confirmDel && (
-        <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center
-          justify-center gap-3 p-3 rounded-xl">
-          <p className="text-xs font-bold text-slate-800 text-center">Delete this post?</p>
-          <div className="flex gap-2 w-full">
-            <button
-              onClick={() => setConfirmDel(false)}
-              className="flex-1 py-1.5 rounded-lg border border-slate-200 text-xs
-                font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => { onDelete(post._id); setConfirmDel(false); }}
-              className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600
-                text-white text-xs font-bold transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      )}
+  <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center
+    justify-center gap-3 p-3 rounded-xl">
+    <p className="text-xs font-bold text-slate-800 text-center">Delete this post?</p>
+    <input
+      type="text"
+      id={`udp-reason-${post._id}`}
+      placeholder="Reason (optional)"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200
+        text-xs text-slate-700 placeholder-slate-400
+        focus:outline-none focus:border-red-300 transition-colors"
+    />
+    <div className="flex gap-2 w-full">
+      <button
+        onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }}
+        className="flex-1 py-1.5 rounded-lg border border-slate-200 text-xs
+          font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+      >
+        Cancel
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          const input = document.getElementById(`udp-reason-${post._id}`);
+          const reason = input?.value?.trim() || "Violation of community guidelines";
+          onDelete(post._id, reason);
+          setConfirmDel(false);
+        }}
+        className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600
+          text-white text-xs font-bold transition-colors"
+      >
+        Confirm
+      </button>
+    </div>
+  </div>
+)}
     </div>
   );
 }
@@ -302,11 +318,15 @@ export default function UserDetailPage() {
     if (!res.error) showToast("Verified badge updated");
   };
 
-  const handleDeletePost = async (postId) => {
-    const res = await dispatch(adminDeletePost(postId));
-    if (!res.error) showToast("Post deleted");
-    else showToast("Failed to delete post", "error");
-  };
+ // ✅ Naya — reason PostTile se aayega
+const handleDeletePost = async (postId, reason) => {
+  const res = await dispatch(adminDeletePost({ 
+    postId, 
+    reason: reason || "Violation of community guidelines" 
+  }));
+  if (!res.error) showToast("Post deleted");
+  else showToast("Failed to delete post", "error");
+};
 
   // ── Loading state ────────────────────────────────────────────
  if (detailLoading || !detail) return <UserDetailSkeleton />;
@@ -328,14 +348,15 @@ export default function UserDetailPage() {
         </div>
       )}
 
-      <PostDetailModal
+  <PostDetailModal
   post={selectedPost}
   onClose={() => setSelectedPost(null)}
-  onDelete={async (postId) => {
-    await handleDeletePost(postId);
+  onDelete={async (postId, reason) => {
+    await handleDeletePost(postId, reason);
     setSelectedPost(null);
   }}
   deleteLoading={actionLoading}
+  hideAuthorNav={true}
 />
 
       {/* Status Modal */}

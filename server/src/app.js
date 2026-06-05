@@ -25,6 +25,7 @@ import followRouter from "./routes/auth/follow.route.js";
 import messageRouter from "./routes/auth/message.route.js";
 import notificationRoutes from "./routes/auth/notification.route.js";
 import transcribeRoute from "./routes/auth/Transcribe.route.js";
+import reportRouter from "./routes/auth/report.route.js";
 import "./cron/suspensionCron.js";
 
 
@@ -147,6 +148,7 @@ app.use("/api/v2/messages", messageRouter);
 app.use("/api/v2/stories", storyRouter);
 app.use("/api/v2/follow", followRouter);
 app.use("/api/v2/notifications", notificationRoutes);
+app.use("/api/v2/user/report", reportRouter);
 app.use("/api/v2/transcribe", rateLimit({
   windowMs: 60 * 1000, 
   max: 10,             

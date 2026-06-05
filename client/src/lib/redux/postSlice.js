@@ -198,6 +198,18 @@ export const fetchDraftPosts = createAsyncThunk(
   }
 );
 
+export const updateDraft = createAsyncThunk(
+  "posts/updateDraft",
+  async ({ postId, caption, media }, { rejectWithValue }) => {
+    try {
+      const res = await api.patch(`/posts/${postId}`, { caption, media });
+      return { postId, post: res.data.post };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Draft update failed");
+    }
+  }
+);
+
 export const publishDraftPost = createAsyncThunk(
   "posts/publishDraft",
   async (postId, { rejectWithValue }) => {
@@ -385,6 +397,12 @@ state.interactions[postId].comments.unshift(comment);
       state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
       if (post) state.myPosts.unshift(post);
     });
+
+    builder.addCase(updateDraft.fulfilled, (state, action) => {
+  const { postId, post } = action.payload;
+  const idx = state.draftPosts.findIndex((p) => p._id === postId);
+  if (idx !== -1) state.draftPosts[idx] = post;
+});
   },
 });
 

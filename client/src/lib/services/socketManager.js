@@ -1,179 +1,12 @@
 
 
-// // client/src/lib/services/socketManager.js
-// import { io } from "socket.io-client";
-// import store from "../../app/store";
-// import {
-//   receiveMessage,
-//   applyMessageEdit,
-//   applyMessageDelete,
-//   applySeenReceipt,
-//   applyReaction,
-//   setOnlineUsers,
-//   userCameOnline,
-//   userWentOffline,
-//   setTyping,
-//   clearTyping,
-//   addNewConversation,
-//   updateConversation,
-// } from "../redux/chatSlice";
-
-// const CHAT_SERVER = import.meta.env.VITE_CHAT_SERVER_URL || "http://localhost:5001";
-
-// let socket        = null;
-// let currentUserId = null;
-// let tokenRefreshListener = null;
-
-// // const getToken = () => localStorage.getItem("accessToken");
-
-// export const getSocket = () => socket;
-
-// // ── Socket event handlers — store dispatch ────────────────────────────────────
-// const registerSocketEvents = (socket) => {
-
-//   // ── Online presence ────────────────────────────────────────────────────
-//   socket.on("online:list", (userIds) => {
-//     store.dispatch(setOnlineUsers(userIds));
-//   });
-
-//   socket.on("user:online", ({ userId }) => {
-//     store.dispatch(userCameOnline({ userId }));
-//   });
-
-//   socket.on("user:offline", ({ userId }) => {
-//     store.dispatch(userWentOffline({ userId }));
-//   });
-
-//   // ── Messages ───────────────────────────────────────────────────────────
-//   socket.on("message:receive", ({ conversationId, message, tempId }) => {
-//     store.dispatch(receiveMessage({ conversationId, message, tempId }));
-//   });
-
-//   // ── Stranger message — sidebar automatically update ────────────────────
-//   socket.on("conversation:new", ({ conversation }) => {
-//     store.dispatch(addNewConversation({ conversation }));
-//   });
-
-// socket.on("conversation:updated", ({ conversation }) => {
-//   store.dispatch(updateConversation({ conversation }));
-// });
-
-//   socket.on("message:edited", ({ conversationId, messageId, newText, isEdited, editedAt }) => {
-//     store.dispatch(applyMessageEdit({ conversationId, messageId, newText, isEdited, editedAt }));
-//   });
-
-//   socket.on("message:deleted", ({ conversationId, messageId }) => {
-//     store.dispatch(applyMessageDelete({ conversationId, messageId }));
-//   });
-
-//   socket.on("message:seen", ({ conversationId, messageId, seenBy }) => {
-//     store.dispatch(applySeenReceipt({ conversationId, messageId, seenBy }));
-//   });
-
-//   socket.on("message:reaction", ({ conversationId, messageId, reactions }) => {
-//     store.dispatch(applyReaction({ conversationId, messageId, reactions }));
-//   });
-
-//   // ── Typing ─────────────────────────────────────────────────────────────
-//   socket.on("typing:start", ({ conversationId, userId }) => {
-//     store.dispatch(setTyping({ conversationId, userId }));
-//   });
-
-//   socket.on("typing:stop", ({ conversationId, userId }) => {
-//     store.dispatch(clearTyping({ conversationId, userId }));
-//   });
-
-//   // ── Connection lifecycle ───────────────────────────────────────────────
-
-// socket.on("connect",       () => {});
-// socket.on("disconnect",    () => {});
-// socket.on("connect_error", () => {});
-// socket.on("token:expired", () => {});
-// socket.on("token:refreshed", () => {});
-  
-//   socket.on("session_expired", () =>
-//     window.dispatchEvent(new CustomEvent("auth:logout"))
-//   );
-// };
-
-// // ── connectSocket ─────────────────────────────────────────────────────────────
-// export const connectSocket = (userId) => {
-//   // const token = getToken();
-//   if (!userId) return null;
-
-//   // Same user — reuse existing socket
-//   if (socket && currentUserId === userId) {
-//     if (!socket.connected) socket.connect();
-//     return socket;
-//   }
-
-//   // Alag user — pehle cleanup karo
-//   if (socket) {
-//     socket.removeAllListeners();
-//     socket.disconnect();
-//     socket = null;
-//   }
-
-//   if (tokenRefreshListener) {
-//     window.removeEventListener("auth:tokenRefreshed", tokenRefreshListener);
-//     tokenRefreshListener = null;
-//   }
-
-//   currentUserId = userId;
-
-//    socket = io(CHAT_SERVER, {
-//     auth: { userId },
-//     withCredentials: true,
-//     transports: ["websocket"],
-//     reconnection: true,
-//     reconnectionAttempts: Infinity,
-//     reconnectionDelay: 2000,
-//     reconnectionDelayMax: 10000,
-//     pingTimeout: 60000,
-//     pingInterval: 25000,
-//   });
-
-//   // Saare events ek jagah register karo
-//   registerSocketEvents(socket);
-
-//   // Token refresh handler
-//   // tokenRefreshListener = (e) => {
-//   //   const newToken = e.detail?.token || getToken();
-//   //   if (!newToken || !socket) return;
-//   //   socket.auth.token = newToken;
-//   //   if (socket.connected) socket.emit("token:refresh", { token: newToken });
-//   //   else socket.connect();
-//   // };
-
-//   // REPLACE KARO
-//   tokenRefreshListener = () => {
-//     if (!socket) return;
-//     if (socket.connected) socket.emit("token:refresh", { userId });
-//     else socket.connect();
-//   };
-//   window.addEventListener("auth:tokenRefreshed", tokenRefreshListener);
-
-//   return socket;
-// };
-
-// // ── disconnectSocket ──────────────────────────────────────────────────────────
-// export const disconnectSocket = () => {
-//   if (tokenRefreshListener) {
-//     window.removeEventListener("auth:tokenRefreshed", tokenRefreshListener);
-//     tokenRefreshListener = null;
-//   }
-//   if (socket) {
-//     socket.removeAllListeners();
-//     socket.disconnect();
-//     socket        = null;
-//     currentUserId = null;
-//   }
-// };
-
-
-
 // client/src/lib/services/socketManager.js
 import { io } from "socket.io-client";
+import {
+  addRealtimeNotification,
+  setUnreadCount,
+} from "../redux/notificationSlice";
+import toast from "react-hot-toast";
 import store from "../../app/store";
 import {
   receiveMessage,
@@ -190,6 +23,46 @@ import {
   updateConversation,
 } from "../redux/chatSlice";
 
+
+
+const TOAST_OPTS = {
+  duration: 4000,
+  position: "top-right",
+  style: {
+    background:   "#fff",
+    color:        "#000",
+    border:       "0.5px solid #eee",
+    borderRadius: "10px",
+    fontSize:     "13px",
+  },
+};
+
+const MSG_TOAST_OPTS = {
+  duration: 4000,
+  position: "top-right",
+  style: {
+    background:   "#1e3a5f",
+    color:        "#fff",
+    borderRadius: "12px",
+    fontSize:     "13px",
+    fontWeight:   "500",
+    padding:      "12px 16px",
+    boxShadow:    "0 6px 24px rgba(0,0,0,0.2)",
+  },
+  icon: "💬",
+};
+
+const TOAST_LABEL = {
+  follow_request:          { emoji: "👤", text: "sent you a follow request" },
+  follow_request_accepted: { emoji: "✅", text: "accepted your follow request" },
+  follow:                  { emoji: "➕", text: "started following you" },
+  post_like:               { emoji: "❤️", text: "liked your post" },
+  post_comment:            { emoji: "💬", text: "commented on your post" },
+  comment_reply:           { emoji: "↩️", text: "replied to your comment" },
+  comment_like:            { emoji: "❤️", text: "liked your comment" },
+  story_reaction:          { emoji: "😮", text: "reacted to your story" },
+  story_reply:             { emoji: "↩️", text: "replied to your story" },
+};
 const CHAT_SERVER = import.meta.env.VITE_CHAT_SERVER_URL || "http://localhost:5001";
 const API_BASE    = import.meta.env.VITE_SERVER_URL       || "http://localhost:9080/api/v2";
 
@@ -227,7 +100,33 @@ const registerSocketEvents = (s) => {
   s.on("connect",       () => {});
   s.on("disconnect",    () => {});
   s.on("connect_error", () => {});
+// ── Notifications ──────────────────────────────────────────────────────
+  s.on("notification:new", (notification) => {
+    const sender =
+      notification.sender && typeof notification.sender === "object"
+        ? notification.sender
+        : { _id: notification.sender, fullName: null, username: null, avatar: null };
 
+    store.dispatch(addRealtimeNotification({ ...notification, sender }));
+
+    const cfg = TOAST_LABEL[notification.type];
+    if (cfg) {
+      const name = sender.fullName || sender.username || "Someone";
+      toast(`${cfg.emoji} ${name} ${cfg.text}`, TOAST_OPTS);
+    }
+  });
+
+  s.on("notification:unread_count", ({ count }) => {
+    store.dispatch(setUnreadCount(count));
+  });
+
+  // ── Message toast ───────────────────────────────────────────────────────
+  s.on("notification:message", ({ conversationId, sender, preview }) => {
+    const activeConvId = store.getState().chat.activeConvId;
+    if (activeConvId === conversationId) return;
+    const senderName = sender?.fullName || sender?.username || "Someone";
+    toast(`${senderName}: ${preview || "New message"}`, MSG_TOAST_OPTS);
+  });
   s.on("token:expired", () => refreshSocketToken(s));
   s.on("session_expired", () => window.dispatchEvent(new CustomEvent("auth:logout")));
 };

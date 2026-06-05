@@ -128,15 +128,12 @@ export default async (io, socket) => {
     }
   };
 
-  // const getParticipants = async (conversationId) => {
-  //   const conv = await Conversation.findById(conversationId).lean();
-  //   return conv?.participants?.map((p) => p.toString()) || [];
-  // };
 
   const getPopulatedConversation = async (conversationId) => {
   const conv = await Conversation.findById(conversationId)
     .populate("participants", PARTICIPANT_SELECT)
     .lean();
+     console.log("DEBUG raw conv:", conv?._id, "participants count:", conv?.participants?.length);
   return normalizeParticipants(conv);
 };
 
@@ -174,6 +171,9 @@ const getParticipantIds = (conv) =>
 if (!conv) return socket.emit("error", { message: "Conversation not found." });
 
 const participants = getParticipantIds(conv);
+console.log("DEBUG participants:", participants);
+console.log("DEBUG userId:", userId);
+console.log("DEBUG includes:", participants.includes(userId));
       if (!participants.includes(userId))
         return socket.emit("error", { message: "Unauthorized." });
 

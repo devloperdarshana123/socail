@@ -108,14 +108,15 @@ router.delete(
 );
 
 // Delete post
-router.delete(
-  "/posts/:postId",
+router.patch(
+  "/posts/:postId/remove",
   auditLog({
     action:     AUDIT_ACTIONS.POST_DELETED,
     targetId:   (req) => req.params.postId,
     targetType: "post",
     targetMeta: (req) => ({
       postId: req.params.postId,
+      reason: req.body?.reason ?? null,
     }),
   }),
   deletePost,

@@ -10,7 +10,7 @@ import EroviansLogo from "../assets/seller_logo.png";
 import { logoutUser } from "../lib/redux/authSlice";
 import { selectTotalUnread } from "../lib/redux/chatSlice";
 import { fetchNotifications, markAllRead } from "../lib/redux/notificationSlice";
-
+import { getSocket } from "../lib/services/socketManager";
 // ── Selectors ─────────────────────────────────────────────────────────────────
 const selectUser          = (s) => s.auth.user;
 const selectLogoutLoading = (s) => s.auth.logout?.loading ?? false;
@@ -210,11 +210,19 @@ export default function Navbar({ onCreatePost }) {
         <div ref={notifRef} className="relative">
           <button
             onClick={() => {
-              const opening = !showNotifs;
-              setShowNotifs(opening);
-              setDropdownOpen(false);
-              if (opening) dispatch(markAllRead());
-            }}
+  const opening = !showNotifs;
+  setShowNotifs(opening);
+  setDropdownOpen(false);
+  if (opening && unreadCount > 0) {
+    // 1. Optimistic UI — turant badge 0
+    dispatch(markAllRead());
+    // 2. Socket se backend DB update
+    const s = getSocket();
+    if (s?.connected) {
+      s.emit("notification:mark_read", { notificationId: "all" });
+    }
+  }
+}}
             className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500"
           >
             <Bell size={20} />

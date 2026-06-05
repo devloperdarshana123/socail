@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useDispatch, useSelector } from "react-redux";
 import ReportModal from "./ReportModal";
 import api from "../lib/services/api";
-import { toast } from "sonner";
+import toast from "react-hot-toast";
 import {
   X, Heart, MessageCircle, Bookmark,
   Play, Pause, ChevronLeft, ChevronRight, Send, Eye,
@@ -679,24 +679,33 @@ Report post
 </div>
      </div> 
 {showReport && (
-          <ReportModal
-            targetModel="Post"
-            onClose={() => setShowReport(false)}
-            onSubmit={async (reason) => {
-              setShowReport(false);
-              try {
-               await api.post("/user/report", {
-                  targetId:    post._id,
-                  targetModel: "Post",
-                  reason,
-                });
-                toast.success("Report submitted. Our team will review it.");
-              } catch (err) {
-                toast.error(err?.response?.data?.message || "Failed to submit report.");
-              }
-            }}
-          />
-        )}
+  <ReportModal
+    targetModel="Post"
+    onClose={() => setShowReport(false)}
+    onSubmit={async (reason) => {
+      try {
+        const { data } = await api.post("/user/report", {
+          targetId:    post._id,
+          targetModel: "Post",
+          reason,
+        });
+        setShowReport(false);
+        setTimeout(() => {
+          if (data.alreadyReported) {
+            toast("You have already reported this post.");
+          } else {
+            toast.success("Report submitted. Our team will review it within 24 hours.");
+          }
+        }, 100);
+      } catch (err) {
+        setShowReport(false);
+        setTimeout(() => {
+          toast.error(err?.response?.data?.message || "Failed to submit report.");
+        }, 100);
+      }
+    }}
+  />
+)}
         {deleteConfirm && (
           <div style={{
             position: "absolute", inset: 0, zIndex: 30,

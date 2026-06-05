@@ -78,6 +78,13 @@ export default function useChat() {
   // ── Send text message ────────────────────────────────────────────────────
   const sendMessage = useCallback(({ conversationId, text, image, replyTo }) => {
     const s = getSocket();
+
+    console.log("sendMessage called", { 
+    connected: s?.connected, 
+    userId, 
+    conversationId,
+    socketId: s?.id 
+  });
     if (!s?.connected || !userId || !conversationId) return;
 
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -94,6 +101,7 @@ export default function useChat() {
       },
     }));
 
+    s.once("error", (err) => console.error("Socket error after send:", err));
     s.emit("message:send", {
       conversationId,
       message: { text: text?.trim() || "", image: image || null, replyTo: replyTo || null, tempId },

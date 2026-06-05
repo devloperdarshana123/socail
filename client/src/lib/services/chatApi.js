@@ -1,5 +1,5 @@
 // client/src/lib/services/chatApi.js
-import api from "../services/api"; // ✅ existing instance — token refresh + interceptors sab included
+import api from "./api"; // ✅ existing instance — token refresh + interceptors sab included
 
 const chatApi = {
   // ── Conversations ─────────────────────────────────────────────────────────

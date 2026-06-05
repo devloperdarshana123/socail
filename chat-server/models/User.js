@@ -43,7 +43,7 @@ const userSchema = new Schema(
   },
   {
     timestamps:  true,
-    collection:  "socialusers", // ✅ main social server ka collection
+    collection:  "users", // ✅ main social server ka collection
     toJSON:      { virtuals: true },
     toObject:    { virtuals: true },
   }
@@ -78,5 +78,5 @@ userSchema.statics.isBlocked = async function (userIdA, userIdB) {
 };
 
 // mongoose model cache — hot reload safe
-const User = models.User || model("User", userSchema, "socialusers");
+const User = models.User || model("User", userSchema, "users");
 export default User;

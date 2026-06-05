@@ -5,6 +5,7 @@ import Post from "../../models/post.model.js";
 import Report from "../../models/report.model.js";
 import logger from "../../config/logger.js";
 import {sendMail} from "../../utils/sendMail.js";
+import { postDeleted } from "../../mail/templates/postDeleted.js";
 import { accountSuspended } from "../../mail/templates/accountSuspended.js";
 import mongoose from "mongoose";
 import redis from "../../config/redis.js";
@@ -443,28 +444,89 @@ export const deleteUserAccount = asyncHandler(async (req, res, next) => {
 //  Delete a specific post
 // ─────────────────────────────────────────────────────────────
 
+// export const deletePost = asyncHandler(async (req, res, next) => {
+//   const { postId } = req.params;
+
+//   const post = await Post.findById(postId).populate("author", "username");
+//   if (!post) return next(new AppError("Post not found", 404));
+
+//   post.isDeleted  = true;
+//   post.deletedAt  = new Date();
+//   post.deletedBy  = req.user._id; // Admin who deleted
+//   await post.save({ validateBeforeSave: false });
+
+//   // Decrement postsCount on user
+// // REPLACE:
+// await User.findOneAndUpdate(
+//   { _id: post.author._id, postsCount: { $gt: 0 } },
+//   { $inc: { postsCount: -1 } }
+// );
+
+//   logger.warn("Admin deleted post", {
+//     adminId: req.user._id,
+//     postId,
+//     authorUsername: post.author?.username,
+//   });
+
+//   return res.status(200).json({
+//     success: true,
+//     message: "Post deleted successfully",
+//   });
+// });
+
+
+
 export const deletePost = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
+  const { reason }  = req.body;
 
-  const post = await Post.findById(postId).populate("author", "username");
-  if (!post) return next(new AppError("Post not found", 404));
+  // ── 1. Fetch post + author email in one query ──────────────
+  const post = await Post.findById(postId)
+    .populate("author", "username fullName email");
 
-  post.isDeleted  = true;
-  post.deletedAt  = new Date();
-  post.deletedBy  = req.user._id; // Admin who deleted
+  if (!post || post.isDeleted) {
+    return next(new AppError("Post not found", 404));
+  }
+
+  // ── 2. Soft delete ─────────────────────────────────────────
+  post.isDeleted = true;
+  post.deletedAt = new Date();
   await post.save({ validateBeforeSave: false });
 
-  // Decrement postsCount on user
-// REPLACE:
-await User.findOneAndUpdate(
-  { _id: post.author._id, postsCount: { $gt: 0 } },
-  { $inc: { postsCount: -1 } }
-);
+  // ── 3. Decrement postsCount (guard: never go below 0) ──────
+  await User.findOneAndUpdate(
+    { _id: post.author._id, postsCount: { $gt: 0 } },
+    { $inc: { postsCount: -1 } },
+  );
+
+  // ── 4. Notify author via email (fire-and-forget) ───────────
+  if (post.author?.email) {
+    sendMail({
+      to:      post.author.email,
+      toName:  post.author.fullName,
+      subject: "Your post has been removed by our moderation team",
+      html: postDeleted({
+        fullName:    post.author.fullName,
+        postCaption: post.caption ?? "",
+        reason:      reason?.trim() || "Violation of community guidelines",
+        deletedAt:   post.deletedAt,
+      }),
+    }).catch((mailErr) => {
+      logger.error("Failed to send post deletion email", {
+        adminId:  req.user._id,
+        postId,
+        authorId: post.author._id,
+        error:    mailErr.message,
+      });
+    });
+  }
 
   logger.warn("Admin deleted post", {
-    adminId: req.user._id,
+    adminId:        req.user._id,
     postId,
-    authorUsername: post.author?.username,
+    authorId:       post.author._id,
+    authorUsername: post.author.username,
+    reason:         reason?.trim() || null,
   });
 
   return res.status(200).json({
@@ -472,7 +534,6 @@ await User.findOneAndUpdate(
     message: "Post deleted successfully",
   });
 });
-
 // ─────────────────────────────────────────────────────────────
 //  PATCH /admin/users/:id/verify-badge
 //  Toggle verified badge

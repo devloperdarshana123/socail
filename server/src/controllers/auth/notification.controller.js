@@ -1,15 +1,3 @@
-// server/src/controllers/notification.controller.js
-//
-// PRODUCTION-READY NOTIFICATION REST API
-//
-// Yeh endpoints use hote hain:
-//  GET  /api/notifications         → inbox fetch (paginated)
-//  GET  /api/notifications/count   → unread badge count
-//  PUT  /api/notifications/read    → mark all read
-//  PUT  /api/notifications/:id/read → mark one read
-//  DELETE /api/notifications/:id   → soft delete one
-//  DELETE /api/notifications       → clear all
-// ─────────────────────────────────────────────────────────────────────────
 
 import Notification from "../../models/notification.model.js";
 import asyncHandler from "../../middlewares/asyncHandler.js";

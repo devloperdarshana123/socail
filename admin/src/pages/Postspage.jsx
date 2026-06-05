@@ -197,22 +197,44 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
                 <Trash2 size={11} className="hidden sm:block" />
                 Delete
               </button>
-            ) : (
-              <div className="flex gap-1 sm:gap-1.5">
-                <button onClick={() => setConfirmDel(false)}
-                  className="flex-1 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white/20 hover:bg-white/30
-                    text-white text-[10px] sm:text-[11px] font-semibold transition-colors">
-                  Cancel
-                </button>
-                <button
-                  onClick={() => { onDelete(post._id); setConfirmDel(false); }}
-                  disabled={busy}
-                  className="flex-1 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-red-500 hover:bg-red-400
-                    text-white text-[10px] sm:text-[11px] font-bold transition-colors
-                    disabled:opacity-50 flex items-center justify-center gap-1"
-                >
-                  {busy ? <Loader2 size={10} className="animate-spin" /> : "Confirm"}
-                </button>
+         ) : (
+              <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  placeholder="Reason (optional)"
+                  className="w-full px-2 py-1 rounded-lg text-[10px] bg-white/20
+                    text-white placeholder-white/60 border border-white/30
+                    focus:outline-none focus:border-white/60"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  onChange={(e) => e.stopPropagation()}
+                  ref={(el) => { if (el) el._reason = el.value; }}
+                  id={`reason-${post._id}`}
+                />
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setConfirmDel(false)}
+                    className="flex-1 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white/20
+                      hover:bg-white/30 text-white text-[10px] sm:text-[11px]
+                      font-semibold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const input = document.getElementById(`reason-${post._id}`);
+                      const reason = input?.value?.trim() || "Violation of community guidelines";
+                      onDelete(post._id, reason);
+                      setConfirmDel(false);
+                    }}
+                    disabled={busy}
+                    className="flex-1 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-red-500
+                      hover:bg-red-400 text-white text-[10px] sm:text-[11px] font-bold
+                      transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {busy ? <Loader2 size={10} className="animate-spin" /> : "Confirm"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -284,11 +306,11 @@ export default function PostsPage() {
     if (error) { showToast(error, "error"); dispatch(clearPostErrors()); }
   }, [error]);
 
-  const handleDelete = useCallback(async (postId) => {
-    const res = await dispatch(adminDeletePost(postId));
-    if (!res.error) showToast("Post deleted successfully");
-    else showToast(res.payload ?? "Failed to delete", "error");
-  }, [dispatch, showToast]);
+ const handleDelete = useCallback(async (postId, reason) => {
+  const res = await dispatch(adminDeletePost({ postId, reason }));
+  if (!res.error) showToast("Post deleted successfully");
+  else showToast(res.payload ?? "Failed to delete", "error");
+}, [dispatch, showToast]);
 
   const total      = pagination.total      ?? 0;
   const totalPages = pagination.totalPages ?? 1;

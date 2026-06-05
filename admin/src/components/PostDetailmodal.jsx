@@ -79,6 +79,7 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
   const navigate              = useNavigate();
   const [mediaIdx, setMediaIdx] = useState(0);
   const [showDel,  setShowDel]  = useState(false);
+  const [reason, setReason] = useState("");
   const backdropRef             = useRef(null);
 
   // Reset on new post
@@ -103,10 +104,10 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
     if (e.target === backdropRef.current) onClose();
   }, [onClose]);
 
-  const handleDelete = useCallback(async () => {
-    if (onDelete) await onDelete(post._id);
-    onClose();
-  }, [onDelete, post, onClose]);
+ const handleDelete = useCallback(async () => {
+  if (onDelete) await onDelete(post._id, reason.trim() || "Violation of community guidelines");
+  onClose();
+}, [onDelete, post, onClose, reason]);
 
   if (!post) return null;
 
@@ -375,14 +376,23 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
                       </svg>
                       Delete Post
                     </button>
-                  ) : (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 p-3">
-                      <p className="text-xs text-red-700 font-semibold text-center mb-2.5">
+               ) : (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-3 space-y-2.5">
+                      <p className="text-xs text-red-700 font-semibold text-center">
                         This action cannot be undone.
                       </p>
+                      <input
+                        type="text"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="Reason for removal (optional)"
+                        className="w-full px-3 py-2 rounded-xl border border-red-200 bg-white
+                          text-xs text-slate-700 placeholder-slate-400
+                          focus:outline-none focus:border-red-400 transition-colors"
+                      />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setShowDel(false)}
+                          onClick={() => { setShowDel(false); setReason(""); }}
                           disabled={deleteLoading === post._id}
                           className="flex-1 py-2 rounded-xl bg-white border border-slate-200
                             text-slate-600 text-xs font-semibold hover:bg-slate-50

@@ -37,9 +37,9 @@ export const fetchAllPosts = createAsyncThunk(
 
 export const adminDeletePost = createAsyncThunk(
   "adminPosts/delete",
-  async (postId, { rejectWithValue }) => {
+  async ({ postId, reason }, { rejectWithValue }) => {
     try {
-      await adminApi.delete(`/admin/posts/${postId}`);
+      await adminApi.patch(`/admin/posts/${postId}/remove`, { reason });
       return { postId };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message ?? "Failed to delete post");
@@ -124,7 +124,7 @@ const adminPostsSlice = createSlice({
 
       // adminDeletePost
       .addCase(adminDeletePost.pending, (s, { meta }) => {
-        s.deleteLoading = meta.arg;
+        s.deleteLoading = meta.arg.postId;
         s.deleteError   = null;
       })
       .addCase(adminDeletePost.fulfilled, (s, { payload }) => {

@@ -374,26 +374,99 @@ export const publishDraft = asyncHandler(async (req, res) => {
   });
 });
 
+// export const updatePost = asyncHandler(async (req, res, next) => {
+//   const { postId } = req.params;
+//   const { caption, isDraft } = req.body;
+
+//   const post = await Post.findOne({ _id: postId, author: req.user._id });
+//   if (!post) return next(new AppError("Post not found.", 404));
+
+//   if (caption !== undefined) {
+//   if (caption.length > 2200) {
+//     return next(new AppError("Caption cannot exceed 2200 characters.", 400));
+//   }
+//   post.caption = caption.trim();
+// }
+//   if (isDraft !== undefined) post.isDraft = isDraft === true || isDraft === "true";
+
+//   await post.save();
+
+//   return res.status(200).json({
+//     success: true,
+//     message: "Post updated.",
+//     post,
+//   });
+// });
+
+
 export const updatePost = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
-  const { caption, isDraft } = req.body;
+  const { caption, isDraft, media } = req.body;
 
-  const post = await Post.findOne({ _id: postId, author: req.user._id });
+  const post = await Post.findOne({
+    _id: postId,
+    author: req.user._id,
+    isDeleted: false,
+  });
   if (!post) return next(new AppError("Post not found.", 404));
 
+  // ── Caption update ──
   if (caption !== undefined) {
-  if (caption.length > 2200) {
-    return next(new AppError("Caption cannot exceed 2200 characters.", 400));
+    if (caption.length > 2200)
+      return next(new AppError("Caption cannot exceed 2200 characters.", 400));
+    post.caption = caption.trim();
   }
-  post.caption = caption.trim();
-}
-  if (isDraft !== undefined) post.isDraft = isDraft === true || isDraft === "true";
+
+  // ── isDraft update ──
+  if (isDraft !== undefined) {
+    post.isDraft = isDraft === true || isDraft === "true";
+  }
+
+  // ── Media update ──
+  if (media !== undefined) {
+    // Purani media jo ab nahi chahiye — Cloudinary se delete karo
+    const newPublicIds = media.map((m) => m.publicId);
+    const toDelete = post.media.filter(
+      (m) => !newPublicIds.includes(m.publicId)
+    );
+
+    await Promise.all(
+      toDelete.map((m) =>
+        deleteFromCloudinary(m.publicId, m.resourceType).catch((err) =>
+          logger.warn("Cloudinary delete failed", {
+            publicId: m.publicId,
+            error: err.message,
+          })
+        )
+      )
+    );
+
+    // ── Type-wise validation ──
+    if (post.type === "reel" && media.length !== 1) {
+      return next(new AppError("Reel must have exactly one video.", 400));
+    }
+    if (post.type === "image" && (media.length < 1 || media.length > 10)) {
+      return next(new AppError("Image post requires 1–10 images.", 400));
+    }
+    if (post.type === "text" && media.length > 0) {
+      return next(new AppError("Text post cannot have media.", 400));
+    }
+
+    post.media = media.map(sanitizeMediaItem);
+  }
 
   await post.save();
+
+  const populated = await Post.getPostById(
+    post._id,
+    req.user._id,
+    false,
+    { allowDraft: post.isDraft }
+  );
 
   return res.status(200).json({
     success: true,
     message: "Post updated.",
-    post,
+    post: populated,
   });
 });

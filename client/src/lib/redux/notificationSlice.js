@@ -4,21 +4,65 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../services/api";
 
-const BASE = "/api/v2/notifications";
+const BASE = "/notifications";
 
 // ── Async Thunks ──────────────────────────────────────────────────────────
+
+
+
+// export const fetchNotifications = createAsyncThunk(
+//   "notifications/fetch",
+//   async ({ page = 1 } = {}, { rejectWithValue }) => {
+//     try {
+//       const { data } = await api.get(BASE, { params: { page, limit: 20 } });
+      
+//       const payload       = data?.data ?? {};
+//       const notifData     = payload.notifications ?? {};
+      
+//       // ✅ items array ke andar hai
+//       const notifications = Array.isArray(notifData.items) 
+//         ? notifData.items 
+//         : Array.isArray(notifData) 
+//         ? notifData 
+//         : [];
+
+//       return {
+//         notifications,
+//         unreadCount: payload.unreadCount ?? 0,
+//         hasMore:     notifData.hasMore   ?? notifications.length === 20,
+//         page,
+//       };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Failed to fetch");
+//     }
+//   }
+// );
+
 
 export const fetchNotifications = createAsyncThunk(
   "notifications/fetch",
   async ({ page = 1 } = {}, { rejectWithValue }) => {
     try {
       const { data } = await api.get(BASE, { params: { page, limit: 20 } });
-      return { ...data.data, page };
+      const payload       = data?.data ?? {};
+      const notifData     = payload.notifications ?? {};
+      const notifications = Array.isArray(notifData.items)
+        ? notifData.items
+        : Array.isArray(notifData)
+        ? notifData
+        : [];
+      return {
+        notifications,
+        unreadCount: payload.unreadCount ?? 0,
+        hasMore:     notifData.hasMore   ?? notifications.length === 20,
+        page,
+      };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Failed to fetch");
     }
   }
 );
+
 
 export const markAllReadThunk = createAsyncThunk(
   "notifications/markAllRead",
