@@ -9,13 +9,12 @@ import {
   removeCoverPhoto,
   updateProfile,
   getMapSellers, 
-  blockUser,      // ← ADD
-  unblockUser,    // ← ADD
+  blockUser,      
+  unblockUser,    
   getBlockedUsers ,
   getBlockStatus ,
-  submitReport
 } from "../../controllers/auth/user.controller.js";
-
+import { submitReport } from "../../controllers/auth/report.controller.js";
 const userRouter = express.Router();
 
 

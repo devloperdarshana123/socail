@@ -1,4 +1,6 @@
 
+
+
 // src/socket/index.js
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
@@ -9,6 +11,52 @@ import logger from "../utils/logger.js";
 
 let io;
 
+// ── Admin Namespace ──────────────────────────────────────────────────────────
+const initAdminNamespace = (io) => {
+  const adminNsp = io.of("/admin");
+
+  adminNsp.use((socket, next) => {
+    let token = socket.handshake.auth?.token;
+
+    if (!token) {
+      const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+      token = cookies.adminAccessToken;
+    }
+
+    if (!token) return next(new Error("Unauthorized"));
+
+    try {
+      const decoded = jwt.verify(token, process.env.ADMIN_ACCESS_TOKEN_SECRET);
+      const validRoles = ["admin", "super_admin", "moderator"];
+
+      if (!validRoles.includes(decoded.role)) {
+        return next(new Error("Forbidden"));
+      }
+
+      socket.admin = decoded;
+      next();
+    } catch (err) {
+      logger.error("❌ Admin JWT Error", { message: err.message });
+      return next(new Error("Invalid token"));
+    }
+  });
+
+  adminNsp.on("connection", (socket) => {
+    const adminId = (socket.admin._id || socket.admin.id)?.toString();
+    logger.info(`🛡️ Admin connected: ${adminId} [${socket.admin.role}]`);
+
+    socket.join("admin_room");
+    logger.info(`🛡️ Admin joined admin_room: ${adminId}`);
+
+    socket.on("disconnect", (reason) => {
+      logger.info(`🛡️ Admin disconnected: ${adminId} — ${reason}`);
+    });
+  });
+
+  return adminNsp;
+};
+
+// ── Main Socket ──────────────────────────────────────────────────────────────
 const initSocket = (server) => {
   const ALLOWED_ORIGINS = process.env.CLIENT_URL
     ? process.env.CLIENT_URL.split(",")
@@ -26,18 +74,16 @@ const initSocket = (server) => {
     pingInterval: 25000,
   });
 
-  // ── JWT Auth Middleware ──────────────────────────────────────────────────
+  // ── JWT Auth Middleware ────────────────────────────────────────────────────
   io.use((socket, next) => {
-  // 1. auth.token se try karo (backward compat)
-  let token = socket.handshake.auth?.token;
+    let token = socket.handshake.auth?.token;
 
-  // 2. Cookie se try karo — httpOnly accessToken
-  if (!token) {
-    const cookies = cookie.parse(socket.handshake.headers.cookie || "");
-    token = cookies.accessToken;
-  }
+    if (!token) {
+      const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+      token = cookies.accessToken;
+    }
 
-  if (!token) return next(new Error("Unauthorized"));
+    if (!token) return next(new Error("Unauthorized"));
 
     try {
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {
@@ -63,7 +109,7 @@ const initSocket = (server) => {
     }
   });
 
-  // ── Connection ───────────────────────────────────────────────────────────
+  // ── Connection ─────────────────────────────────────────────────────────────
   io.on("connection", (socket) => {
     const userId = (socket.user.id || socket.user._id)?.toString();
     if (!userId) {
@@ -77,7 +123,7 @@ const initSocket = (server) => {
       socket.emit("token:expired");
     }
 
-    // ── Token refresh ────────────────────────────────────────────────────
+    // ── Token refresh ──────────────────────────────────────────────────────
     socket.on("token:refresh", ({ token: newToken }) => {
       if (!newToken) return;
       try {
@@ -93,7 +139,7 @@ const initSocket = (server) => {
       }
     });
 
-    // ── Handlers ────────────────────────────────────────────────────────
+    // ── Handlers ──────────────────────────────────────────────────────────
     try {
       chatHandler(io, socket);
       notificationHandler(io, socket);
@@ -107,6 +153,7 @@ const initSocket = (server) => {
     });
   });
 
+  initAdminNamespace(io);
   return io;
 };
 

@@ -36,25 +36,13 @@ import adminUserRoute from "./routes/admin/Admin.user.routes .js";
 import adminReportRoute from "./routes/admin/Admin.report.routes.js";
 import dashboardRoutes from "./routes/admin/Admin.dashboard.route.js";
 import auditLogRoute from "./routes/admin/Admin.auditlog.route.js";
-import commentRoutes from "./routes/admin/admin.comment.routes.js"
+import commentRoutes from "./routes/admin/admin.comment.routes.js";
+import adminNotificationRoute from "./routes/admin/adminNotification.routes.js";
 const app = express();
 
 // ── Security ──
 app.use(helmet());
 
-// ── CORS ──
-// CHANGE 1: Single URL ki jagah array — multiple origins support
-// const allowedOrigins = process.env.FRONTEND_URL
-//   ? process.env.FRONTEND_URL.split(",").map((o) => o.trim())
-//   : ["http://localhost:5173"];
-
-// app.use(
-//   cors({
-//     origin: allowedOrigins,
-//     credentials: true,
-//     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-//   }),
-// );
 
 
 
@@ -164,6 +152,7 @@ app.use("/api/v2/admin",      adminUserRoute);
 app.use("/api/v2/admin", adminReportRoute);
 app.use("/api/v2/admin/settings", adminSettingsRoute);
 app.use("/api/v2/admin/audit-logs", auditLogRoute);
+app.use("/api/v2/admin/notifications", adminNotificationRoute);
 
 
 

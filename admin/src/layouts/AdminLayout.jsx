@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { adminLogout, fetchAdminMe, forceLogout } from "../lib/redux/AdminauthSlice";
+import AdminNotificationBell from "../components/AdminNotificationBell";
 import PageLoader from "../components/PageLoader";
 const NAV_ITEMS = [
   {
@@ -403,9 +404,18 @@ export default function AdminLayout() {
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-slate-800 tracking-tight">Admin Panel</span>
         </div>
+         <AdminNotificationBell />
       </header>
 
       {/* ── Main content ── */}
+   {/* ── Desktop top bar ── */}
+      <div className={`hidden md:flex fixed top-0 right-0 z-20 h-15 items-center px-6
+        transition-all duration-300 ${collapsed ? "left-17" : "left-55"}`}>
+        <div className="ml-auto">
+          <AdminNotificationBell />
+        </div>
+      </div>
+
       <main
         className={`
           transition-all duration-300

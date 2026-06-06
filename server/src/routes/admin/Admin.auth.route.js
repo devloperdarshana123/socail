@@ -2,7 +2,7 @@
 // server/src/routes/admin/Admin.auth.route.js
 import express from "express";
 import {
-  adminLogin, adminLogout, adminRefreshToken, getAdminMe,
+  adminLogin, adminLogout, adminRefreshToken, getAdminMe, getAdminSocketToken,
 } from "../../controllers/admin/admin.auth.controller.js";
 
 import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
@@ -37,5 +37,5 @@ router.post(
   auditLog({ action: AUDIT_ACTIONS.ADMIN_LOGOUT }),
   adminLogout,
 );
-
+router.get("/socket-token", isAdminAuthenticated, getAdminSocketToken);
 export default router;

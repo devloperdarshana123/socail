@@ -27,6 +27,8 @@ const notificationSchema = new Schema(
         "story_view", "story_reaction", "story_reply", "story_mention",
         "new_message", "new_group_message",
         "system",
+"admin_new_user",
+"admin_new_report",
       ],
       index: true,
     },

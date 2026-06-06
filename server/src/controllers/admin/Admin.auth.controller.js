@@ -214,3 +214,21 @@ export const getAdminMe = asyncHandler(async (req, res) => {
     data   : { _id, fullName, email, username, role, avatar },
   });
 });
+
+
+// ═════════════════════════════════════════════
+//  GET /admin/auth/socket-token  (protected)
+// ═════════════════════════════════════════════
+
+export const getAdminSocketToken = asyncHandler(async (req, res) => {
+  const token = jwt.sign(
+    {
+      _id:  req.user._id,
+      id:   req.user._id,
+      role: req.user.role,
+    },
+    process.env.ADMIN_ACCESS_TOKEN_SECRET,
+    { expiresIn: "1m" }
+  );
+  return res.status(200).json({ success: true, data: { token } });
+});

@@ -1,7 +1,7 @@
 // src/routes/notifyRoutes.js
 import { Router } from "express";
 import { internalAuth } from "../middleware/internalAuth.js";
-import { emitNotification } from "../services/notificationService.js";
+import { emitNotification , emitAdminNotification } from "../services/notificationService.js";
 import { getIO } from "../socket/index.js";
 
 const router = Router();
@@ -65,6 +65,16 @@ router.post("/message", internalAuth, (req, res) => {
   const io = getIO();
   io.to(to).emit("receive_message", message);
   res.json({ success: true });
+});
+
+
+router.post("/admin-notify", internalAuth, async (req, res) => {
+  const { type, meta = {} } = req.body;
+  if (!type) return res.status(400).json({ message: "Missing: type" });
+  try {
+    await emitAdminNotification({ type, meta });
+    res.json({ success: true });
+  } catch { res.status(500).json({ success: false }); }
 });
 
 export default router;

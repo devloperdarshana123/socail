@@ -487,97 +487,6 @@ useEffect(() => {
   }, [otherId]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
-
-
-
-  // ✅ conversation:new — stranger ya koi bhi pehla message bheje
-// ✅ conversation:updated — har message pe sidebar reorder
-// useEffect(() => {
-//   const s = getSocket();
-//   if (!s) return;
-
-//   const onConvNew = ({ conversation }) => {
-//     if (!conversation?._id) return;
-//     dispatch(addNewConversation({ conversation }));
-//   };
-
-//   const onConvUpdated = ({ conversation }) => {
-//     if (!conversation?._id) return;
-//     dispatch(updateConversation({ conversation }));
-//   };
-
-//   s.on("conversation:new",     onConvNew);
-//   s.on("conversation:updated", onConvUpdated);
-
-//   return () => {
-//     s.off("conversation:new",     onConvNew);
-//     s.off("conversation:updated", onConvUpdated);
-//   };
-// }, [dispatch]);
-
-
-// useEffect(() => {
-//   const s = getSocket();
-//   if (!s) return;
-
-//   const onConvNew      = ({ conversation }) => {
-//     if (!conversation?._id) return;
-//     dispatch(addNewConversation({ conversation }));
-//   };
-//   const onConvUpdated  = ({ conversation }) => {
-//     if (!conversation?._id) return;
-//     dispatch(updateConversation({ conversation }));
-//   };
-//   const onMsgReceive   = ({ conversationId, message, tempId }) => {
-//     if (!conversationId || !message) return;
-//     dispatch(receiveMessage({ conversationId, message, tempId: tempId ?? null }));
-//   };
-//   const onMsgEdited    = ({ conversationId, messageId, newText, isEdited, editedAt }) => {
-//     dispatch(applyMessageEdit({ conversationId, messageId, newText, isEdited, editedAt }));
-//   };
-//   const onMsgDeleted   = ({ conversationId, messageId }) => {
-//     dispatch(applyMessageDelete({ conversationId, messageId }));
-//   };
-//   const onMsgSeen      = ({ conversationId, messageId, seenBy }) => {
-//     dispatch(applySeenReceipt({ conversationId, messageId, seenBy }));
-//   };
-//   const onReaction     = ({ conversationId, messageId, reactions }) => {
-//     dispatch(applyReaction({ conversationId, messageId, reactions }));
-//   };
-//   const onOnlineList   = (userIds) => dispatch(setOnlineUsers(userIds));
-//   const onUserOnline   = ({ userId }) => dispatch(userCameOnline({ userId }));
-//   const onUserOffline  = ({ userId }) => dispatch(userWentOffline({ userId }));
-//   const onTypingStart  = ({ conversationId, userId }) => dispatch(setTyping({ conversationId, userId }));
-//   const onTypingStop   = ({ conversationId, userId }) => dispatch(clearTyping({ conversationId, userId }));
-
-//   s.on("conversation:new",     onConvNew);
-//   s.on("conversation:updated", onConvUpdated);
-//   s.on("message:receive",      onMsgReceive);
-//   s.on("message:edited",       onMsgEdited);
-//   s.on("message:deleted",      onMsgDeleted);
-//   s.on("message:seen",         onMsgSeen);
-//   s.on("message:reaction",     onReaction);
-//   s.on("online:list",          onOnlineList);
-//   s.on("user:online",          onUserOnline);
-//   s.on("user:offline",         onUserOffline);
-//   s.on("typing:start",         onTypingStart);
-//   s.on("typing:stop",          onTypingStop);
-
-//   return () => {
-//     s.off("conversation:new",     onConvNew);
-//     s.off("conversation:updated", onConvUpdated);
-//     s.off("message:receive",      onMsgReceive);
-//     s.off("message:edited",       onMsgEdited);
-//     s.off("message:deleted",      onMsgDeleted);
-//     s.off("message:seen",         onMsgSeen);
-//     s.off("message:reaction",     onReaction);
-//     s.off("online:list",          onOnlineList);
-//     s.off("user:online",          onUserOnline);
-//     s.off("user:offline",         onUserOffline);
-//     s.off("typing:start",         onTypingStart);
-//     s.off("typing:stop",          onTypingStop);
-//   };
-// }, [dispatch]);
   useEffect(() => {
     if (!activeConvId || messages.length === 0) return;
     const last = messages[messages.length - 1];
@@ -701,22 +610,39 @@ useEffect(() => {
     else showToast("Failed to unblock. Try again.");
   };
 
-  const handleReportSubmit = async (reason) => {
-    setShowReport(false);
-    try {
-     const res = await fetch(`${BASE_URL}/api/v2/user/report`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  credentials: "include",
-  body: JSON.stringify({ targetId: otherId, targetModel: "User", reason }),
-});
-      const data = await res.json();
-      showToast(data.success ? "Report submitted. Our team will review it." : (data.message || "Failed to submit report."));
-    } catch {
-      showToast("Something went wrong. Try again.");
-    }
-  };
+const handleReportSubmit = async (reason) => {
+  setShowReport(false);
+  try {
+    const res = await fetch(`${BASE_URL}/api/v2/user/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ targetId: otherId, targetModel: "User", reason }),
+    });
 
+    const data = await res.json();
+
+    if (res.status === 429) {
+      showToast("Too many reports. Please wait a minute.");
+      return;
+    }
+
+    if (data.alreadyReported) {
+      showToast("You have already reported this user.");
+      return;
+    }
+
+    if (data.success) {
+      showToast("Report submitted. Our team will review it within 24 hours.");
+      return;
+    }
+
+    showToast(data.message || "Failed to submit report.");
+
+  } catch {
+    showToast("Something went wrong. Try again.");
+  }
+};
   const filteredConvs = conversations.filter((c) => {
     const other = c.participants?.find((p) => (p._id || p).toString() !== myId);
     return (other?.fullName || other?.username || "").toLowerCase().includes(search.toLowerCase());

@@ -5,6 +5,7 @@ import AppError from "../../utils/AppError.js";
 import User from "../../models/user.model.js";
 import OTP from "../../models/otp.model.js";
 import { sendTemplateMail } from "../../mail/index.js";
+import { notifyAdmin } from "../../utils/adminNotify.js";
 import logger from "../../config/logger.js";
 import { sendUserToken }              from "../../utils/sendUserToken.js";
 import { 
@@ -426,6 +427,16 @@ export const setUsername = asyncHandler(async (req, res, next) => {
 
   logger.info("Username set, onboarding complete", { userId: user._id, username: trimmed });
 
+  notifyAdmin({
+  type: "admin_new_user",
+  meta: {
+    userId:   user._id.toString(),
+    username: trimmed,
+    email:    user.email    ?? null,
+    fullName: user.fullName ?? null,
+  },
+}).catch(() => {});
+
   await sendUserToken(user, 200, res, {
     message   : "Welcome to Erovians! 🎉",
     nextRoute : "/feed",
@@ -531,7 +542,16 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
       avatar: picture ? { url: picture, publicId: null } : null,
     });
     logger.info("New user via Google OAuth", { userId: user._id, email });
- 
+ notifyAdmin({
+  type: "admin_new_user",
+  meta: {
+    userId:   user._id.toString(),
+    username: null,
+    email:    user.email    ?? null,
+    fullName: user.fullName ?? null,
+    provider: "google",
+  },
+}).catch(() => {});
   } else {
     // Existing user — agar pehle email se register kiya tha toh googleId link karo
   if (!user.firebaseUid) {

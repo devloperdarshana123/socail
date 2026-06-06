@@ -2,7 +2,7 @@ import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError     from "../../utils/AppError.js";
 import Report       from "../../models/report.model.js";
 import logger       from "../../config/logger.js";
-
+import { notifyAdmin } from "../../utils/adminNotify.js";
 // ─────────────────────────────────────────────────────────────────────────────
 //  Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,12 +83,25 @@ export const submitReport = asyncHandler(async (req, res, next) => {
   }
 
   logger.info("User submitted report", {
+    
     reportedBy:  req.user._id.toString(),
     targetId,
     targetModel,
     reason,
     reportId:    report._id.toString(),
   });
+
+  console.log("🔔 notifyAdmin calling...", process.env.CHAT_SERVER_URL, process.env.CHAT_INTERNAL_SECRET);
+  notifyAdmin({
+  type: "admin_new_report",
+  meta: {
+    reportId:    report._id.toString(),
+    targetId,
+    targetModel,
+    reason,
+    reportedBy:  req.user._id.toString(),
+  },
+}).catch(() => {});
 
   return res.status(201).json({
     success:         true,
