@@ -5,7 +5,13 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import morgan from "morgan";
-import rateLimit from "express-rate-limit";
+// import rateLimit from "express-rate-limit";
+import {
+  authRouteLimiter,
+  adminAuthRouteLimiter,
+  transcribeLimiter,
+  globalRouteLimiter,
+} from "./middlewares/rateLimiter.js";
 import mongoose from "mongoose";
 import authRoute from "./routes/auth/auth.route.js";
 import globalErrorHandler from "./middlewares/globalErrorHandler.js";
@@ -76,38 +82,43 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // CHANGE 3: Rate limiting — DDoS / brute force se bachao
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
- max: process.env.NODE_ENV === "production" ? 500 : 0,
-skip: () => process.env.NODE_ENV === "development",
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: "Too many requests, please try again later." },
-});
+// const globalLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//  max: process.env.NODE_ENV === "production" ? 500 : 0,
+// skip: () => process.env.NODE_ENV === "development",
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   message: { success: false, message: "Too many requests, please try again later." },
+// });
 
-// Auth routes ke liye strict limiter
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20, // 15 min mein sirf 20 auth attempts
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: "Too many attempts, please try again later." },
-});
+// // Auth routes ke liye strict limiter
+// const authLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000,
+//   max: 20, // 15 min mein sirf 20 auth attempts
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   message: { success: false, message: "Too many attempts, please try again later." },
+// });
 
 
 
-const adminAuthLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10, // sirf 10 attempts — admin panel sensitive hai
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: "Too many admin login attempts. Please try again later." },
-});
+// const adminAuthLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000,
+//   max: 10, // sirf 10 attempts — admin panel sensitive hai
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   message: { success: false, message: "Too many admin login attempts. Please try again later." },
+// });
 
-app.use("/api/", globalLimiter);
-app.use("/api/v2/auth/login", authLimiter);
-app.use("/api/v2/auth/register", authLimiter);
-app.use("/api/v2/auth/forgot-password", authLimiter);
+// app.use("/api/", globalLimiter);
+// app.use("/api/v2/auth/login", authLimiter);
+// app.use("/api/v2/auth/register", authLimiter);
+// app.use("/api/v2/auth/forgot-password", authLimiter);
+
+app.use("/api/", globalRouteLimiter);
+app.use("/api/v2/auth/login", authRouteLimiter);
+app.use("/api/v2/auth/register", authRouteLimiter);
+app.use("/api/v2/auth/forgot-password", authRouteLimiter);
 
 // ── Health Check — CHANGE 4: DB status bhi check karo ──
 app.get("/health", (req, res) => {
@@ -137,14 +148,16 @@ app.use("/api/v2/stories", storyRouter);
 app.use("/api/v2/follow", followRouter);
 app.use("/api/v2/notifications", notificationRoutes);
 app.use("/api/v2/user/report", reportRouter);
-app.use("/api/v2/transcribe", rateLimit({
-  windowMs: 60 * 1000, 
-  max: 10,             
-  message: { success: false, message: "Too many voice requests." }
-}));
-app.use("/api/v2/transcribe", transcribeRoute);
+// app.use("/api/v2/transcribe", rateLimit({
+//   windowMs: 60 * 1000, 
+//   max: 10,             
+//   message: { success: false, message: "Too many voice requests." }
+// }));
+// app.use("/api/v2/transcribe", transcribeRoute);
 
-app.use("/api/v2/admin/login", adminAuthLimiter);
+app.use("/api/v2/transcribe", transcribeLimiter);
+app.use("/api/v2/transcribe", transcribeRoute);
+app.use("/api/v2/admin/login", adminAuthRouteLimiter);
 app.use("/api/v2/admin/auth", adminAuthRoute);
 app.use("/api/v2/admin/dashboard", dashboardRoutes);
 app.use("/api/v2/admin/comments", commentRoutes);

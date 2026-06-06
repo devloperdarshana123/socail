@@ -201,3 +201,55 @@ export const commentLimiter = createRateLimiter({
   windowSecs : 60,
   message    : "Too many comments. Please slow down.",
 });
+
+
+export const uploadRateLimiter = createRateLimiter({
+  route      : "upload",
+  limit      : 15,
+  windowSecs : 15 * 60,
+  message    : "Too many upload attempts. Please try again after 15 minutes.",
+});
+
+
+/**
+ * Auth routes — 20 attempts per 15 minutes per IP
+ */
+export const authRouteLimiter = createRateLimiter({
+  route      : "authRoute",
+  limit      : 20,
+  windowSecs : 15 * 60,
+  message    : "Too many attempts, please try again later.",
+  keyFn      : (req) => req.ip,
+});
+
+/**
+ * Admin auth — 10 attempts per 15 minutes per IP
+ */
+export const adminAuthRouteLimiter = createRateLimiter({
+  route      : "adminAuthRoute",
+  limit      : 10,
+  windowSecs : 15 * 60,
+  message    : "Too many admin login attempts. Please try again later.",
+  keyFn      : (req) => req.ip,
+});
+
+/**
+ * Transcribe — 10 requests per minute per user
+ */
+export const transcribeLimiter = createRateLimiter({
+  route      : "transcribe",
+  limit      : 10,
+  windowSecs : 60,
+  message    : "Too many voice requests.",
+});
+
+/**
+ * Global — 500 requests per 15 minutes per IP
+ */
+export const globalRouteLimiter = createRateLimiter({
+  route      : "global",
+  limit      : process.env.NODE_ENV === "production" ? 500 : 10000,
+  windowSecs : 15 * 60,
+  message    : "Too many requests, please try again later.",
+  keyFn      : (req) => req.ip,
+});
