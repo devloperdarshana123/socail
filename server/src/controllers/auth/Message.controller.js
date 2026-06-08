@@ -252,7 +252,15 @@ export const getMessages = asyncHandler(async (req, res, next) => {
     return next(new AppError("Unauthorized.", 403));
 
   // Cursor query build karo
-  const query = { conversation: conversationId, isDeleted: false };
+  // const query = { conversation: conversationId, isDeleted: false };
+
+  // NAYA
+const member = await ConversationMember.findOne({ conversationId, userId }).lean();
+const query = { 
+  conversation: conversationId, 
+  isDeleted: false,
+  ...(member?.clearedAt && { createdAt: { $gt: member.clearedAt } }),
+};
   if (before && mongoose.isValidObjectId(before)) {
     const cursorMsg = await Message.findById(before).select("createdAt").lean();
     if (cursorMsg) query.createdAt = { $lt: cursorMsg.createdAt };
@@ -474,4 +482,29 @@ export const reactToMessage = asyncHandler(async (req, res, next) => {
     success: true,
     data: { messageId: msg._id, reactions: msg.reactions },
   });
+});
+
+/**
+ * DELETE /api/messages/conversations/:conversationId/clear
+ * Sirf apne liye chat clear karo — doosre ke messages rahenge
+ */
+export const clearChat = asyncHandler(async (req, res, next) => {
+  const userId = req.user._id;
+  const { conversationId } = req.params;
+
+  if (!mongoose.isValidObjectId(conversationId))
+    return next(new AppError("Invalid conversationId.", 400));
+
+  const conv = await Conversation.findById(conversationId).lean();
+  if (!conv) return next(new AppError("Conversation not found.", 404));
+  if (!verifyParticipant(conv, userId))
+    return next(new AppError("Unauthorized.", 403));
+
+  // Sirf is user ke liye clearedAt timestamp set karo
+  await ConversationMember.findOneAndUpdate(
+    { conversationId, userId },
+    { $set: { clearedAt: new Date() } },
+  );
+
+  return res.status(200).json({ success: true, message: "Chat cleared." });
 });

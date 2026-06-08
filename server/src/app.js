@@ -4,8 +4,9 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import compression from "compression";
 import morgan from "morgan";
-// import rateLimit from "express-rate-limit";
+
 import {
   authRouteLimiter,
   adminAuthRouteLimiter,
@@ -38,7 +39,7 @@ import "./cron/suspensionCron.js";
 //admin//
 import adminAuthRoute from "./routes/admin/Admin.auth.route.js";
 import adminSettingsRoute from "./routes/admin/admin.settings.route.js";
-import adminUserRoute from "./routes/admin/Admin.user.routes .js";
+import adminUserRoute from "./routes/admin/Admin.user.routes.js";
 import adminReportRoute from "./routes/admin/Admin.report.routes.js";
 import dashboardRoutes from "./routes/admin/Admin.dashboard.route.js";
 import auditLogRoute from "./routes/admin/Admin.auditlog.route.js";
@@ -48,7 +49,7 @@ const app = express();
 
 // ── Security ──
 app.use(helmet());
-
+app.use(compression());
 
 
 
@@ -73,47 +74,16 @@ app.use(
 );
 // ── Body Parsers ──
 app.use(cookieParser());
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // CHANGE 2: Request logging — har request log hogi
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan("combined"));
 }
 
-// CHANGE 3: Rate limiting — DDoS / brute force se bachao
-// const globalLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, // 15 minutes
-//  max: process.env.NODE_ENV === "production" ? 500 : 0,
-// skip: () => process.env.NODE_ENV === "development",
-//   standardHeaders: true,
-//   legacyHeaders: false,
-//   message: { success: false, message: "Too many requests, please try again later." },
-// });
-
-// // Auth routes ke liye strict limiter
-// const authLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   max: 20, // 15 min mein sirf 20 auth attempts
-//   standardHeaders: true,
-//   legacyHeaders: false,
-//   message: { success: false, message: "Too many attempts, please try again later." },
-// });
 
 
-
-// const adminAuthLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   max: 10, // sirf 10 attempts — admin panel sensitive hai
-//   standardHeaders: true,
-//   legacyHeaders: false,
-//   message: { success: false, message: "Too many admin login attempts. Please try again later." },
-// });
-
-// app.use("/api/", globalLimiter);
-// app.use("/api/v2/auth/login", authLimiter);
-// app.use("/api/v2/auth/register", authLimiter);
-// app.use("/api/v2/auth/forgot-password", authLimiter);
 
 app.use("/api/", globalRouteLimiter);
 app.use("/api/v2/auth/login", authRouteLimiter);
@@ -148,12 +118,6 @@ app.use("/api/v2/stories", storyRouter);
 app.use("/api/v2/follow", followRouter);
 app.use("/api/v2/notifications", notificationRoutes);
 app.use("/api/v2/user/report", reportRouter);
-// app.use("/api/v2/transcribe", rateLimit({
-//   windowMs: 60 * 1000, 
-//   max: 10,             
-//   message: { success: false, message: "Too many voice requests." }
-// }));
-// app.use("/api/v2/transcribe", transcribeRoute);
 
 app.use("/api/v2/transcribe", transcribeLimiter);
 app.use("/api/v2/transcribe", transcribeRoute);

@@ -648,7 +648,8 @@ userSchema.statics.searchUsers = function (query, limit = 20) {
   const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
 
   return this.find(
-    { $text: { $search: q }, accountStatus: "active" },
+  // NAYA
+{ $text: { $search: q }, accountStatus: "active", role: { $ne: "super_admin" } },
     { score: { $meta: "textScore" } },
   )
     .sort({ score: { $meta: "textScore" } })

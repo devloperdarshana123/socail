@@ -2,12 +2,6 @@
 
 import axios from "axios";
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Admin API — cookie-based auth (httpOnly cookies, no localStorage)
-//  Access token  : 15 min, httpOnly cookie → sent automatically by browser
-//  Refresh token : 7 days, httpOnly cookie → sent automatically by browser
-//  Rule: NEVER read/write tokens in JS. Browser handles everything.
-// ─────────────────────────────────────────────────────────────────────────────
 
 const adminApi = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:9080/api/v2",
@@ -76,7 +70,6 @@ adminApi.interceptors.response.use(
 
         // New access token cookie is now set by browser — retry all queued requests
         processQueue(null);
-        window.dispatchEvent(new CustomEvent("admin:tokenRefreshed"));
         return adminApi(originalRequest);
 
       } catch (refreshError) {

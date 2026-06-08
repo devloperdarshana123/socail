@@ -57,6 +57,11 @@ const conversationMemberSchema = new Schema(
       type: Date,
       default: null,
     },
+
+    clearedAt: {        // ← YE ADD KARO
+  type: Date,
+  default: null,
+},
   },
   { timestamps: true },
 );

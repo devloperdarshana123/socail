@@ -459,9 +459,13 @@ export const createHighlight = asyncHandler(async (req, res, next) => {
     snapshots = (await Promise.all(stories.map(buildSnapshot))).filter(Boolean);
   }
 
-  const firstMedia = snapshots.find((s) => s.type !== "text");
-  const coverImage = firstMedia?.url || null;
+  // const firstMedia = snapshots.find((s) => s.type !== "text");
+  // const coverImage = firstMedia?.url || null;
 
+
+  // NAYA
+const firstMedia = snapshots.find((s) => s.type !== "text");
+const coverImage = firstMedia?.thumbnailUrl || firstMedia?.url || null;
   const highlight = await Highlight.create({
     author:    req.user._id,
     title:     title.trim(),
@@ -543,9 +547,15 @@ export const addToHighlight = asyncHandler(async (req, res, next) => {
   const updated = await Highlight.addSnapshot(req.params.id, req.user._id, snapshotData);
   if (!updated) return next(new AppError("Failed to add snapshot.", 500));
 
-  if (!highlight.coverImage && snapshotData.url) {
-    await Highlight.updateCover(req.params.id, req.user._id, snapshotData.url);
-  }
+  // if (!highlight.coverImage && snapshotData.url) {
+  //   await Highlight.updateCover(req.params.id, req.user._id, snapshotData.url);
+  // }
+// NAYA
+if (!highlight.coverImage && snapshotData.url) {
+  const cover = snapshotData.thumbnailUrl || snapshotData.url;
+  await Highlight.updateCover(req.params.id, req.user._id, cover);
+}
+
 
   return res.status(200).json({ success: true, highlight: updated });
 });
@@ -607,10 +617,17 @@ export const removeSnapFromHighlight = asyncHandler(async (req, res, next) => {
   const updated = await Highlight.removeSnapshot(highlightId, req.user._id, snapId);
   if (!updated) return next(new AppError("Failed to remove snapshot.", 500));
 
-  if (highlight.coverImage === snap.url) {
-    const nextSnap = updated.snapshots.find((s) => s.url);
-    await Highlight.updateCover(highlightId, req.user._id, nextSnap?.url || null);
-  }
+  // if (highlight.coverImage === snap.url) {
+  //   const nextSnap = updated.snapshots.find((s) => s.url);
+  //   await Highlight.updateCover(highlightId, req.user._id, nextSnap?.url || null);
+  // }
+
+  // NAYA
+if (highlight.coverImage === snap.url || highlight.coverImage === snap.thumbnailUrl) {
+  const nextSnap = updated.snapshots.find((s) => s.url);
+  const newCover = nextSnap?.thumbnailUrl || nextSnap?.url || null;
+  await Highlight.updateCover(highlightId, req.user._id, newCover);
+}
 
   return res.status(200).json({ success: true, highlight: updated });
 });

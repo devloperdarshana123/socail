@@ -21,6 +21,7 @@ import {
 } from "../lib/redux/userprofileslice";
 import {
   fetchMyPosts,
+  fetchMoreMyPosts,
   fetchSavedPosts,
   fetchComments,
   initInteraction,
@@ -121,7 +122,18 @@ export default function Profile() {
     (state) => state.userProfile
   );
 
-  const { myPosts, myPostsLoading, savedPosts, savedPostsLoading, draftPosts, draftPostsLoading, serverPostsCount } = useSelector((state) => state.posts);
+const {
+  myPosts,
+  myPostsLoading,
+  myPostsHasMore,
+  myPostsNextCursor,
+  myPostsLoadingMore,
+  savedPosts,
+  savedPostsLoading,
+  draftPosts,
+  draftPostsLoading,
+  serverPostsCount,
+} = useSelector((state) => state.posts);
   const { user } = useSelector((state) => state.auth);
  
   const { highlights, highlightLoading } = useSelector((state) => state.stories);
@@ -144,6 +156,7 @@ const coverPreview = localCoverPreview || coverPhoto?.url || user?.coverPhoto?.u
   const avatarInputRef = useRef(null);
   const coverInputRef = useRef(null);
   const viewedPosts = useRef(new Set());
+  const loadMoreRef = useRef(null);   
  
   useEffect(() => {
     if (user?._id) dispatch(fetchMyPosts(user._id));
@@ -204,7 +217,26 @@ useEffect(() => {
   }
 }, [selectedPost?._id]);
 
-
+useEffect(() => {
+  if (activeTab !== "posts") return;
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (
+        entry.isIntersecting &&
+        myPostsHasMore &&
+        !myPostsLoadingMore &&
+        myPostsNextCursor &&
+        user?._id
+      ) {
+        dispatch(fetchMoreMyPosts({ userId: user._id, cursor: myPostsNextCursor }));
+      }
+    },
+    { threshold: 0.1 }
+  );
+  const el = loadMoreRef.current;
+  if (el) observer.observe(el);
+  return () => { if (el) observer.unobserve(el); };
+}, [activeTab, myPostsHasMore, myPostsLoadingMore, myPostsNextCursor, user?._id]);
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -635,8 +667,15 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
                 </motion.div>
               );
             })}
-          </div>
+         </div>
        )}
+        {activeTab === "posts" && (
+          <div ref={loadMoreRef} className="flex items-center justify-center py-6">
+            {myPostsLoadingMore && (
+              <Loader2 size={20} className="animate-spin text-[#c09a6e]" />
+            )}
+          </div>
+        )}
         </div> {/* tab-content */}
       </div>
 

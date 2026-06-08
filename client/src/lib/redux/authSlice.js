@@ -200,7 +200,6 @@ export const unfollowUser = createAsyncThunk(
 
 const initialState = {
   user: null,
-  accessToken: null,
   isAuthenticated: false,
 
   pendingUserId: null,
@@ -231,15 +230,6 @@ const authSlice = createSlice({
   initialState,
 
   reducers: {
-    setAccessToken: (state, action) => {
-      state.accessToken = action.payload;
-      // localStorage sync
-      if (action.payload) {
-        localStorage.setItem("accessToken", action.payload);
-      } else {
-        localStorage.removeItem("accessToken");
-      }
-    },
     setUser: (state, action) => {
       state.user = action.payload;
       state.isAuthenticated = !!action.payload;
@@ -274,10 +264,7 @@ const authSlice = createSlice({
         error: null,
       };
     },
-    resetAuth: () => {
-      localStorage.removeItem("accessToken");
-      return initialState;
-    },
+   resetAuth: () => initialState, 
 updateUserAvatar(state, action) {
   if (state.user) state.user.avatar = action.payload;
 },
@@ -322,16 +309,11 @@ setPending(state, action) {
       .addCase(verifyOtp.fulfilled, (state, action) => {
         state.otp.loading = false;
         state.otp.success = true;
-        state.accessToken = action.payload.accessToken || null;
         state.user = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
         state.pendingUserId = null;
         state.pendingPurpose = null;
-        // localStorage sync
-      if (action.payload.accessToken) {
-  localStorage.setItem("accessToken", action.payload.accessToken);
-}
       })
       .addCase(verifyOtp.rejected, (state, action) => {
         state.otp.loading = false;
@@ -358,7 +340,6 @@ setPending(state, action) {
   state.fetchMe.error    = action.payload;
   state.user             = null;
   state.isAuthenticated  = false;
-  localStorage.removeItem("accessToken"); // ← stale token clear
 })
 
     // ── Login ──
@@ -371,18 +352,9 @@ setPending(state, action) {
      .addCase(loginUser.fulfilled, (state, action) => {
         state.login.loading = false;
         state.login.success = true;
-        state.accessToken = action.payload.accessToken || null;
         state.user = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
-        // localStorage sync — null/undefined guard
-const token = action.payload.accessToken;
-if (token && token !== "null" && token !== "undefined") {
-  localStorage.setItem("accessToken", token);
-} else {
-  localStorage.removeItem("accessToken");
-}
-        // Agar onboarding incomplete hai toh pendingUserId set karo
         if (action.payload.nextRoute === "/verify-otp") {
           state.pendingUserId = action.payload.data?._id || null;
           state.pendingPurpose =
@@ -414,15 +386,8 @@ if (token && token !== "null" && token !== "undefined") {
 
     // ── Logout ──
     builder
-      .addCase(logoutUser.fulfilled, () => {
-        localStorage.removeItem("accessToken");
-        return initialState;
-      })
-      .addCase(logoutUser.rejected, () => {
-        // Backend fail hone par bhi frontend clean karo
-        localStorage.removeItem("accessToken");
-        return initialState;
-      });
+    .addCase(logoutUser.fulfilled,  () => initialState)
+.addCase(logoutUser.rejected,   () => initialState); 
 
     // ── Username Suggestions ──
     builder
@@ -462,14 +427,9 @@ if (token && token !== "null" && token !== "undefined") {
       })
       .addCase(setUsername.fulfilled, (state, action) => {
         state.onboarding.setLoading = false;
-        state.accessToken = action.payload.accessToken || null;
         state.user = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
-        // localStorage sync
-        if (action.payload.accessToken) {
-  localStorage.setItem("accessToken", action.payload.accessToken);
-}
       })
       .addCase(setUsername.rejected, (state, action) => {
         state.onboarding.setLoading = false;
@@ -502,17 +462,10 @@ builder
   .addCase(googleLogin.fulfilled, (state, action) => {
     state.login.loading   = false;
     state.login.success   = true;
-    state.accessToken     = action.payload.accessToken || null;
     state.user            = action.payload.data || null;
     state.isAuthenticated = !!action.payload.data;
     state.nextRoute       = action.payload.nextRoute || "/feed";
 
-    const token = action.payload.accessToken;
-    if (token && token !== "null" && token !== "undefined") {
-      localStorage.setItem("accessToken", token);
-    } else {
-      localStorage.removeItem("accessToken");
-    }
   })
   .addCase(googleLogin.rejected, (state, action) => {
     state.login.loading = false;
@@ -523,7 +476,6 @@ builder
 });
 
 export const {
-  setAccessToken,
   setUser,
   setPending,  
   clearRegisterState,

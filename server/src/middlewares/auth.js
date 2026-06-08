@@ -64,8 +64,12 @@ const accessToken =
     return next(new AppError("Your account has been deactivated.", 403));
   }
 
-  req.user = user;
+req.user = user;
+const FIVE_MIN = 5 * 60 * 1000;
+const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt) : null;
+if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
   User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).catch(() => {});
+}
 
   logger.debug("User authenticated", { userId: user._id, path: req.originalUrl });
 

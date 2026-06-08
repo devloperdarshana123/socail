@@ -236,14 +236,15 @@ export const getMapSellers = asyncHandler(async (req, res) => {
   } catch { /* Redis down — DB se serve karo */ }
   const currentUserId = req.user?._id;
 
-  // ── Build filter ──────────────────────────────────────────
-  const filter = {
-    accountStatus: "active",
-    $or: [
-      { "location.coordinates.coordinates": { $exists: true, $size: 2 } },
-      { "location.city": { $exists: true, $ne: null } },
-    ],
-  };
+// NAYA
+const filter = {
+  accountStatus: "active",
+  role: { $ne: "super_admin" },   // ← YE ADD KARO
+  $or: [
+    { "location.coordinates.coordinates": { $exists: true, $size: 2 } },
+    { "location.city": { $exists: true, $ne: null } },
+  ],
+};
 
   if (category && category !== "all") {
     filter.businessCategory = category;

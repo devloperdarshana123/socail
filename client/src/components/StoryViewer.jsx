@@ -48,6 +48,8 @@ const [likesCount, setLikesCount] = useState(0);
   const timerRef   = useRef(null);
   const startRef   = useRef(null);
   const elapsedRef = useRef(0);
+  const videoRef   = useRef(null);        // ← YE ADD KARO
+const durationRef = useRef(STORY_DURATION);
 
   const group  = feed[userIdx];
   const story  = group?.stories[storyIdx];
@@ -55,18 +57,17 @@ const [likesCount, setLikesCount] = useState(0);
                  story?.author === currentUser?._id;
   const isVideo = story?.media?.resourceType === "video";
 
-  // ── Timer ─────────────────────────────────────────────────
   const startTimer = (elapsed = 0) => {
-    clearInterval(timerRef.current);
-    startRef.current = Date.now() - elapsed;
-    timerRef.current = setInterval(() => {
-      const spent = Date.now() - startRef.current;
-      const pct   = Math.min((spent / STORY_DURATION) * 100, 100);
-      setProgress(pct);
-      if (spent >= STORY_DURATION) goNext();
-    }, 50);
-  };
-
+  clearInterval(timerRef.current);
+  const duration = durationRef.current;
+  startRef.current = Date.now() - elapsed;
+  timerRef.current = setInterval(() => {
+    const spent = Date.now() - startRef.current;
+    const pct   = Math.min((spent / duration) * 100, 100);
+    setProgress(pct);
+    if (spent >= duration) goNext();
+  }, 50);
+};
   const stopTimer = () => {
     clearInterval(timerRef.current);
     elapsedRef.current = Date.now() - (startRef.current || Date.now());
@@ -82,16 +83,33 @@ setLiked(story?.isLiked ?? false);
 setLikesCount(story?.reactionsCount ?? 0);
 
     setShowViewers(false);
-    
+
+     if (!isVideo) {
+    durationRef.current = STORY_DURATION;
     if (!paused) startTimer(0);
+  }
+    
+
     if (story?._id) dispatch(viewStory(story._id));
     return () => clearInterval(timerRef.current);
   }, [userIdx, storyIdx]);
 
-  useEffect(() => {
-    if (paused) stopTimer();
-    else startTimer(elapsedRef.current);
-  }, [paused]);
+ useEffect(() => {
+  if (paused) {
+    stopTimer();
+    
+    if (isVideo && videoRef.current) videoRef.current.pause();
+  } else {
+    
+    if (isVideo && videoRef.current) {
+      videoRef.current.play();
+    
+      startTimer(elapsedRef.current);
+    } else {
+      startTimer(elapsedRef.current);
+    }
+  }
+}, [paused]);
 
   // ── Navigation ────────────────────────────────────────────
   const goNext = () => {
@@ -344,8 +362,23 @@ const createNewHighlight = async () => {
       </p>
     </div>
   ) : isVideo ? (
-    <video key={story._id} src={story.media.url}
-      autoPlay muted playsInline className="w-full h-full object-cover" />
+    <video
+  key={story._id}
+  ref={videoRef}
+  src={story.media.url}
+  autoPlay
+  muted
+  playsInline
+  className="w-full h-full object-cover"
+  onLoadedMetadata={() => {
+    if (videoRef.current) {
+      durationRef.current = videoRef.current.duration * 1000;
+      if (!paused) startTimer(0);
+    }
+  }}
+  onEnded={goNext}
+  onError={goNext}
+/>
   ) : (
     <img key={story._id} src={story.media.url}
       alt="" className="w-full h-full object-cover" />

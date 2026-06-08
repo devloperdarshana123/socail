@@ -35,6 +35,13 @@ import { fetchNotifications } from "./lib/redux/notificationSlice";
 // ✅ Socket hooks — sirf ek baar App level pe mount karo
 import useSocketInit from "./lib/hooks/useSocketInit";
 
+
+const ProtectedRoute = ({ children }) => {
+  const { user, fetchMe: { loading } } = useSelector((s) => s.auth);
+  if (loading) return null;
+  if (!user) return <Navigate to="/" replace />;
+  return children;
+};
 const HIDE_NAVBAR_ON = ["/", "/register", "/verify-otp", "/onboarding/username", "/forgot-password", "/reset-password"];
 const HIDE_BANNER_ON = ["/privacy", "/terms", "/legal", "/help", "/about", "/locations", "/contact"];
 
@@ -87,17 +94,6 @@ return () => window.removeEventListener("auth:logout", handleForceLogout);
   }
 }, [user?._id]);
 
-  // Post submit handler
-  // const handlePostSubmit = async (formData) => {
-  //   const isDraft = formData.get("isDraft") === "true";
-  //   const result  = await dispatch(createPost(formData));
-  //   if (createPost.fulfilled.match(result)) {
-  //     setShowPostModal(false);
-  //     toast.success(isDraft ? "Draft saved! 📝" : "Post shared! 🎉");
-  //   } else {
-  //     throw new Error(result.payload);
-  //   }
-  // };
 
 
   const handlePostSubmit = async (postData) => {
@@ -123,7 +119,7 @@ return () => window.removeEventListener("auth:logout", handleForceLogout);
         <Route path="/register"            element={<Register />} />
         <Route path="/verify-otp"          element={<VerifyOTP />} />
         <Route path="/onboarding/username" element={<SetUsername />} />
-        <Route path="/feed"                element={<FeedPage />} />
+        <Route path="/feed"              element={<ProtectedRoute><FeedPage /></ProtectedRoute>} />
         <Route path="/privacy"             element={<PrivacyPage />} />
         <Route path="/terms"               element={<Terms />} />
         <Route path="/legal"               element={<Legal />} />
@@ -131,14 +127,14 @@ return () => window.removeEventListener("auth:logout", handleForceLogout);
         <Route path="/help"                element={<Help />} />
         <Route path="/locations"           element={<Locations />} />
         <Route path="/contact"             element={<Contact />} />
-        <Route path="/profile"             element={<Profile />} />
-        <Route path="/profile/:username"   element={<PublicProfile />} />
-        <Route path="/explore"             element={<Explore />} />
+       <Route path="/profile"           element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+   <Route path="/profile/:username" element={<ProtectedRoute><PublicProfile /></ProtectedRoute>} />
+       <Route path="/explore"           element={<ProtectedRoute><Explore /></ProtectedRoute>} />
         <Route path="/forgot-password"     element={<ForgotPassword />} />
         <Route path="/reset-password"      element={<ResetPassword />} />
-    <Route path="/messages" element={<Messages/>} />
-        <Route path="/saved"               element={<Saved />} />
-        <Route path="/settings"            element={<Settings />} />
+<Route path="/messages"          element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+     <Route path="/saved"             element={<ProtectedRoute><Saved /></ProtectedRoute>} />
+      <Route path="/settings"          element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="*"                    element={<Navigate to="/" replace />} />
       </Routes>
 

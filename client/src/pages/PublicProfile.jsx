@@ -16,6 +16,9 @@ export default function PublicProfile() {
   const currentUser    = useSelector((s) => s.auth.user);
   const [profile,       setProfile]       = useState(null);
   const [posts,         setPosts]         = useState([]);
+  const [hasMorePosts,  setHasMorePosts]  = useState(false);   // ← ADD
+const [nextPostCursor, setNextPostCursor] = useState(null);  // ← ADD
+const [loadingMore,   setLoadingMore]   = useState(false); 
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState(null);
   const [followState,   setFollowState]   = useState("none");
@@ -29,6 +32,7 @@ export default function PublicProfile() {
 
   
   const viewedPosts     = useRef(new Set());
+  const loadMoreRef  = useRef(null); 
 
   useEffect(() => {
     if (currentUser?.username && username === currentUser.username) {
@@ -36,22 +40,40 @@ export default function PublicProfile() {
     }
   }, [username, currentUser]);
 
-  useEffect(() => {
+  // useEffect(() => {
+  //   if (!username) return;
+  //   setLoading(true);
+  //   setError(null);
+  //   api.get(`/explore/user/${username}`)
+  //     .then(({ data }) => {
+  //       if (data.success) {
+  //         setProfile(data.user);
+  //         setPosts(data.posts || []);
+  //         setFollowState(data.user.isFollowing ? "following" : "none");
+  //       } else setError("User not found.");
+  //     })
+  //     .catch(() => setError("Could not load profile."))
+  //     .finally(() => setLoading(false));
+  // }, [username]);
+
+
+   useEffect(() => {
     if (!username) return;
     setLoading(true);
     setError(null);
-    api.get(`/explore/user/${username}`)
+    api.get(`/explore/user/${username}?postLimit=18`)
       .then(({ data }) => {
         if (data.success) {
           setProfile(data.user);
           setPosts(data.posts || []);
+          setHasMorePosts(data.hasMorePosts  ?? false);
+          setNextPostCursor(data.nextPostCursor ?? null);
           setFollowState(data.user.isFollowing ? "following" : "none");
         } else setError("User not found.");
       })
       .catch(() => setError("Could not load profile."))
       .finally(() => setLoading(false));
   }, [username]);
-
 
   useEffect(() => {
   const params = new URLSearchParams(window.location.search);
@@ -73,7 +95,35 @@ export default function PublicProfile() {
     }
   }, [selectedPost?._id]);
 
+useEffect(() => {
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (
+        entry.isIntersecting &&
+        hasMorePosts &&
+        !loadingMore &&
+        nextPostCursor
+      ) {
+        setLoadingMore(true);
+        api.get(`/explore/user/${username}?postLimit=18&postCursor=${nextPostCursor}`)
+          .then(({ data }) => {
+            if (data.success) {
+              setPosts((prev) => [...prev, ...(data.posts || [])]);
+              setHasMorePosts(data.hasMorePosts   ?? false);
+              setNextPostCursor(data.nextPostCursor ?? null);
+            }
+          })
+          .catch(() => {})
+          .finally(() => setLoadingMore(false));
+      }
+    },
+    { threshold: 0.1 }
+  );
 
+  const el = loadMoreRef.current;
+  if (el) observer.observe(el);
+  return () => { if (el) observer.unobserve(el); };
+}, [hasMorePosts, loadingMore, nextPostCursor, username]);
 
   const handleFollow = async () => {
   if (followLoading || !profile) return;
@@ -307,6 +357,11 @@ const followBtnConfig = {
                   </div>
                 </motion.div>
               ))}
+         </div>
+            <div ref={loadMoreRef} className="flex items-center justify-center py-6 mt-2">
+              {loadingMore && (
+                <Loader2 size={20} className="animate-spin text-[#c09a6e]" />
+              )}
             </div>
           </>
         )}

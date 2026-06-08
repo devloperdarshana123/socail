@@ -611,7 +611,7 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
 export const getSocketToken = asyncHandler(async (req, res) => {
   const token = jwt.sign(
     { _id: req.user._id, id: req.user._id },
-    process.env.ACCESS_TOKEN_SECRET,
+    ENV.USER_ACCESS_TOKEN_SECRET,
     { expiresIn: "1m" }
   );
   return res.status(200).json({ success: true, data: { token } });

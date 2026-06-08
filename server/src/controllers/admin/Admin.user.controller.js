@@ -181,7 +181,7 @@ export const getUserById = asyncHandler(async (req, res, next) => {
   Post.find({ author: id, isDeleted: { $ne: true }, isDraft: { $ne: true } })
   .select("caption type media likesCount commentsCount viewsCount createdAt")
   .sort({ createdAt: -1 })
-  .limit(10)
+  .limit(30)
   .lean(),
 
     Report.aggregate([
@@ -626,10 +626,24 @@ export const getAllPosts = asyncHandler(async (req, res, next) => {
   } = req.query;
 
   // ── Build filter ────────────────────────────────────────────
-  const filter = {
-    isDeleted: { $ne: true },
-    isDraft:   { $ne: true },
-  };
+  // const filter = {
+  //   isDeleted: { $ne: true },
+  //   isDraft:   { $ne: true },
+  // };
+
+
+  // NAYA
+const filter = {
+  isDeleted: { $ne: true },
+  isDraft:   { $ne: true },
+};
+
+// super_admin ke posts admin panel mein bhi nahi dikhne chahiye
+const superAdmins = await User.find({ role: "super_admin" }).select("_id").lean();
+const superAdminIds = superAdmins.map((u) => u._id);
+if (superAdminIds.length) {
+  filter.author = { $nin: superAdminIds };
+}
 
   if (type && ["image", "reel", "text"].includes(type)) {
     filter.type = type;
@@ -746,7 +760,9 @@ export const getSuspensionHistory = asyncHandler(async (req, res, next) => {
     .populate("activeSuspension.suspendedBy",  "username fullName")
     .lean();
 
-  if (!user) return next(new AppError("User not found", 404));
+ if (user.role === "super_admin") {
+  return next(new AppError("User not found", 404));
+}
 
   return res.status(200).json({
     success: true,

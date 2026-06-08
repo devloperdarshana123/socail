@@ -610,6 +610,25 @@ useEffect(() => {
     else showToast("Failed to unblock. Try again.");
   };
 
+
+  const handleClearChat = async () => {
+  setHeaderMenu(false);
+  try {
+    const res = await fetch(
+      `${BASE_URL}/api/v2/messages/conversations/${activeConvId}/clear`,
+      { method: "DELETE", credentials: "include" }
+    );
+    const data = await res.json();
+    if (data.success) {
+      dispatch(fetchMessages({ conversationId: activeConvId }));
+      showToast("Chat cleared.");
+    } else {
+      showToast("Failed to clear chat.");
+    }
+  } catch {
+    showToast("Failed to clear chat.");
+  }
+};
 const handleReportSubmit = async (reason) => {
   setShowReport(false);
   try {
@@ -918,6 +937,8 @@ const unread = typeof conv.unreadCount === "object"
                         </svg>
                         Unblock user
                       </button>
+
+                      
                     )}
                     <button onClick={() => { setHeaderMenu(false); setShowReport(true); }} style={{
                       display: "flex", alignItems: "center", gap: 10, width: "100%",
@@ -932,6 +953,23 @@ const unread = typeof conv.unreadCount === "object"
                       </svg>
                       Report user
                     </button>
+
+
+                    <button onClick={handleClearChat} style={{
+  display: "flex", alignItems: "center", gap: 10, width: "100%",
+  padding: "11px 14px", background: "none", border: "none",
+  fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
+  borderBottom: "0.5px solid var(--color-border-tertiary)",
+}}
+  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+  </svg>
+  Clear chat
+</button>
                   </div>
                 )}
               </div>

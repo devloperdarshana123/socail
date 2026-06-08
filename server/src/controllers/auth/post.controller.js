@@ -195,9 +195,18 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
   const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const userId       = req.user._id;
 
-  const follows   = await Follow.find({ follower: userId }).select("following").lean();
-  const authorIds = [userId, ...follows.map((f) => f.following)];
+  // const follows   = await Follow.find({ follower: userId }).select("following").lean();
+  // const authorIds = [userId, ...follows.map((f) => f.following)];
 
+
+
+  // NAYA
+const follows   = await Follow.find({ follower: userId }).select("following").lean();
+const rawIds    = [userId, ...follows.map((f) => f.following)];
+
+const hiddenUsers = await User.find({ role: "super_admin" }).select("_id").lean();
+const hiddenIds   = new Set(hiddenUsers.map((u) => u._id.toString()));
+const authorIds   = rawIds.filter((id) => !hiddenIds.has(id.toString()));
   const { items, hasMore, nextCursor } = await Post.getFeedPosts(authorIds, { beforeId: beforeId || null, limit });
 
   const responseData = { success: true, posts: items, hasMore, nextCursor };
@@ -208,30 +217,82 @@ export const getFeedPosts = asyncHandler(async (req, res) => {
 //  GET USER POSTS (Profile Grid)
 //  GET /api/v2/posts/user/:userId
 // ─────────────────────────────────────────────
+// export const getUserPosts = asyncHandler(async (req, res) => {
+//   const { userId }   = req.params;
+//   const targetUser = await User.findById(userId).select("role").lean();
+// if (targetUser?.role === "super_admin") {
+//   return res.status(200).json({ 
+//     success: true, data: [], hasMore: false, nextCursor: null, postsCount: 0 
+//   });
+// }
+//   const { beforeId } = req.query;
+//  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 500));
+
+// const postsCount = await Post.countDocuments({
+//   author:    new mongoose.Types.ObjectId(userId),
+//   isDeleted: false,
+//   isDraft:   false,
+// });
+//   const viewerId     = req.user._id.toString();
+
+//   const isOwner    = viewerId === userId;
+//   const isFollower = isOwner
+//     ? false
+//     : !!(await Follow.findOne({ follower: viewerId, following: userId }).lean());
+
+//   const { items, hasMore, nextCursor } = await Post.getUserPosts(
+//     userId, isFollower, isOwner, { beforeId: beforeId || null, limit }
+//   );
+
+//   return res.status(200).json({ success: true, data: items, hasMore, nextCursor, postsCount });
+// });
+
+// ─────────────────────────────────────────────
+//  GET USER POSTS (Profile Grid)
+//  GET /api/v2/posts/user/:userId
+// ─────────────────────────────────────────────
 export const getUserPosts = asyncHandler(async (req, res) => {
-  const { userId }   = req.params;
-  const { beforeId } = req.query;
- const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 500));
+  const { userId } = req.params;
 
-const postsCount = await Post.countDocuments({
-  author:    new mongoose.Types.ObjectId(userId),
-  isDeleted: false,
-  isDraft:   false,
-});
-  const viewerId     = req.user._id.toString();
+  // super_admin block
+  const targetUser = await User.findById(userId).select("role").lean();
+  if (targetUser?.role === "super_admin") {
+    return res.status(200).json({
+      success: true, data: [], hasMore: false, nextCursor: null, postsCount: 0,
+    });
+  }
 
-  const isOwner    = viewerId === userId;
-  const isFollower = isOwner
-    ? false
-    : !!(await Follow.findOne({ follower: viewerId, following: userId }).lean());
+  const limit    = Math.min(18, Math.max(1, parseInt(req.query.limit) || 18));
+  const beforeId = req.query.beforeId?.trim() || null;
+  const viewerId = req.user._id.toString();
+  const isOwner  = viewerId === userId;
+
+  // postsCount aur follow check parallel mein
+  const [postsCount, followRecord] = await Promise.all([
+    Post.countDocuments({
+      author:    new mongoose.Types.ObjectId(userId),
+      isDeleted: false,
+      isDraft:   false,
+    }),
+    isOwner
+      ? Promise.resolve(null)
+      : Follow.findOne({ follower: viewerId, following: userId }).select("status").lean(),
+  ]);
+
+  const isFollower = followRecord?.status === "accepted";
 
   const { items, hasMore, nextCursor } = await Post.getUserPosts(
-    userId, isFollower, isOwner, { beforeId: beforeId || null, limit }
+    userId, isFollower, isOwner, { beforeId, limit }
   );
 
-  return res.status(200).json({ success: true, data: items, hasMore, nextCursor, postsCount });
+  return res.status(200).json({
+    success: true,
+    data:    items,
+    hasMore,
+    nextCursor,
+    postsCount,
+  });
 });
-
 // ─────────────────────────────────────────────
 //  DELETE POST
 //  DELETE /api/v2/posts/:postId

@@ -16,14 +16,38 @@ export const createPost = createAsyncThunk(
   }
 );
 
+// export const fetchMyPosts = createAsyncThunk(
+//   "posts/fetchMyPosts",
+//   async (userId, { rejectWithValue }) => {
+//     try {
+//       const res = await api.get(`/posts/user/${userId}?limit=500`);
+//       return {
+//         posts:      res.data.data || res.data.posts || [],
+//         postsCount: res.data.postsCount ?? null,
+//       };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Posts fetch nahi hue");
+//     }
+//   }
+// );
+
+// ── Toggle like ──
+// Socket emit NAHI — main server like.controller → notifyChat("/notify/like") se notification jaati hai
+
+// PURANA fetchMyPosts hatao, ye dono add karo
+
+// ── Initial load ──
 export const fetchMyPosts = createAsyncThunk(
   "posts/fetchMyPosts",
   async (userId, { rejectWithValue }) => {
     try {
-      const res = await api.get(`/posts/user/${userId}?limit=500`);
+      const res = await api.get(`/posts/user/${userId}?limit=18`);
       return {
-        posts:      res.data.data || res.data.posts || [],
+        posts:      res.data.data      ?? [],
         postsCount: res.data.postsCount ?? null,
+        hasMore:    res.data.hasMore    ?? false,
+        nextCursor: res.data.nextCursor ?? null,
+        append:     false,
       };
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "Posts fetch nahi hue");
@@ -31,8 +55,23 @@ export const fetchMyPosts = createAsyncThunk(
   }
 );
 
-// ── Toggle like ──
-// Socket emit NAHI — main server like.controller → notifyChat("/notify/like") se notification jaati hai
+// ── Load more (infinite scroll) ──
+export const fetchMoreMyPosts = createAsyncThunk(
+  "posts/fetchMoreMyPosts",
+  async ({ userId, cursor }, { rejectWithValue }) => {
+    try {
+      const res = await api.get(`/posts/user/${userId}?limit=18&beforeId=${cursor}`);
+      return {
+        posts:      res.data.data      ?? [],
+        hasMore:    res.data.hasMore    ?? false,
+        nextCursor: res.data.nextCursor ?? null,
+        append:     true,
+      };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "More posts fetch nahi hue");
+    }
+  }
+);
 export const togglePostLike = createAsyncThunk(
   "posts/toggleLike",
   async ({ postId, postAuthorId = null }, { rejectWithValue }) => {
@@ -46,22 +85,45 @@ export const togglePostLike = createAsyncThunk(
   }
 );
 
-export const fetchComments = createAsyncThunk(
-  "posts/fetchComments",
-  async ({ postId, page = 1 }, { rejectWithValue }) => {
-    try {
-    const res = await api.get(`/comments/post/${postId}?limit=20`);
-return { postId, comments: res.data.data, nextCursor: res.data.nextCursor };
-    } catch (err) {
-      return rejectWithValue(err.response?.data?.message || "Comments fetch nahi hue");
-    }
-  }
-);
+// export const fetchComments = createAsyncThunk(
+
+//   "posts/fetchComments",
+//   async ({ postId, page = 1 }, { rejectWithValue }) => {
+//     try {
+//     const res = await api.get(`/comments/post/${postId}?limit=20`);
+// return { postId, comments: res.data.data, nextCursor: res.data.nextCursor };
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "Comments fetch nahi hue");
+//     }
+//   }
+// );
 
 // ── Add comment ──
 // Socket emit NAHI — main server comment.controller → notifyChat("/notify/comment") se notification jaati hai
 // Reply ke liye socket "send_reply" emit hota hai notificationHandler.js mein kyunki
 // HTTP route /notify/reply nahi hai — woh socket se handle hota hai
+
+
+export const fetchComments = createAsyncThunk(
+  "posts/fetchComments",
+  async ({ postId, afterId = null, afterDate = null }, { rejectWithValue }) => {
+    try {
+      const params = new URLSearchParams({ limit: "20" });
+      if (afterId)   params.set("afterId",   afterId);
+      if (afterDate) params.set("afterDate", afterDate);
+      const res = await api.get(`/comments/post/${postId}?${params}`);
+      return {
+        postId,
+        comments:   Array.isArray(res.data.data) ? res.data.data : [],
+        nextCursor: res.data.nextCursor ?? null,
+        hasMore:    res.data.hasMore    ?? false,
+        append:     !!afterId,
+      };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Comments fetch nahi hue");
+    }
+  }
+);
 export const addComment = createAsyncThunk(
   "posts/addComment",
   async ({ postId, content, parentCommentId = null, postAuthorId = null }, { rejectWithValue }) => {
@@ -95,17 +157,7 @@ export const addComment = createAsyncThunk(
   }
 );
 
-// export const toggleSavePost = createAsyncThunk(
-//   "posts/toggleSave",
-//   async (postId, { rejectWithValue }) => {
-//     try {
-//       const res = await api.post(`/saved/${postId}`);
-//       return { postId, saved: res.data.saved };
-//     } catch (err) {
-//       return rejectWithValue(err.response?.data?.message || "Save failed");
-//     }
-//   }
-// );
+
 
 
 export const toggleSavePost = createAsyncThunk(
@@ -119,17 +171,7 @@ export const toggleSavePost = createAsyncThunk(
     }
   }
 );
-// export const fetchSavedPosts = createAsyncThunk(
-//   "posts/fetchSavedPosts",
-//   async (page = 1, { rejectWithValue }) => {
-//     try {
-//       const res = await api.get(`/saved?page=${page}&limit=12`);
-//       return res.data.data;
-//     } catch (err) {
-//       return rejectWithValue(err.response?.data?.message || "Saved posts fetch nahi hue");
-//     }
-//   }
-// );
+
 
 
 export const fetchSavedPosts = createAsyncThunk(
@@ -228,6 +270,9 @@ const postSlice = createSlice({
   initialState: {
     feed: [],
     myPosts: [],
+     myPostsHasMore:    false,   // ← ADD
+  myPostsNextCursor: null,    // ← ADD
+  myPostsLoadingMore: false,
     savedPosts: [],
     myPostsLoading: false,
     savedPostsLoading: false,
@@ -247,20 +292,38 @@ savedPostsNextCursor: null,
       state.feed.unshift(action.payload);
       state.myPosts.unshift(action.payload);
     },
+    // initInteraction(state, action) {
+    //   const { postId, liked, likesCount, saved, commentsCount } = action.payload;
+    //   if (!state.interactions[postId]) {
+    //     state.interactions[postId] = {
+    //       liked: liked ?? false,
+    //       likesCount: likesCount ?? 0,
+    //       saved: saved ?? false,
+    //       commentsCount: commentsCount ?? 0,
+    //       comments: [],
+    //       commentsLoading: false,
+    //       commentAdding: false,
+    //     };
+    //   }
+    // },
+
     initInteraction(state, action) {
-      const { postId, liked, likesCount, saved, commentsCount } = action.payload;
-      if (!state.interactions[postId]) {
-        state.interactions[postId] = {
-          liked: liked ?? false,
-          likesCount: likesCount ?? 0,
-          saved: saved ?? false,
-          commentsCount: commentsCount ?? 0,
-          comments: [],
-          commentsLoading: false,
-          commentAdding: false,
-        };
-      }
-    },
+  const { postId, liked, likesCount, saved, commentsCount } = action.payload;
+  if (!state.interactions[postId]) {
+    state.interactions[postId] = {
+      liked:               liked         ?? false,
+      likesCount:          likesCount    ?? 0,
+      saved:               saved         ?? false,
+      commentsCount:       commentsCount ?? 0,
+      comments:            [],
+      commentsLoading:     false,
+      commentsLoadingMore: false,
+      commentsHasMore:     false,
+      commentsNextCursor:  null,
+      commentAdding:       false,
+    };
+  }
+},
   },
 
   extraReducers: (builder) => {
@@ -279,17 +342,41 @@ savedPostsNextCursor: null,
   }
 })
       .addCase(createPost.rejected,   (state, action) => { state.creating = false; state.createError = action.payload; });
+// NAYA — replace karo
+builder
+  .addCase(fetchMyPosts.pending, (state) => {
+    state.myPostsLoading = true;
+  })
+  .addCase(fetchMyPosts.fulfilled, (state, action) => {
+    state.myPostsLoading    = false;
+    state.myPosts           = Array.isArray(action.payload.posts) ? action.payload.posts : [];
+    state.myPostsHasMore    = action.payload.hasMore    ?? false;
+    state.myPostsNextCursor = action.payload.nextCursor ?? null;
+    if (action.payload.postsCount !== null) {
+      state.serverPostsCount = action.payload.postsCount;
+    }
+  })
+  .addCase(fetchMyPosts.rejected, (state, action) => {
+    state.myPostsLoading = false;
+    state.myPostsError   = action.payload;
+  });
 
-    builder
-      .addCase(fetchMyPosts.pending,    (state) => { state.myPostsLoading = true; })
- .addCase(fetchMyPosts.fulfilled, (state, action) => {
-  state.myPostsLoading = false;
-  state.myPosts        = Array.isArray(action.payload.posts) ? action.payload.posts : [];
-  if (action.payload.postsCount !== null) {
-    state.serverPostsCount = action.payload.postsCount;
-  }
-})
-      .addCase(fetchMyPosts.rejected,   (state, action) => { state.myPostsLoading = false; state.myPostsError = action.payload; });
+builder
+  .addCase(fetchMoreMyPosts.pending, (state) => {
+    state.myPostsLoadingMore = true;
+  })
+  .addCase(fetchMoreMyPosts.fulfilled, (state, action) => {
+    state.myPostsLoadingMore = false;
+    state.myPosts = [
+      ...state.myPosts,
+      ...(Array.isArray(action.payload.posts) ? action.payload.posts : []),
+    ];
+    state.myPostsHasMore    = action.payload.hasMore    ?? false;
+    state.myPostsNextCursor = action.payload.nextCursor ?? null;
+  })
+  .addCase(fetchMoreMyPosts.rejected, (state) => {
+    state.myPostsLoadingMore = false;
+  });
 
     builder.addCase(togglePostLike.fulfilled, (state, action) => {
       const { postId, liked, likesCount } = action.payload;
@@ -298,22 +385,39 @@ savedPostsNextCursor: null,
       state.interactions[postId].likesCount = likesCount;
     });
 
-    builder
-      .addCase(fetchComments.pending, (state, action) => {
-        const postId = action.meta.arg.postId;
-        if (!state.interactions[postId]) state.interactions[postId] = {};
-        state.interactions[postId].commentsLoading = true;
-      })
-      .addCase(fetchComments.fulfilled, (state, action) => {
-  const { postId, comments } = action.payload;
-  if (!state.interactions[postId]) state.interactions[postId] = {};
-  state.interactions[postId].comments = Array.isArray(comments) ? comments : [];
-  state.interactions[postId].commentsLoading = false;
-})
-      .addCase(fetchComments.rejected, (state, action) => {
-        const postId = action.meta.arg.postId;
-        if (state.interactions[postId]) state.interactions[postId].commentsLoading = false;
-      });
+builder
+  .addCase(fetchComments.pending, (state, action) => {
+    const { postId, afterId } = action.meta.arg;
+    if (!state.interactions[postId]) state.interactions[postId] = {};
+    if (afterId) {
+      state.interactions[postId].commentsLoadingMore = true;
+    } else {
+      state.interactions[postId].commentsLoading = true;
+    }
+  })
+  .addCase(fetchComments.fulfilled, (state, action) => {
+    const { postId, comments, nextCursor, hasMore, append } = action.payload;
+    if (!state.interactions[postId]) state.interactions[postId] = {};
+    const ix = state.interactions[postId];
+    if (append) {
+      ix.comments              = [...(ix.comments ?? []), ...comments];
+      ix.commentsLoadingMore   = false;
+    } else {
+      ix.comments              = comments;
+      ix.commentsLoading       = false;
+    }
+    ix.commentsHasMore         = hasMore;
+    ix.commentsNextCursor      = nextCursor;
+  })
+  .addCase(fetchComments.rejected, (state, action) => {
+    const { postId, afterId } = action.meta.arg;
+    if (!state.interactions[postId]) return;
+    if (afterId) {
+      state.interactions[postId].commentsLoadingMore = false;
+    } else {
+      state.interactions[postId].commentsLoading     = false;
+    }
+  });
 
     builder.addCase(recordPostView.fulfilled, (state, action) => {
       const postId = action.payload;

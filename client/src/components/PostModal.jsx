@@ -199,8 +199,11 @@ export default function PostModal({ post, onClose }) {
   const likesCount      = inter.likesCount      ?? post?.likesCount    ?? 0;
   const saved           = inter.saved           ?? false;
   const comments        = inter.comments        ?? [];
-  const commentsLoading = inter.commentsLoading ?? false;
-  const commentAdding   = inter.commentAdding   ?? false;
+ const commentsLoading     = inter.commentsLoading     ?? false;
+const commentsLoadingMore = inter.commentsLoadingMore ?? false;
+const commentsHasMore     = inter.commentsHasMore     ?? false;
+const commentsNextCursor  = inter.commentsNextCursor  ?? null;
+const commentAdding       = inter.commentAdding       ?? false;
 
 
   const [showMenu,     setShowMenu]     = useState(false);
@@ -211,6 +214,7 @@ const isOwner = me?._id === post?.author?._id;
   const [likeAnim, setLikeAnim]       = useState(false);
   const [showReport, setShowReport] = useState(false);
   const inputRef = useRef(null);
+  const commentsListRef = useRef(null);
 
 
 const viewTimerRef = useRef(null);
@@ -253,7 +257,7 @@ const isText   = post?.type === "text";
       commentsCount: post.commentsCount ?? 0,
     }));
     dispatch(fetchPostInteraction(postId));
-    dispatch(fetchComments({ postId, page: 1 }));
+    dispatch(fetchComments({ postId}));
     return () => { document.body.style.overflow = ""; };
   }, [postId, dispatch]);
 
@@ -546,8 +550,36 @@ Report post
           )}
 
           {/* Comments list */}
-         <div className="pm-right-section" style={{ flex: 1, overflowY: "auto", padding: "4px 16px",
-            scrollbarWidth: "thin", scrollbarColor: `${T.border} transparent` }}>
+         {/* <div className="pm-right-section" style={{ flex: 1, overflowY: "auto", padding: "4px 16px",
+            scrollbarWidth: "thin", scrollbarColor: `${T.border} transparent` }}> */}
+
+            <div
+  ref={commentsListRef}
+  className="pm-right-section"
+  style={{
+    flex: 1, overflowY: "auto", padding: "4px 16px",
+    scrollbarWidth: "thin", scrollbarColor: `${T.border} transparent`,
+  }}
+  onScroll={(e) => {
+    const el = e.currentTarget;
+    // Bottom se 100px ke andar aao toh next page fetch karo
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    if (
+      nearBottom &&
+      commentsHasMore &&
+      !commentsLoadingMore &&
+      commentsNextCursor &&
+      comments.length > 0
+    ) {
+      const lastComment = comments[comments.length - 1];
+      dispatch(fetchComments({
+        postId,
+        afterId:   lastComment._id,
+        afterDate: lastComment.createdAt,
+      }));
+    }
+  }}
+>
             {post.commentsDisabled ? (
               <div style={{ textAlign: "center", padding: "32px 0" }}>
                 <p style={{ fontSize: 24 }}>🔒</p>
@@ -562,10 +594,40 @@ Report post
                 <p style={{ fontSize: 24 }}>💬</p>
                 <p style={{ fontSize: 13, color: T.textLt, marginTop: 8 }}>No comments yet. Be first!</p>
               </div>
-            ) : (
-              comments.map((c) => (
-                <CommentItem key={c._id} comment={c} onReply={handleReply} />
-              ))
+    ) : (
+              <>
+                {comments.map((c) => (
+                  <CommentItem key={c._id} comment={c} onReply={handleReply} />
+                ))}
+                {commentsLoadingMore && (
+                  <div style={{ display: "flex", justifyContent: "center", padding: "14px 0" }}>
+                    <Loader2
+                      size={18}
+                      style={{ color: T.accent, animation: "spin 1s linear infinite" }}
+                    />
+                  </div>
+                )}
+                {!commentsLoadingMore && commentsHasMore && (
+                  <div style={{ textAlign: "center", padding: "10px 0" }}>
+                    <button
+                      onClick={() => {
+                        const lastComment = comments[comments.length - 1];
+                        dispatch(fetchComments({
+                          postId,
+                          afterId:   lastComment._id,
+                          afterDate: lastComment.createdAt,
+                        }));
+                      }}
+                      style={{
+                        fontSize: 12, fontWeight: 600, color: T.accent,
+                        background: "none", border: "none", cursor: "pointer",
+                      }}
+                    >
+                      Load more comments
+                    </button>
+                  </div>
+                )}
+           </>
             )}
           </div>
 

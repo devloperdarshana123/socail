@@ -12,7 +12,8 @@ const [confirmDelete, setConfirmDelete] = useState(false);
   const timerRef                = useRef(null);
   const startRef                = useRef(null);
   const elapsedRef              = useRef(0);
-
+const videoRef    = useRef(null);           // ← ADD
+const durationRef = useRef(DURATION);  
   const snapshots = highlight.snapshots || [];
   const snap      = snapshots[idx];
 
@@ -34,32 +35,64 @@ const [confirmDelete, setConfirmDelete] = useState(false);
     }
   };
 
+  // const startTimer = (elapsed = 0) => {
+  //   clearInterval(timerRef.current);
+  //   startRef.current = Date.now() - elapsed;
+  //   timerRef.current = setInterval(() => {
+  //     const spent = Date.now() - startRef.current;
+  //     setProgress(Math.min((spent / DURATION) * 100, 100));
+  //     if (spent >= DURATION) goNext();
+  //   }, 50);
+  // };
+
+
   const startTimer = (elapsed = 0) => {
-    clearInterval(timerRef.current);
-    startRef.current = Date.now() - elapsed;
-    timerRef.current = setInterval(() => {
-      const spent = Date.now() - startRef.current;
-      setProgress(Math.min((spent / DURATION) * 100, 100));
-      if (spent >= DURATION) goNext();
-    }, 50);
-  };
+  clearInterval(timerRef.current);
+  const duration = durationRef.current;     // ← DURATION_REF se lo
+  startRef.current = Date.now() - elapsed;
+  timerRef.current = setInterval(() => {
+    const spent = Date.now() - startRef.current;
+    setProgress(Math.min((spent / duration) * 100, 100));
+    if (spent >= duration) goNext();
+  }, 50);
+};
 
   const stopTimer = () => {
     clearInterval(timerRef.current);
     elapsedRef.current = Date.now() - (startRef.current || Date.now());
   };
 
-  useEffect(() => {
-    elapsedRef.current = 0;
-    setProgress(0);
-    if (!paused) startTimer(0);
-    return () => clearInterval(timerRef.current);
-  }, [idx]);
+  
 
   useEffect(() => {
-    if (paused) stopTimer();
-    else startTimer(elapsedRef.current);
-  }, [paused]);
+  elapsedRef.current = 0;
+  setProgress(0);
+  const isVideo = snap?.type === "video";
+  if (!isVideo) {
+    durationRef.current = DURATION;
+    if (!paused) startTimer(0);
+  }
+  return () => clearInterval(timerRef.current);
+}, [idx]);
+
+
+ 
+
+  useEffect(() => {
+  const isVideo = snap?.type === "video";
+  if (paused) {
+    stopTimer();
+    if (isVideo && videoRef.current) videoRef.current.pause();
+  } else {
+    if (isVideo && videoRef.current) {
+      videoRef.current.play();
+      startTimer(elapsedRef.current);
+    } else {
+      startTimer(elapsedRef.current);
+    }
+  }
+}, [paused]);
+
 
   if (!snapshots.length) return (
   <div className="fixed inset-0 bg-black flex items-center justify-center" 
@@ -168,8 +201,23 @@ if (!snap) return null;
                 </p>
               </div>
             ) : snap.type === "video" ? (
-              <video src={snap.url} autoPlay muted playsInline
-                className="w-full h-full object-cover" />
+              <video
+  key={snap._id}
+  ref={videoRef}
+  src={snap.url}
+  autoPlay
+  muted
+  playsInline
+  className="w-full h-full object-cover"
+  onLoadedMetadata={() => {
+    if (videoRef.current) {
+      durationRef.current = videoRef.current.duration * 1000;
+      if (!paused) startTimer(0);
+    }
+  }}
+  onEnded={goNext}
+  onError={goNext}
+/>
             ) : (
               <img src={snap.url} alt="" className="w-full h-full object-cover" />
             )}

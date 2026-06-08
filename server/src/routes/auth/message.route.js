@@ -12,6 +12,7 @@ import {
   getTotalUnreadCount,
   reactToMessage,
   deleteConversation,
+   clearChat, 
 } from "../../controllers/auth/Message.controller.js";
 
 const router = express.Router();
@@ -35,6 +36,7 @@ router.get("/conversations/:conversationId/messages", getMessages);
 router.post("/messages", sendMessage);
 router.patch("/messages/:messageId", editMessage);
 router.delete("/messages/:messageId", deleteMessage);
+router.delete("/conversations/:conversationId/clear", clearChat);
 router.patch("/messages/:messageId/react", reactToMessage); // ← missing tha
 
 export default router;
