@@ -57,6 +57,7 @@ const refreshToken = await admin.generateAdminRefreshToken(deviceInfo, ipAddress
         message,
         data     : safeAdmin,
         nextRoute: sanitizeRoute(nextRoute),
+        expiresAt: new Date(Date.now() + ACCESS_TTL_MS).toISOString(),
         ...(process.env.NODE_ENV === "development" && { accessToken }),
       });
 

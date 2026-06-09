@@ -33,6 +33,7 @@ const pctChange = (prev, curr) => {
 
 export const getDashboardStats = asyncHandler(async (req, res, next) => {
   const now             = new Date();
+    const superAdminIds   = await User.find({ role: "super_admin" }).distinct("_id");
   const startOfToday    = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -52,7 +53,7 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     viewsAgg,
   ] = await Promise.all([
     User.countDocuments({ ...REGULAR_USER_FILTER }),
-    Post.countDocuments({ isDeleted: { $ne: true } }),
+  Post.countDocuments({ isDeleted: { $ne: true }, isDraft: { $ne: true }, author: { $nin: superAdminIds } }),
     Report.countDocuments({ status: "pending" }),
     User.countDocuments({ ...REGULAR_USER_FILTER, lastActiveAt: { $gte: startOfToday } }),
     User.countDocuments({ ...REGULAR_USER_FILTER, createdAt: { $gte: startOfThisMonth } }),

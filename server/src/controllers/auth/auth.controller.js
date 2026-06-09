@@ -302,6 +302,7 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
 
   // Step 2 — fetch user with refreshTokens array
   const user = await User.findById(decoded._id).select("+refreshTokens");
+  
   if (!user) return next(new AppError("User not found.", 401));
 
   // Step 3 — look up by tokenHash (User model stores hash, never raw token)
@@ -311,23 +312,42 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
     (t) => t.tokenHash === incomingHash && t.expiresAt > now,
   );
 
+
   if (!storedToken) {
     logger.warn("Refresh token reuse or expired", { userId: user._id });
     return next(new AppError("Session invalid. Please log in again.", 401));
   }
 
+  // Account status check
+  if (user.accountStatus === "banned" || user.accountStatus === "suspended") {
+    await user.removeRefreshToken(incomingRefreshToken);
+    return next(new AppError("Your account has been suspended or banned.", 403));
+  }
   // Step 4 — rotate: remove old, issue new
  
-// Step 4 — pehle naya generate karo, phir purana hatao
-// Agar generate fail ho toh purana token safe rahega
+
+// await user.removeRefreshToken(incomingRefreshToken);
+// const newAccessToken  = user.generateAccessToken();
+// const newRefreshToken = await user.generateRefreshToken(
+//   storedToken.deviceInfo,
+//   storedToken.ipAddress,
+// );
+
+const removeResult = await User.findOneAndUpdate(
+  { _id: user._id, "refreshTokens.tokenHash": incomingHash },
+  { $pull: { refreshTokens: { tokenHash: incomingHash } } },
+);
+
+if (!removeResult) {
+  logger.warn("Refresh token already consumed", { userId: user._id });
+  return next(new AppError("Session invalid. Please log in again.", 401));
+}
+
 const newAccessToken  = user.generateAccessToken();
 const newRefreshToken = await user.generateRefreshToken(
   storedToken.deviceInfo,
   storedToken.ipAddress,
 );
-
-// Generate successful — ab purana hatao aur blacklist karo
-await user.removeRefreshToken(incomingRefreshToken);
 
 const oldAccessToken = req.cookies?.[USER_COOKIE_ACCESS];
 if (oldAccessToken) {
@@ -346,13 +366,16 @@ const refreshTokenOptions = buildCookieOptions({ maxAge: 7 * 24 * 60 * 60 * 1000
 
   logger.info("Access token refreshed", { userId: user._id });
 
- return res
+
+
+return res
   .status(200)
   .cookie(USER_COOKIE_ACCESS,  newAccessToken,  accessTokenOptions)
   .cookie(USER_COOKIE_REFRESH, newRefreshToken, refreshTokenOptions)
   .json({
-    success: true,
-    message: "Token refreshed successfully",
+    success  : true,
+    message  : "Token refreshed successfully",
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // ← ADD
   });
 });
 

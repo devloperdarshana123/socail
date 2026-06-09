@@ -8,6 +8,7 @@ import {
   clearOtpState,
   clearResendState,
 } from "../lib/redux/authSlice";
+import { setTokenExpiry } from "../lib/services/api";
 import AnimatedCollage from "../components/AnimatedCollage";
 import Footer from "../components/Footer";
 import ero_logo from "../assets/seller_logo.png";
@@ -71,6 +72,7 @@ const VerifyOTP = () => {
   const pendingUserId = useSelector((s) => s.auth.pendingUserId);
   const pendingPurpose = useSelector((s) => s.auth.pendingPurpose);
   const nextRoute = useSelector((s) => s.auth.nextRoute);
+  const expiresAt  = useSelector((s) => s.auth.expiresAt); 
   const {
     loading: verifyLoading,
     error: verifyError,
@@ -119,14 +121,32 @@ const VerifyOTP = () => {
   }, [startTimer]);
 
   // ── Verify success ────────────────────────────────────────────
-  useEffect(() => {
-    if (verifySuccess) {
-      toast.success("Verified! 🎉");
-      navigate(nextRoute || "/onboarding/username");
-      dispatch(clearOtpState());
-    }
-  }, [verifySuccess, nextRoute, navigate, dispatch]);
+  // useEffect(() => {
+  //   if (verifySuccess) {
+  //     toast.success("Verified! 🎉");
+  //     navigate(nextRoute || "/onboarding/username");
+  //     dispatch(clearOtpState());
+  //   }
+  // }, [verifySuccess, nextRoute, navigate, dispatch]);
 
+//   useEffect(() => {
+//   if (verifySuccess) {
+//     setTokenExpiry(null);
+//     toast.success("Verified! 🎉");
+//     navigate(nextRoute || "/onboarding/username");
+//     dispatch(clearOtpState());
+//   }
+// }, [verifySuccess, nextRoute, navigate, dispatch]);
+
+
+useEffect(() => {
+  if (verifySuccess) {
+    setTokenExpiry(expiresAt);   // ← exact value
+    toast.success("Verified! 🎉");
+    navigate(nextRoute || "/onboarding/username");
+    dispatch(clearOtpState());
+  }
+}, [verifySuccess, nextRoute, navigate, dispatch, expiresAt]);
   // ── Verify error ──────────────────────────────────────────────
   useEffect(() => {
     if (verifyError) {

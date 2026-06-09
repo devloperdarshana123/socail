@@ -204,18 +204,30 @@ export const fetchPostInteraction = createAsyncThunk(
   }
 );
 
+// export const recordPostView = createAsyncThunk(
+//   "posts/recordView",
+//   async (postId, { rejectWithValue }) => {
+//     try {
+//       await api.post(`/posts/${postId}/view`);
+//       return postId;
+//     } catch (err) {
+//       return rejectWithValue(err.response?.data?.message || "View record failed");
+//     }
+//   }
+// );
+
+
 export const recordPostView = createAsyncThunk(
   "posts/recordView",
-  async (postId, { rejectWithValue }) => {
+  async ({ postId, source = "modal", duration = 0 }, { rejectWithValue }) => {
     try {
-      await api.post(`/posts/${postId}/view`);
+      await api.post(`/posts/${postId}/view`, { source, duration });
       return postId;
     } catch (err) {
       return rejectWithValue(err.response?.data?.message || "View record failed");
     }
   }
 );
-
 export const deletePost = createAsyncThunk(
   "posts/deletePost",
   async (postId, { rejectWithValue }) => {
@@ -335,10 +347,14 @@ savedPostsNextCursor: null,
   if (action.payload.isDraft) {
     // Draft: only goes into draftPosts, never feed/grid
     state.draftPosts.unshift(action.payload);
-  } else {
+ } else {
     // Published post: goes into feed and profile grid
     state.feed.unshift(action.payload);
     state.myPosts.unshift(action.payload);
+    // ✅ FIX: count increment
+    if (state.serverPostsCount !== null) {
+      state.serverPostsCount += 1;
+    }
   }
 })
       .addCase(createPost.rejected,   (state, action) => { state.creating = false; state.createError = action.payload; });
@@ -480,13 +496,18 @@ state.interactions[postId].comments.unshift(comment);
   })
   .addCase(fetchSavedPosts.rejected, (state) => { state.savedPostsLoading = false; });
 
-    builder.addCase(deletePost.fulfilled, (state, action) => {
-      const postId = action.payload;
-      state.myPosts = state.myPosts.filter((p) => p._id !== postId);
-      state.feed    = state.feed.filter((p) => p._id !== postId);
-      state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
-      delete state.interactions[postId];
-    });
+   builder.addCase(deletePost.fulfilled, (state, action) => {
+  const postId = action.payload;
+  const wasPublished = state.myPosts.some((p) => p._id === postId);
+  state.myPosts    = state.myPosts.filter((p) => p._id !== postId);
+  state.feed       = state.feed.filter((p) => p._id !== postId);
+  state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
+  delete state.interactions[postId];
+  // ✅ FIX: delete pe count decrement
+  if (wasPublished && state.serverPostsCount !== null) {
+    state.serverPostsCount = Math.max(0, state.serverPostsCount - 1);
+  }
+});
 
     builder
       .addCase(fetchDraftPosts.pending,   (state) => { state.draftPostsLoading = true; })
@@ -496,12 +517,18 @@ state.interactions[postId].comments.unshift(comment);
       })
       .addCase(fetchDraftPosts.rejected,  (state) => { state.draftPostsLoading = false; });
 
-    builder.addCase(publishDraftPost.fulfilled, (state, action) => {
-      const { postId, post } = action.payload;
-      state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
-      if (post) state.myPosts.unshift(post);
-    });
-
+   builder.addCase(publishDraftPost.fulfilled, (state, action) => {
+  const { postId, post } = action.payload;
+  state.draftPosts = state.draftPosts.filter((p) => p._id !== postId);
+  if (post) {
+    state.myPosts.unshift(post);
+    state.feed.unshift(post);
+    // ✅ FIX: publish hone pe count increment karo
+    if (state.serverPostsCount !== null) {
+      state.serverPostsCount += 1;
+    }
+  }
+});
     builder.addCase(updateDraft.fulfilled, (state, action) => {
   const { postId, post } = action.payload;
   const idx = state.draftPosts.findIndex((p) => p._id === postId);

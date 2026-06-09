@@ -17,6 +17,7 @@ import {
   fetchPostInteraction,
   initInteraction,
   deletePost,
+  recordPostView,
 } from "../lib/redux/postSlice";
 
 const T = {
@@ -227,19 +228,26 @@ useEffect(() => {
 
   viewStartRef.current = Date.now();
 
-  viewTimerRef.current = setTimeout(async () => {
-    try {
-      const duration = Math.floor((Date.now() - viewStartRef.current) / 1000);
-      await api.post(`/posts/${postId}/view`, {
-        source: "modal",
-        duration,
-      });
-      sessionStorage.setItem(`view_${postId}`, "1");
-    } catch {
-      // silent fail
-    }
-  }, 3000);
+  // viewTimerRef.current = setTimeout(async () => {
+  //   try {
+  //     const duration = Math.floor((Date.now() - viewStartRef.current) / 1000);
+  //     await api.post(`/posts/${postId}/view`, {
+  //       source: "modal",
+  //       duration,
+  //     });
+  //     sessionStorage.setItem(`view_${postId}`, "1");
+  //     dispatch(recordPostView(postId));
+  //   } catch {
+  //     // silent fail
+  //   }
+  // }, 3000);
 
+  // NAYA — clean, single call
+viewTimerRef.current = setTimeout(() => {
+  const duration = Math.floor((Date.now() - viewStartRef.current) / 1000);
+  dispatch(recordPostView({ postId, source: "modal", duration }));
+  sessionStorage.setItem(`view_${postId}`, "1");
+}, 3000);
   return () => clearTimeout(viewTimerRef.current);
 }, [postId, isOwner]);
   // ── key fix: hasMedia checks properly ──

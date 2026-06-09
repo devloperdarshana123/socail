@@ -13,7 +13,7 @@ const { Schema, model, models } = mongoose;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
-const MAX_DEVICES             = 5;
+const MAX_DEVICES             = 10;
 const COUNTABLE_FIELDS        = new Set(["followersCount", "followingCount", "postsCount"]);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ const cloudinaryMediaSchema = new Schema(
 
 const refreshTokenSchema = new Schema(
   {
-    tokenHash:  { type: String, required: true, select: false },
+    tokenHash:  { type: String, required: true, },
     deviceInfo: { type: String, default: "unknown" },
     ipAddress:  { type: String, default: null },
     isTrusted:  { type: Boolean, default: false },

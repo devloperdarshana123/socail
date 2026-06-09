@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../services/api";
+import { togglePostLike, addComment, recordPostView } from "./postSlice";
 
 const BASE = "/explore";
 
@@ -192,7 +193,52 @@ const exploreSlice = createSlice({
         state.searchLoadingMore = false;
         state.error             = action.payload;
       });
+      // ── Like — optimistic update ──
+builder
+  .addCase(togglePostLike.pending, (state, action) => {
+    const { postId } = action.meta.arg;
+    const update = (p) => {
+      if (p._id !== postId) return p;
+      const newLiked = !p.isLiked;
+      return { ...p, isLiked: newLiked, likesCount: newLiked ? (p.likesCount||0)+1 : Math.max(0,(p.likesCount||0)-1) };
+    };
+    state.posts       = state.posts.map(update);
+    state.searchPosts = state.searchPosts.map(update);
+  })
+  .addCase(togglePostLike.fulfilled, (state, action) => {
+    const { postId, liked, likesCount } = action.payload;
+    const update = (p) => p._id !== postId ? p : { ...p, isLiked: liked, likesCount };
+    state.posts       = state.posts.map(update);
+    state.searchPosts = state.searchPosts.map(update);
+  })
+  .addCase(togglePostLike.rejected, (state, action) => {
+    const { postId } = action.meta.arg;
+    const rollback = (p) => {
+      if (p._id !== postId) return p;
+      const rb = !p.isLiked;
+      return { ...p, isLiked: rb, likesCount: rb ? (p.likesCount||0)+1 : Math.max(0,(p.likesCount||0)-1) };
+    };
+    state.posts       = state.posts.map(rollback);
+    state.searchPosts = state.searchPosts.map(rollback);
+  });
+
+// ── Comment count sync ──
+builder.addCase(addComment.fulfilled, (state, action) => {
+  const { postId } = action.payload;
+  const update = (p) => p._id !== postId ? p : { ...p, commentsCount: (p.commentsCount||0)+1 };
+  state.posts       = state.posts.map(update);
+  state.searchPosts = state.searchPosts.map(update);
+});
+
+// ── View count sync ──
+builder.addCase(recordPostView.fulfilled, (state, action) => {
+  const postId = action.payload;
+  const update = (p) => p._id !== postId ? p : { ...p, viewsCount: (p.viewsCount||0)+1 };
+  state.posts       = state.posts.map(update);
+  state.searchPosts = state.searchPosts.map(update);
+});
   },
+  
 });
 
 export const { setActiveType, setSearchMode, clearExplore } = exploreSlice.actions;

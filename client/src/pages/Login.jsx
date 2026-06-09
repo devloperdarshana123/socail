@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser, clearLoginState, googleLogin  } from "../lib/redux/authSlice";
+import { setTokenExpiry } from "../lib/services/api";
 import AnimatedCollage from "../components/AnimatedCollage";
 import Footer from "../components/Footer";
 import ero_logo from "../assets/seller_logo.png";
@@ -165,6 +166,7 @@ const Login = () => {
   const nextRoute = useSelector((s) => s.auth.nextRoute);
   const isAuthenticated = useSelector((s) => s.auth.isAuthenticated);
   const user = useSelector((s) => s.auth.user);
+  const expiresAt = useSelector((s) => s.auth.expiresAt);
 
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
@@ -210,14 +212,23 @@ if (
   return () => clearTimeout(t);
 }, [error, dispatch]);
 
-  // ── Success → navigate ────────────────────────────────────────
-  useEffect(() => {
-    if (success && nextRoute) {
-      navigate(nextRoute);
-      dispatch(clearLoginState());
-    }
-  }, [success, nextRoute, navigate, dispatch]);
 
+
+//   useEffect(() => {
+//   if (success && nextRoute) {
+//     setTokenExpiry(null);
+//     navigate(nextRoute);
+//     dispatch(clearLoginState());
+//   }
+// }, [success, nextRoute, navigate, dispatch]);
+
+useEffect(() => {
+  if (success && nextRoute) {
+    setTokenExpiry(expiresAt);   // ← null se exact value
+    navigate(nextRoute);
+    dispatch(clearLoginState());
+  }
+}, [success, nextRoute, navigate, dispatch, expiresAt]);
   // ── Cleanup ───────────────────────────────────────────────────
   useEffect(() => {
     return () => {
@@ -256,9 +267,11 @@ if (
 const handleGoogleLogin = async () => {
   try {
     const { idToken } = await signInWithGoogle();
+    
     const result = await dispatch(googleLogin(idToken)).unwrap();
-    toast.success(result.message || "Signed in with Google!");
-    navigate(result.nextRoute || "/feed", { replace: true });
+setTokenExpiry(result.expiresAt || null);  
+toast.success(result.message || "Signed in with Google!");
+navigate(result.nextRoute || "/feed", { replace: true });
   } catch (err) {
     if (
       err?.code === "auth/popup-closed-by-user" ||

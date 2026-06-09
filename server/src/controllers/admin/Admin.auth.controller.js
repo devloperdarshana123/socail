@@ -144,6 +144,13 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
     return next(new AppError("Session invalid. Please log in again.", 401));
   }
 
+
+  // Account status check
+  if (user.accountStatus === "banned" || user.accountStatus === "suspended") {
+    await user.removeRefreshToken(incomingRefreshToken);
+    return next(new AppError("Your account has been suspended or banned.", 403));
+  }
+
   // ── Step 6: Rotate tokens (atomic — new method handles cleanup + push) ───
   await user.removeRefreshToken(incomingRefreshToken);
   // Purana access token blacklist karo
@@ -227,7 +234,7 @@ export const getAdminSocketToken = asyncHandler(async (req, res) => {
       id:   req.user._id,
       role: req.user.role,
     },
-    process.env.ADMIN_ACCESS_TOKEN_SECRET,
+    ENV.ADMIN_ACCESS_TOKEN_SECRET,
     { expiresIn: "1m" }
   );
   return res.status(200).json({ success: true, data: { token } });

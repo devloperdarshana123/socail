@@ -31,7 +31,8 @@ import { fetchMe, resetAuth } from "./lib/redux/authSlice";
 import { resetProfile } from "./lib/redux/userprofileslice";
 import { createPost } from "./lib/redux/postSlice";
 import { fetchNotifications } from "./lib/redux/notificationSlice";
-
+// existing imports ke saath
+import { setTokenExpiry } from "./lib/services/api";
 // ✅ Socket hooks — sirf ek baar App level pe mount karo
 import useSocketInit from "./lib/hooks/useSocketInit";
 
@@ -50,8 +51,13 @@ const App = () => {
   const navigate  = useNavigate();
   const dispatch  = useDispatch();
 
-  const user    = useSelector((state) => state.auth.user);
-  const creating = useSelector((state) => state.posts.creating);
+  // const user    = useSelector((state) => state.auth.user);
+  // const creating = useSelector((state) => state.posts.creating);
+
+
+  const user           = useSelector((state) => state.auth.user);
+const creating       = useSelector((state) => state.posts.creating);
+const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
 
   const showBanner = !HIDE_BANNER_ON.includes(location.pathname);
   const showNavbar = !HIDE_NAVBAR_ON.includes(location.pathname);
@@ -64,16 +70,23 @@ const App = () => {
   );
 
   // App load pe user fetch
-  useEffect(() => {
-    dispatch(fetchMe());
-  }, []);
+ useEffect(() => {
+  dispatch(fetchMe()).then((result) => 
+    
+    {
+    // Agar user already logged in hai (page reload) toh silent refresh shuru karo
+    if (fetchMe.fulfilled.match(result)) {
+       setTokenExpiry(null);
+    }
+  });
+}, []);
 
   // Force logout handler
   useEffect(() => {
   const handleForceLogout = () => {
   dispatch(resetAuth());
   dispatch(resetProfile());
-  navigate("/login", { replace: true });
+  navigate("/", { replace: true });
 };
 window.addEventListener("auth:logout", handleForceLogout);
 return () => window.removeEventListener("auth:logout", handleForceLogout);
@@ -87,6 +100,7 @@ return () => window.removeEventListener("auth:logout", handleForceLogout);
   //   window.addEventListener("auth:tokenRefreshed", handleTokenRefreshed);
   //   return () => window.removeEventListener("auth:tokenRefreshed", handleTokenRefreshed);
   // }, []);
+
 
   useEffect(() => {
   if (user?._id) {

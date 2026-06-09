@@ -1,7 +1,7 @@
 
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import api from "../services/api";
+import api  from "../services/api";
 
 // ─────────────────────────────────────────────
 //  Thunks
@@ -201,7 +201,7 @@ export const unfollowUser = createAsyncThunk(
 const initialState = {
   user: null,
   isAuthenticated: false,
-
+ expiresAt: null,
   pendingUserId: null,
   pendingPurpose: null,
   nextRoute: null,
@@ -312,8 +312,10 @@ setPending(state, action) {
         state.user = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
+        state.expiresAt = action.payload.expiresAt || null; 
         state.pendingUserId = null;
         state.pendingPurpose = null;
+        
       })
       .addCase(verifyOtp.rejected, (state, action) => {
         state.otp.loading = false;
@@ -355,6 +357,8 @@ setPending(state, action) {
         state.user = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
+        state.expiresAt = action.payload.expiresAt || null; 
+         
         if (action.payload.nextRoute === "/verify-otp") {
           state.pendingUserId = action.payload.data?._id || null;
           state.pendingPurpose =
@@ -465,6 +469,8 @@ builder
     state.user            = action.payload.data || null;
     state.isAuthenticated = !!action.payload.data;
     state.nextRoute       = action.payload.nextRoute || "/feed";
+    state.expiresAt       = action.payload.expiresAt || null; 
+    
 
   })
   .addCase(googleLogin.rejected, (state, action) => {

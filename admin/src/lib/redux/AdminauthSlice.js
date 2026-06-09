@@ -65,7 +65,7 @@ export const adminLogout = createAsyncThunk(
 const initialState = {
   admin: null,
   isAuthenticated: false,
-
+expiresAt: null, 
   login: {
     loading: false,
     error: null,
@@ -132,6 +132,7 @@ const adminAuthSlice = createSlice({
         state.login.success = true;
         state.admin = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
+        state.expiresAt = action.payload.expiresAt || null; 
       })
       .addCase(adminLogin.rejected, (state, action) => {
         state.login.loading = false;

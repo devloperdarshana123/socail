@@ -338,7 +338,7 @@ if (!post.isDraft) {
 // ─────────────────────────────────────────────
 export const recordView = asyncHandler(async (req, res) => {
   const { postId }               = req.params;
-  const { source = "modal", duration = 0 } = req.body;
+  const { source = "modal", duration = 0 } = req.body || {};
   const userId                   = req.user._id;
 
   // ── 1. Post fetch — author check ──
@@ -435,29 +435,7 @@ export const publishDraft = asyncHandler(async (req, res) => {
   });
 });
 
-// export const updatePost = asyncHandler(async (req, res, next) => {
-//   const { postId } = req.params;
-//   const { caption, isDraft } = req.body;
 
-//   const post = await Post.findOne({ _id: postId, author: req.user._id });
-//   if (!post) return next(new AppError("Post not found.", 404));
-
-//   if (caption !== undefined) {
-//   if (caption.length > 2200) {
-//     return next(new AppError("Caption cannot exceed 2200 characters.", 400));
-//   }
-//   post.caption = caption.trim();
-// }
-//   if (isDraft !== undefined) post.isDraft = isDraft === true || isDraft === "true";
-
-//   await post.save();
-
-//   return res.status(200).json({
-//     success: true,
-//     message: "Post updated.",
-//     post,
-//   });
-// });
 
 
 export const updatePost = asyncHandler(async (req, res, next) => {

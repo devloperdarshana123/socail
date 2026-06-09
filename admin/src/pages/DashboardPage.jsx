@@ -1,4 +1,4 @@
-// src/pages/admin/DashboardPage.jsx
+
 import { useEffect, useCallback, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -30,18 +30,14 @@ import {
   selectGlobalLoading,
 } from "../lib/redux/dashboardSlice";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const PIE_COLORS = ["#6366f1", "#f59e0b", "#10b981"];
-const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5 min
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
 
 const TYPE_BADGE = {
   photo: { label: "Photo", cls: "bg-indigo-100 text-indigo-700" },
   reel:  { label: "Reel",  cls: "bg-amber-100 text-amber-700" },
   text:  { label: "Text",  cls: "bg-emerald-100 text-emerald-700" },
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n) => {
   if (n == null) return "—";
@@ -58,22 +54,21 @@ const relativeTime = (iso) => {
   return `${Math.floor(diff / 3600)}h ago`;
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
 function SkeletonBox({ className = "" }) {
-  return (
-    <div className={`animate-pulse bg-slate-200 rounded-xl ${className}`} />
-  );
+  return <div className={`animate-pulse bg-slate-200 rounded-xl ${className}`} />;
 }
 
 function KPICard({ icon: Icon, label, value, sub, change, accent, loading }) {
   const isPositive = change >= 0;
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-slate-100 shadow-sm
-      hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-5 flex items-start gap-4 ${accent.bg}`}>
-      {/* colored top bar */}
+    <div
+      className="relative overflow-hidden rounded-2xl border shadow-sm
+        hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-5 flex items-start gap-4 "
+      style={{ backgroundColor: accent.bgHex, borderColor: accent.borderHex }}
+    >
       <div className={`absolute top-0 left-0 right-0 h-1 ${accent.bar}`} />
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 `}>
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+        style={{ backgroundColor: accent.iconBgHex }}>
         <Icon size={22} className={accent.icon} />
       </div>
       <div className="flex-1 min-w-0">
@@ -131,15 +126,11 @@ function ChartCard({ title, loading, error, periodValue, periodOptions, onPeriod
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
       <SectionHeader title={title}>
         {periodOptions && (
-          <PeriodTabs
-            value={periodValue}
-            options={periodOptions}
-            onChange={onPeriodChange}
-          />
+          <PeriodTabs value={periodValue} options={periodOptions} onChange={onPeriodChange} />
         )}
       </SectionHeader>
       {loading ? (
-        <SkeletonBox className={`w-full`} style={{ height }} />
+        <SkeletonBox style={{ height }} />
       ) : error ? (
         <div className="flex items-center justify-center gap-2 text-red-400 text-sm" style={{ height }}>
           <AlertTriangle size={16} /> Failed to load
@@ -170,30 +161,26 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
 export default function DashboardPage() {
   const dispatch = useDispatch();
 
-  const stats        = useSelector(selectDashboardStats);
-  const userGrowth   = useSelector(selectUserGrowth);
-  const postGrowth   = useSelector(selectPostGrowth);
-  const engagement   = useSelector(selectEngagementTrend);
-  const topPosts     = useSelector(selectTopPosts);
-  const hourly       = useSelector(selectHourlyActivity);
-  const lastRefresh  = useSelector(selectLastRefreshed);
-  const globalLoad   = useSelector(selectGlobalLoading);
+  const stats       = useSelector(selectDashboardStats);
+  const userGrowth  = useSelector(selectUserGrowth);
+  const postGrowth  = useSelector(selectPostGrowth);
+  const engagement  = useSelector(selectEngagementTrend);
+  const topPosts    = useSelector(selectTopPosts);
+  const hourly      = useSelector(selectHourlyActivity);
+  const lastRefresh = useSelector(selectLastRefreshed);
+  const globalLoad  = useSelector(selectGlobalLoading);
 
   const s = stats.data;
 
-  // Initial + auto-refresh
   useEffect(() => {
     dispatch(fetchAllDashboardData());
     const id = setInterval(() => dispatch(fetchAllDashboardData()), AUTO_REFRESH_MS);
     return () => clearInterval(id);
   }, [dispatch]);
 
-  // Period change handlers
   const handleUserPeriod = useCallback((p) => {
     dispatch(setUserGrowthPeriod(p));
     dispatch(fetchUserGrowth({ period: p }));
@@ -209,73 +196,73 @@ export default function DashboardPage() {
     dispatch(fetchEngagementTrend({ period: p }));
   }, [dispatch]);
 
-  // Donut data for post type distribution from post growth totals
   const postTypeDonut = (() => {
     const totals = { photo: 0, reel: 0, text: 0 };
     postGrowth.data.forEach((d) => {
       totals.photo += d.photo ?? 0;
-      totals.reel += d.reel ?? 0;
-      totals.text += d.text ?? 0;
+      totals.reel  += d.reel  ?? 0;
+      totals.text  += d.text  ?? 0;
     });
     return [
       { name: "Photos", value: totals.photo },
-      { name: "Reels",  value: totals.reel },
-      { name: "Text",   value: totals.text },
+      { name: "Reels",  value: totals.reel  },
+      { name: "Text",   value: totals.text  },
     ];
   })();
 
+  // ── Lighter card backgrounds using inline hex colors ──
+  // bgHex: very pale tint  |  borderHex: faint border  |  iconBgHex: slightly deeper tint for icon
   const kpiCards = [
     {
       icon: Users, label: "Total Users", value: s?.totalUsers,
-      sub: `${fmt(s?.activeToday)} active today`,
-      change: null,
-      accent: { bar: "bg-indigo-500", bg: "bg-indigo-50", icon: "text-indigo-600" },
+      sub: `${fmt(s?.activeToday)} active today`, change: null,
+      accent: { bar: "bg-indigo-400", icon: "text-indigo-500", bgHex: "#fafaff", borderHex: "#e0e0fa", iconBgHex: "#ebebfd" },
     },
     {
       icon: LayoutGrid, label: "Total Posts", value: s?.totalPosts,
       sub: null, change: s?.postsChange,
-      accent: { bar: "bg-amber-500", bg: "bg-amber-50", icon: "text-amber-600" },
+      accent: { bar: "bg-amber-400", icon: "text-amber-500", bgHex: "#fffefc", borderHex: "#faefd0", iconBgHex: "#fef5d8" },
     },
     {
       icon: Heart, label: "Total Likes", value: s?.totalLikes,
       sub: null, change: null,
-      accent: { bar: "bg-rose-500", bg: "bg-rose-50", icon: "text-rose-600" },
+      accent: { bar: "bg-rose-400", icon: "text-rose-500", bgHex: "#fffafa", borderHex: "#fad8d8", iconBgHex: "#fee2e2" },
     },
     {
       icon: Eye, label: "Total Views", value: s?.totalViews,
       sub: null, change: null,
-      accent: { bar: "bg-sky-500", bg: "bg-sky-50", icon: "text-sky-600" },
+      accent: { bar: "bg-sky-400", icon: "text-sky-500", bgHex: "#f8fcff", borderHex: "#d0eefa", iconBgHex: "#ddf2fd" },
     },
     {
       icon: MessageCircle, label: "Total Comments", value: s?.totalComments,
       sub: null, change: null,
-      accent: { bar: "bg-emerald-500", bg: "bg-emerald-50", icon: "text-emerald-600" },
+      accent: { bar: "bg-emerald-400", icon: "text-emerald-500", bgHex: "#f7fefb", borderHex: "#c6f0da", iconBgHex: "#d4f7e5" },
     },
     {
       icon: Activity, label: "Active Today", value: s?.activeToday,
       sub: null, change: null,
-      accent: { bar: "bg-violet-500", bg: "bg-violet-50", icon: "text-violet-600" },
+      accent: { bar: "bg-violet-400", icon: "text-violet-500", bgHex: "#fcfaff", borderHex: "#e4d9fc", iconBgHex: "#ede5fd" },
     },
     {
       icon: UserPlus, label: "New Signups", value: s?.newSignups,
       sub: "this month", change: s?.newSignupsChange,
-      accent: { bar: "bg-teal-500", bg: "bg-teal-50", icon: "text-teal-600" },
+      accent: { bar: "bg-teal-400", icon: "text-teal-500", bgHex: "#f7fefe", borderHex: "#c0f0e8", iconBgHex: "#d0f7f0" },
     },
     {
       icon: AlertTriangle, label: "Pending Reports", value: s?.pendingReports,
       sub: null, change: null,
-      accent: { bar: "bg-red-500", bg: "bg-red-50", icon: "text-red-600" },
+      accent: { bar: "bg-red-400", icon: "text-red-500", bgHex: "#fffcfc", borderHex: "#facaca", iconBgHex: "#fee0e0" },
     },
   ];
 
   const periodOpts6 = [
-    { label: "6M", value: "6months" },
+    { label: "6M",  value: "6months"  },
     { label: "12M", value: "12months" },
-    { label: "30D", value: "30days" },
+    { label: "30D", value: "30days"   },
   ];
 
   const engagementOpts = [
-    { label: "7D", value: "7days" },
+    { label: "7D",  value: "7days"  },
     { label: "14D", value: "14days" },
     { label: "30D", value: "30days" },
   ];
@@ -291,9 +278,7 @@ export default function DashboardPage() {
               Dashboard
             </h1>
             <p className="text-sm text-slate-400 mt-0.5">
-              {lastRefresh
-                ? `Last updated ${relativeTime(lastRefresh)}`
-                : "Loading data…"}
+              {lastRefresh ? `Last updated ${relativeTime(lastRefresh)}` : "Loading data…"}
             </p>
           </div>
           <button
@@ -307,39 +292,26 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* ── KPI Cards — 2 cols mobile, 4 desktop ── */}
+        {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {kpiCards.map((card) => (
-            <KPICard
-              key={card.label}
-              {...card}
-              loading={stats.loading || !s}
-            />
+            <KPICard key={card.label} {...card} loading={stats.loading || !s} />
           ))}
         </div>
 
         {/* ── Charts Row 1 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* User Growth — Area */}
-          <ChartCard
-            title="User Growth"
-            loading={userGrowth.loading}
-            error={userGrowth.error}
-            periodValue={userGrowth.period}
-            periodOptions={periodOpts6}
-            onPeriodChange={handleUserPeriod}
-            height={220}
-          >
+          <ChartCard title="User Growth" loading={userGrowth.loading} error={userGrowth.error}
+            periodValue={userGrowth.period} periodOptions={periodOpts6} onPeriodChange={handleUserPeriod} height={220}>
             <AreaChart data={userGrowth.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.18} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.18} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}    />
                 </linearGradient>
                 <linearGradient id="gradNew" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.18} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.18} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}    />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -348,76 +320,43 @@ export default function DashboardPage() {
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Area type="monotone" dataKey="totalUsers" name="Total Users" stroke="#6366f1" strokeWidth={2} fill="url(#gradTotal)" dot={false} />
-              <Area type="monotone" dataKey="newUsers" name="New Users" stroke="#10b981" strokeWidth={2} fill="url(#gradNew)" dot={false} />
+              <Area type="monotone" dataKey="newUsers"   name="New Users"   stroke="#10b981" strokeWidth={2} fill="url(#gradNew)"   dot={false} />
             </AreaChart>
           </ChartCard>
 
-          {/* Post Type Distribution — Donut */}
-          <ChartCard
-            title="Post Type Distribution"
-            loading={postGrowth.loading}
-            error={postGrowth.error}
-            height={220}
-          >
+          <ChartCard title="Post Type Distribution" loading={postGrowth.loading} error={postGrowth.error} height={220}>
             <PieChart>
-              <Pie
-                data={postTypeDonut}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={3}
-                dataKey="value"
-              >
+              <Pie data={postTypeDonut} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="value">
                 {postTypeDonut.map((_, i) => (
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip formatter={(v) => fmt(v)} />
-              <Legend
-                formatter={(val, entry) => (
-                  <span className="text-xs text-slate-600">{val} ({fmt(entry.payload.value)})</span>
-                )}
-              />
+              <Legend formatter={(val, entry) => (
+                <span className="text-xs text-slate-600">{val} ({fmt(entry.payload.value)})</span>
+              )} />
             </PieChart>
           </ChartCard>
         </div>
 
         {/* ── Charts Row 2 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* Post Growth — Stacked Bar */}
-          <ChartCard
-            title="Post Growth (by Type)"
-            loading={postGrowth.loading}
-            error={postGrowth.error}
-            periodValue={postGrowth.period}
-            periodOptions={periodOpts6}
-            onPeriodChange={handlePostPeriod}
-            height={220}
-          >
+          <ChartCard title="Post Growth (by Type)" loading={postGrowth.loading} error={postGrowth.error}
+            periodValue={postGrowth.period} periodOptions={periodOpts6} onPeriodChange={handlePostPeriod} height={220}>
             <BarChart data={postGrowth.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} />
               <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="photo" name="Photos" stackId="a" fill="#6366f1" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="photo" name="Photos" stackId="a" fill="#6366f1" radius={[0,0,0,0]} />
               <Bar dataKey="reel"  name="Reels"  stackId="a" fill="#f59e0b" />
-              <Bar dataKey="text"  name="Text"   stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="text"  name="Text"   stackId="a" fill="#10b981" radius={[4,4,0,0]} />
             </BarChart>
           </ChartCard>
 
-          {/* Weekly Engagement — Multi-line */}
-          <ChartCard
-            title="Engagement Trend"
-            loading={engagement.loading}
-            error={engagement.error}
-            periodValue={engagement.period}
-            periodOptions={engagementOpts}
-            onPeriodChange={handleEngagementPeriod}
-            height={220}
-          >
+          <ChartCard title="Engagement Trend" loading={engagement.loading} error={engagement.error}
+            periodValue={engagement.period} periodOptions={engagementOpts} onPeriodChange={handleEngagementPeriod} height={220}>
             <LineChart data={engagement.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} />
@@ -431,22 +370,15 @@ export default function DashboardPage() {
           </ChartCard>
         </div>
 
-        {/* ── Bottom Row: Hourly Activity + Top Posts ── */}
+        {/* ── Bottom Row ── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-
-          {/* Hourly Active Users — spark area (2/5 width) */}
           <div className="lg:col-span-2">
-            <ChartCard
-              title="Hourly Active Users (24h)"
-              loading={hourly.loading}
-              error={hourly.error}
-              height={180}
-            >
+            <ChartCard title="Hourly Active Users (24h)" loading={hourly.loading} error={hourly.error} height={180}>
               <AreaChart data={hourly.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradHourly" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                    <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}    />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -458,7 +390,6 @@ export default function DashboardPage() {
             </ChartCard>
           </div>
 
-          {/* Top 5 Posts — table (3/5 width) */}
           <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
             <SectionHeader title="Top Posts" />
             {topPosts.loading ? (
@@ -521,4 +452,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

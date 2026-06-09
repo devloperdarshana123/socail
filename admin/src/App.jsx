@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Toaster } from "sonner";
 import { fetchAdminMe, forceLogout } from "./lib/redux/AdminauthSlice";
+import { setAdminTokenExpiry } from "./services/api";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 
 // ── Layouts ──
@@ -72,11 +73,24 @@ function AppLoader() {
 const App = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const expiresAt   = useSelector((s) => s.adminAuth.expiresAt);
+
+  // useEffect(() => {
+  //   dispatch(fetchAdminMe());
+  // }, [dispatch]);
 
   useEffect(() => {
-    dispatch(fetchAdminMe());
-  }, [dispatch]);
-
+  dispatch(fetchAdminMe()).then((result) => {
+    if (fetchAdminMe.fulfilled.match(result)) {
+      setAdminTokenExpiry(null); // page reload pe conservative estimate
+    }
+  });
+}, [dispatch]);
+useEffect(() => {
+  if (expiresAt) {
+    setAdminTokenExpiry(expiresAt);  // ← YE ADD KARO
+  }
+}, [expiresAt]);
   useEffect(() => {
     const handleForceLogout = () => {
       dispatch(forceLogout());
@@ -86,13 +100,6 @@ const App = () => {
     return () => window.removeEventListener("admin:logout", handleForceLogout);
   }, [dispatch, navigate]);
 
-  useEffect(() => {
-    const handleTokenRefreshed = (e) => {
-      if (e.detail?.token) localStorage.setItem("adminAccessToken", e.detail.token);
-    };
-    window.addEventListener("admin:tokenRefreshed", handleTokenRefreshed);
-    return () => window.removeEventListener("admin:tokenRefreshed", handleTokenRefreshed);
-  }, []);
 
   return (
     <>

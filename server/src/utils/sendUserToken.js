@@ -8,6 +8,7 @@ import {
 } from "./authCookies.js";
 
 const ACCESS_TTL_MS          = 15 * 60 * 1000;
+
 const REFRESH_TTL_MS         = 7  * 24 * 60 * 60 * 1000;
 const REFRESH_TTL_REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -63,6 +64,7 @@ export const sendUserToken = async (user, statusCode, res, options = {}, next) =
         message,
         data     : safeUser,
         nextRoute: sanitizeRoute(nextRoute),
+        expiresAt: new Date(Date.now() + ACCESS_TTL_MS).toISOString(),
         ...(process.env.NODE_ENV === "development" && { accessToken }),
       });
 
