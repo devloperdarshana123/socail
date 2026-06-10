@@ -21,7 +21,7 @@ mongoose.connection.on("error", (err) =>
 const startServer = async () => {
   try {
     // 1. MongoDB
-    await mongoose.connect(process.env.MONGODB_URI);
+    await mongoose.connect(process.env.MONGO_URI);
     logger.info("✅ MongoDB connected");
 
     // 2. Redis — env loaded hone ke baad
