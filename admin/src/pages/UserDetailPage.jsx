@@ -1,6 +1,6 @@
 
 
-// import { useEffect, useState, useCallback } from "react";
+// import { useEffect, useState, useCallback, useRef } from "react";
 // import { useParams, useNavigate } from "react-router-dom";
 // import { useDispatch, useSelector } from "react-redux";
 // import { UserDetailSkeleton } from "../components/skeletons";
@@ -17,6 +17,7 @@
 //   selectActionLoading,
 // } from "../lib/redux/usersSlice";
 // import { Calendar, MapPin, Tag, KeyRound } from "lucide-react";
+
 // // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // function formatDate(iso) {
@@ -87,7 +88,7 @@
 //   );
 // }
 
-// // ── Post thumbnail — uses same Cloudinary trick as client app ─────────────────
+// // ── Post thumbnail ────────────────────────────────────────────────────────────
 // function resolveThumb(post) {
 //   const media = post?.media?.[0];
 //   if (!media?.url) return null;
@@ -108,17 +109,27 @@
 //   );
 // }
 
+// // FIX: useRef instead of document.getElementById (React anti-pattern fixed)
 // function PostTile({ post, onDelete, onClick }) {
 //   const [confirmDel, setConfirmDel] = useState(false);
+//   const reasonRef = useRef(""); // FIX: ref instead of DOM query
 //   const isText = post.type === "text";
 //   const isVid  = post.type === "reel" || post.media?.[0]?.resourceType === "video";
 //   const thumb  = resolveThumb(post);
 
+//   const handleConfirmDelete = useCallback((e) => {
+//     e.stopPropagation();
+//     const reason = reasonRef.current?.trim() || "Violation of community guidelines";
+//     onDelete(post._id, reason);
+//     setConfirmDel(false);
+//   }, [onDelete, post._id]);
+
 //   return (
-//     <div className="relative group rounded-xl overflow-hidden border border-slate-100 bg-slate-50"
+//     <div
+//       className="relative group rounded-xl overflow-hidden border border-slate-100 bg-slate-50"
 //       style={{ paddingBottom: "100%", height: 0 }}
-//       onClick={onClick} 
-//       >
+//       onClick={onClick}
+//     >
 //       <div className="absolute inset-0">
 
 //         {/* Content */}
@@ -142,7 +153,8 @@
 //         ) : (
 //           <div className="w-full h-full flex items-center justify-center bg-slate-200">
 //             <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+//                 d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
 //             </svg>
 //           </div>
 //         )}
@@ -183,43 +195,38 @@
 
 //       {/* Delete confirm overlay */}
 //       {confirmDel && (
-//   <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center
-//     justify-center gap-3 p-3 rounded-xl">
-//     <p className="text-xs font-bold text-slate-800 text-center">Delete this post?</p>
-//     <input
-//       type="text"
-//       id={`udp-reason-${post._id}`}
-//       placeholder="Reason (optional)"
-//       onClick={(e) => e.stopPropagation()}
-//       onKeyDown={(e) => e.stopPropagation()}
-//       className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200
-//         text-xs text-slate-700 placeholder-slate-400
-//         focus:outline-none focus:border-red-300 transition-colors"
-//     />
-//     <div className="flex gap-2 w-full">
-//       <button
-//         onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }}
-//         className="flex-1 py-1.5 rounded-lg border border-slate-200 text-xs
-//           font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-//       >
-//         Cancel
-//       </button>
-//       <button
-//         onClick={(e) => {
-//           e.stopPropagation();
-//           const input = document.getElementById(`udp-reason-${post._id}`);
-//           const reason = input?.value?.trim() || "Violation of community guidelines";
-//           onDelete(post._id, reason);
-//           setConfirmDel(false);
-//         }}
-//         className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600
-//           text-white text-xs font-bold transition-colors"
-//       >
-//         Confirm
-//       </button>
-//     </div>
-//   </div>
-// )}
+//         <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center
+//           justify-center gap-3 p-3 rounded-xl">
+//           <p className="text-xs font-bold text-slate-800 text-center">Delete this post?</p>
+//           {/* FIX: onChange updates ref value, no DOM query needed */}
+//           <input
+//             type="text"
+//             placeholder="Reason (optional)"
+//             onClick={(e) => e.stopPropagation()}
+//             onKeyDown={(e) => e.stopPropagation()}
+//             onChange={(e) => { reasonRef.current = e.target.value; }}
+//             className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200
+//               text-xs text-slate-700 placeholder-slate-400
+//               focus:outline-none focus:border-red-300 transition-colors"
+//           />
+//           <div className="flex gap-2 w-full">
+//             <button
+//               onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }}
+//               className="flex-1 py-1.5 rounded-lg border border-slate-200 text-xs
+//                 font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+//             >
+//               Cancel
+//             </button>
+//             <button
+//               onClick={handleConfirmDelete}
+//               className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600
+//                 text-white text-xs font-bold transition-colors"
+//             >
+//               Confirm
+//             </button>
+//           </div>
+//         </div>
+//       )}
 //     </div>
 //   );
 // }
@@ -258,12 +265,17 @@
 //             className="flex-1 py-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-600 hover:bg-slate-200">
 //             Cancel
 //           </button>
-//           <button onClick={() => onConfirm({ status, reason })} disabled={!status || loading}
-//             className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
-//             {loading && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-//               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-//               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-//             </svg>}
+//           <button
+//             onClick={() => onConfirm({ status, reason })}
+//             disabled={!status || loading}
+//             className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+//           >
+//             {loading && (
+//               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+//                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+//                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+//               </svg>
+//             )}
 //             Update
 //           </button>
 //         </div>
@@ -272,73 +284,123 @@
 //   );
 // }
 
+// // ── Error State ───────────────────────────────────────────────────────────────
+// // FIX: Added error state component so infinite skeleton doesn't show on fetch failure
+// function ErrorState({ onRetry }) {
+//   return (
+//     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+//       <div className="text-center">
+//         <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+//           <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+//               d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+//           </svg>
+//         </div>
+//         <p className="text-sm font-semibold text-slate-700 mb-1">Failed to load user</p>
+//         <p className="text-xs text-slate-400 mb-4">Something went wrong while fetching user details.</p>
+//         <button
+//           onClick={onRetry}
+//           className="px-4 py-2 rounded-xl bg-violet-600 text-white text-xs font-semibold hover:bg-violet-500 transition-colors"
+//         >
+//           Try Again
+//         </button>
+//       </div>
+//     </div>
+//   );
+// }
+
 // // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 // export default function UserDetailPage() {
-//   const { id }     = useParams();
-//   const navigate   = useNavigate();
-//   const dispatch   = useDispatch();
+//   const { id }   = useParams();
+//   const navigate = useNavigate();
+//   const dispatch = useDispatch();
 
 //   const detail        = useSelector(selectUserDetail);
 //   const detailLoading = useSelector(selectDetailLoading);
 //   const postsLoading  = useSelector(selectPostsLoading);
 //   const actionLoading = useSelector(selectActionLoading);
 
-//   const [toast,       setToast]       = useState(null);
-//   const [statusModal, setStatusModal] = useState(false);
-//   const [postsPage,   setPostsPage]   = useState(1);
+//   const [toast,        setToast]        = useState(null);
+//   const [statusModal,  setStatusModal]  = useState(false);
+//   const [postsPage,    setPostsPage]    = useState(1);
 //   const [selectedPost, setSelectedPost] = useState(null);
+//   const [fetchError,   setFetchError]   = useState(false); // FIX: track fetch error
+
+//   // FIX: useRef for toast timer — prevents memory leak on unmount
+//   const toastTimer = useRef(null);
 
 //   const showToast = useCallback((msg, type = "success") => {
+//     if (toastTimer.current) clearTimeout(toastTimer.current);
 //     setToast({ msg, type });
-//     setTimeout(() => setToast(null), 3000);
+//     toastTimer.current = setTimeout(() => setToast(null), 3000);
 //   }, []);
 
-//   // ── Fetch user detail on mount ──────────────────────────────
+//   // FIX: cleanup timer on unmount
 //   useEffect(() => {
-//     dispatch(fetchUserById(id));
+//     return () => {
+//       if (toastTimer.current) clearTimeout(toastTimer.current);
+//     };
+//   }, []);
+
+//   // ── Fetch user detail ────────────────────────────────────────
+//   const loadUser = useCallback(async () => {
+//     setFetchError(false);
+//     const res = await dispatch(fetchUserById(id));
+//     if (res.error) setFetchError(true);
 //   }, [id, dispatch]);
 
-//   // ── Fetch posts when page changes ───────────────────────────
+//   useEffect(() => {
+//     loadUser();
+//   }, [loadUser]);
+
+//   // ── Fetch posts when page changes ────────────────────────────
 //   useEffect(() => {
 //     dispatch(fetchUserPosts({ userId: id, page: postsPage, limit: 18 }));
 //   }, [id, postsPage, dispatch]);
 
-//   // ── Handlers ────────────────────────────────────────────────
-//   const handleStatusConfirm = async ({ status, reason }) => {
+//   // ── Handlers ─────────────────────────────────────────────────
+//   const handleStatusConfirm = useCallback(async ({ status, reason }) => {
 //     const res = await dispatch(updateUserStatus({ userId: id, status, reason }));
 //     if (!res.error) {
 //       showToast(`Status updated to ${status}`);
 //       setStatusModal(false);
-//       dispatch(fetchUserById(id));   // refresh
+//       dispatch(fetchUserById(id));
+//     } else {
+//       showToast("Failed to update status", "error");
 //     }
-//   };
+//   }, [dispatch, id, showToast]);
 
-//   const handleToggleVerify = async () => {
+//   const handleToggleVerify = useCallback(async () => {
 //     const res = await dispatch(toggleVerifiedBadge(id));
 //     if (!res.error) showToast("Verified badge updated");
-//   };
+//     else showToast("Failed to update badge", "error");
+//   }, [dispatch, id, showToast]);
 
-//  // ✅ Naya — reason PostTile se aayega
-// const handleDeletePost = async (postId, reason) => {
-//   const res = await dispatch(adminDeletePost({ 
-//     postId, 
-//     reason: reason || "Violation of community guidelines" 
-//   }));
-//   if (!res.error) showToast("Post deleted");
-//   else showToast("Failed to delete post", "error");
-// };
+//   const handleDeletePost = useCallback(async (postId, reason) => {
+//     const res = await dispatch(adminDeletePost({
+//       postId,
+//       reason: reason || "Violation of community guidelines",
+//     }));
+//     if (!res.error) showToast("Post deleted");
+//     else showToast("Failed to delete post", "error");
+//   }, [dispatch, showToast]);
 
-//   // ── Loading state ────────────────────────────────────────────
-//  if (detailLoading || !detail) return <UserDetailSkeleton />;
+//   // ── FIX: proper loading / error / empty guards ───────────────
+//   if (detailLoading) return <UserDetailSkeleton />;
+//   if (fetchError)    return <ErrorState onRetry={loadUser} />;
+//   if (!detail)       return <UserDetailSkeleton />;  // still hydrating from cache
 
 //   const { user, posts = [], reportStats = {}, postsPagination = {} } = detail;
 //   const totalPostPages = postsPagination.totalPages ?? 1;
 
+//   // FIX: actionLoading is likely boolean — don't compare to id string
+//   const isActioning = Boolean(actionLoading);
+
 //   return (
 //     <>
-//       {/* Toast */}
+//       {/* Toast — FIX: z-[100] instead of invalid z-100 */}
 //       {toast && (
-//         <div className={`fixed top-5 right-5 z-100 px-4 py-3 rounded-xl text-sm
+//         <div className={`fixed top-5 right-5 z-[100] px-4 py-3 rounded-xl text-sm
 //           font-semibold shadow-lg border ${
 //             toast.type === "error"
 //               ? "bg-red-50 border-red-200 text-red-700"
@@ -348,16 +410,16 @@
 //         </div>
 //       )}
 
-//   <PostDetailModal
-//   post={selectedPost}
-//   onClose={() => setSelectedPost(null)}
-//   onDelete={async (postId, reason) => {
-//     await handleDeletePost(postId, reason);
-//     setSelectedPost(null);
-//   }}
-//   deleteLoading={actionLoading}
-//   hideAuthorNav={true}
-// />
+//       <PostDetailModal
+//         post={selectedPost}
+//         onClose={() => setSelectedPost(null)}
+//         onDelete={async (postId, reason) => {
+//           await handleDeletePost(postId, reason);
+//           setSelectedPost(null);
+//         }}
+//         deleteLoading={isActioning}
+//         hideAuthorNav={true}
+//       />
 
 //       {/* Status Modal */}
 //       {statusModal && (
@@ -365,48 +427,35 @@
 //           user={user}
 //           onClose={() => setStatusModal(false)}
 //           onConfirm={handleStatusConfirm}
-//           loading={actionLoading === id}
+//           loading={isActioning} // FIX: was actionLoading === id (always false)
 //         />
 //       )}
 
 //       <div className="min-h-screen bg-slate-50">
 //         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
 
-//           {/* Back button */}
-//           {/* <button
-//             onClick={() => navigate(-1)}
-//             className="flex items-center gap-2 text-sm font-medium text-slate-500
-//               hover:text-slate-800 mb-6 transition-colors"
-//           >
-//             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+//           {/* Breadcrumb */}
+//           <nav className="flex items-center gap-1.5 text-xs mb-6">
+//             <button
+//               onClick={() => navigate("/users")}
+//               className="text-slate-400 hover:text-violet-600 font-medium transition-colors"
+//             >
+//               Users
+//             </button>
+//             <svg className="w-3 h-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
 //             </svg>
-//             Back to Users
-//           </button> */}
+//             <span className="text-slate-700 font-semibold truncate max-w-48">
+//               {user?.fullName || user?.username || "..."}
+//             </span>
+//           </nav>
 
-
-// <nav className="flex items-center gap-1.5 text-xs mb-6">
-//   <button
-//     onClick={() => navigate("/users")}
-//     className="text-slate-400 hover:text-violet-600 font-medium transition-colors"
-//   >
-//     Users
-//   </button>
-//   <svg className="w-3 h-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-//   </svg>
-//   <span className="text-slate-700 font-semibold truncate max-w-48">
-//     {user?.fullName || user?.username || "..."}
-//   </span>
-// </nav>
 //           {/* ── User Profile Card ── */}
 //           <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 shadow-sm">
 //             <div className="flex flex-col sm:flex-row gap-5">
 
-//               {/* Avatar */}
 //               <Avatar user={user} size={72} />
 
-//               {/* Info */}
 //               <div className="flex-1 min-w-0">
 //                 <div className="flex flex-wrap items-center gap-2 mb-1">
 //                   <h1 className="text-xl font-bold text-slate-800">{user.fullName}</h1>
@@ -424,30 +473,30 @@
 //                 <p className="text-sm text-slate-400 mb-1">@{user.username}</p>
 //                 <p className="text-sm text-slate-500 mb-3">{user.email}</p>
 
-//              <div className="flex flex-wrap gap-4 text-xs text-slate-400">
-//   <span className="flex items-center gap-1">
-//     <Calendar size={13} className="text-slate-400" />
-//     Joined {formatDate(user.createdAt)}
-//   </span>
-//   {user.location?.city && (
-//     <span className="flex items-center gap-1">
-//       <MapPin size={13} className="text-slate-400" />
-//       {user.location.city}
-//     </span>
-//   )}
-//   {user.businessCategory && (
-//     <span className="flex items-center gap-1">
-//       <Tag size={13} className="text-slate-400" />
-//       {user.businessCategory}
-//     </span>
-//   )}
-//  {user.authProvider && (
-//     <span className="flex items-center gap-1">
-//       <KeyRound size={13} className="text-slate-400" />
-//       {user.authProvider}
-//     </span>
-//   )}
-// </div>
+//                 <div className="flex flex-wrap gap-4 text-xs text-slate-400">
+//                   <span className="flex items-center gap-1">
+//                     <Calendar size={13} className="text-slate-400" />
+//                     Joined {formatDate(user.createdAt)}
+//                   </span>
+//                   {user.location?.city && (
+//                     <span className="flex items-center gap-1">
+//                       <MapPin size={13} className="text-slate-400" />
+//                       {user.location.city}
+//                     </span>
+//                   )}
+//                   {user.businessCategory && (
+//                     <span className="flex items-center gap-1">
+//                       <Tag size={13} className="text-slate-400" />
+//                       {user.businessCategory}
+//                     </span>
+//                   )}
+//                   {user.authProvider && (
+//                     <span className="flex items-center gap-1">
+//                       <KeyRound size={13} className="text-slate-400" />
+//                       {user.authProvider}
+//                     </span>
+//                   )}
+//                 </div>
 //               </div>
 
 //               {/* Actions */}
@@ -461,7 +510,7 @@
 //                 </button>
 //                 <button
 //                   onClick={handleToggleVerify}
-//                   disabled={actionLoading === id}
+//                   disabled={isActioning} // FIX: was actionLoading === id (always false)
 //                   className="px-4 py-2 rounded-xl text-xs font-semibold bg-sky-50
 //                     hover:bg-sky-100 text-sky-700 border border-sky-200 transition-colors
 //                     disabled:opacity-40"
@@ -473,18 +522,17 @@
 
 //             {/* Stats row */}
 //             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5">
-//               <StatBox label="Posts"     value={user.postsCount}     color="text-violet-600" />
-//               <StatBox label="Followers" value={user.followersCount} color="text-sky-600" />
-//               <StatBox label="Following" value={user.followingCount} color="text-slate-800" />
-//               <StatBox label="Reports"   value={reportStats.total}   color="text-amber-600" />
-//               <StatBox label="Pending Reports" value={reportStats.pending} color="text-red-600" />
+//               <StatBox label="Posts"           value={user.postsCount}      color="text-violet-600" />
+//               <StatBox label="Followers"       value={user.followersCount}  color="text-sky-600" />
+//               <StatBox label="Following"       value={user.followingCount}  color="text-slate-800" />
+//               <StatBox label="Reports"         value={reportStats.total}    color="text-amber-600" />
+//               <StatBox label="Pending Reports" value={reportStats.pending}  color="text-red-600" />
 //             </div>
 //           </div>
 
 //           {/* ── Posts Section ── */}
 //           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
 
-//             {/* Section header */}
 //             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
 //               <div>
 //                 <h2 className="text-base font-bold text-slate-800">Posts</h2>
@@ -513,7 +561,6 @@
 //                 </div>
 //               ) : (
 //                 <>
-//                   {/* Grid */}
 //                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
 //                     {postsLoading
 //                       ? [...Array(12)].map((_, i) => (
@@ -533,7 +580,6 @@
 //                     }
 //                   </div>
 
-//                   {/* Pagination */}
 //                   {totalPostPages > 1 && (
 //                     <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
 //                       <p className="text-xs text-slate-400">
@@ -573,9 +619,7 @@
 // }
 
 
-
-
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, memo, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { UserDetailSkeleton } from "../components/skeletons";
@@ -593,7 +637,29 @@ import {
 } from "../lib/redux/usersSlice";
 import { Calendar, MapPin, Tag, KeyRound } from "lucide-react";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─── Constants (module-level — never recreated) ───────────────────────────────
+
+// FIX: was inside Avatar component, rebuilt every render
+const AVATAR_COLORS = [
+  "bg-pink-500",
+  "bg-violet-500",
+  "bg-cyan-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+];
+
+// FIX: stable skeleton key array — no inline [...Array(N)] allocations in render
+const SKELETON_POST_KEYS = Array.from({ length: 12 }, (_, i) => i);
+
+const STATUS_BADGE_MAP = {
+  active:      "bg-emerald-50 text-emerald-700 border-emerald-200",
+  suspended:   "bg-amber-50 text-amber-700 border-amber-200",
+  banned:      "bg-red-50 text-red-700 border-red-200",
+  pending:     "bg-sky-50 text-sky-700 border-sky-200",
+  deactivated: "bg-slate-100 text-slate-600 border-slate-200",
+};
+
+// ─── Pure utilities ────────────────────────────────────────────────────────────
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -608,21 +674,53 @@ function fmtCount(n = 0) {
   return String(n);
 }
 
+// FIX: guard against empty strings from double-spaces in name
 function getInitials(name = "") {
-  return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  return name
+    .split(" ")
+    .map((w) => w[0] ?? "")   // w[0] is undefined on "", fallback to ""
+    .filter(Boolean)
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// FIX: resolve once, return early — previous version re-evaluated src twice
+function resolveThumb(post) {
+  const media = post?.media?.[0];
+  if (!media?.url) return null;
 
-function Avatar({ user, size = 56 }) {
-  const colors = ["bg-pink-500","bg-violet-500","bg-cyan-500","bg-amber-500","bg-emerald-500"];
-  const color  = colors[(user?.username?.charCodeAt(0) || 0) % colors.length];
-  const s      = `${size}px`;
+  const isVid =
+    post.type === "reel" ||
+    media.resourceType === "video" ||
+    /\.(mp4|mov|webm|avi)$/i.test(media.url);
 
-  if (user?.profilePicture || user?.avatar?.url) {
+  if (!isVid) return media.url;
+
+  if (media.thumbnailUrl) return media.thumbnailUrl;
+
+  // Cloudinary video → JPEG thumbnail transform
+  const cloudinaryThumb = media.url
+    .replace("/upload/", "/upload/so_0,w_400,h_400,c_fill,f_jpg,q_auto/")
+    .replace(/\.(mp4|mov|webm|avi)$/i, ".jpg");
+
+  // Only use the transformed URL if it actually changed (i.e. it's a Cloudinary URL)
+  return cloudinaryThumb !== media.url ? cloudinaryThumb : media.url;
+}
+
+// ─── Sub-components (all memoized) ────────────────────────────────────────────
+
+const Avatar = memo(function Avatar({ user, size = 56 }) {
+  // FIX: AVATAR_COLORS is module-level; color derived once per render, not per array alloc
+  const color = AVATAR_COLORS[(user?.username?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length];
+  const s     = `${size}px`;
+  // FIX: resolve src once — original checked condition with || then re-evaluated in src={}
+  const src   = user?.profilePicture || user?.avatar?.url;
+
+  if (src) {
     return (
       <img
-        src={user.profilePicture || user.avatar?.url}
+        src={src}
         alt={user.username}
         style={{ width: s, height: s }}
         className="rounded-full object-cover ring-4 ring-white shadow-md shrink-0"
@@ -637,61 +735,38 @@ function Avatar({ user, size = 56 }) {
       {getInitials(user?.fullName || user?.username || "?")}
     </div>
   );
-}
+});
 
-function StatusBadge({ status }) {
-  const map = {
-    active:      "bg-emerald-50 text-emerald-700 border-emerald-200",
-    suspended:   "bg-amber-50 text-amber-700 border-amber-200",
-    banned:      "bg-red-50 text-red-700 border-red-200",
-    pending:     "bg-sky-50 text-sky-700 border-sky-200",
-    deactivated: "bg-slate-100 text-slate-600 border-slate-200",
-  };
+const StatusBadge = memo(function StatusBadge({ status }) {
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${map[status] ?? map.active}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border
+        ${STATUS_BADGE_MAP[status] ?? STATUS_BADGE_MAP.active}`}
+    >
       {status}
     </span>
   );
-}
+});
 
-function StatBox({ label, value, color = "text-slate-800" }) {
+const StatBox = memo(function StatBox({ label, value, color = "text-slate-800" }) {
   return (
     <div className="bg-slate-50 rounded-xl px-4 py-3 text-center border border-slate-100">
       <p className={`text-xl font-bold ${color}`}>{fmtCount(value ?? 0)}</p>
       <p className="text-xs text-slate-400 font-medium mt-0.5">{label}</p>
     </div>
   );
-}
+});
 
-// ── Post thumbnail ────────────────────────────────────────────────────────────
-function resolveThumb(post) {
-  const media = post?.media?.[0];
-  if (!media?.url) return null;
+// ─── Post thumbnail ────────────────────────────────────────────────────────────
 
-  const isVid =
-    post.type === "reel" ||
-    media.resourceType === "video" ||
-    /\.(mp4|mov|webm|avi)$/i.test(media.url);
-
-  if (!isVid) return media.url;
-
-  return (
-    media.thumbnailUrl ||
-    media.url
-      .replace("/upload/", "/upload/so_0,w_400,h_400,c_fill,f_jpg,q_auto/")
-      .replace(/\.(mp4|mov|webm|avi)$/i, ".jpg") ||
-    media.url
-  );
-}
-
-// FIX: useRef instead of document.getElementById (React anti-pattern fixed)
-function PostTile({ post, onDelete, onClick }) {
+const PostTile = memo(function PostTile({ post, onDelete, onClick }) {
   const [confirmDel, setConfirmDel] = useState(false);
-  const reasonRef = useRef(""); // FIX: ref instead of DOM query
+  const reasonRef = useRef("");
   const isText = post.type === "text";
   const isVid  = post.type === "reel" || post.media?.[0]?.resourceType === "video";
   const thumb  = resolveThumb(post);
 
+  // FIX: onDelete is stable (useCallback in parent) so this dep is safe
   const handleConfirmDelete = useCallback((e) => {
     e.stopPropagation();
     const reason = reasonRef.current?.trim() || "Violation of community guidelines";
@@ -707,10 +782,11 @@ function PostTile({ post, onDelete, onClick }) {
     >
       <div className="absolute inset-0">
 
-        {/* Content */}
         {isText ? (
-          <div className="w-full h-full p-3 flex items-start"
-            style={{ background: "linear-gradient(135deg, #f5ece0, #fdf9f5)" }}>
+          <div
+            className="w-full h-full p-3 flex items-start"
+            style={{ background: "linear-gradient(135deg, #f5ece0, #fdf9f5)" }}
+          >
             <p className="text-xs text-slate-700 leading-relaxed line-clamp-5">
               {post.caption || "—"}
             </p>
@@ -721,8 +797,10 @@ function PostTile({ post, onDelete, onClick }) {
             alt=""
             className="w-full h-full object-cover"
             onError={(e) => {
-              e.target.style.display = "none";
-              e.target.parentNode.style.background = "#e2e8f0";
+              e.currentTarget.style.display = "none";
+              if (e.currentTarget.parentNode) {
+                (e.currentTarget.parentNode).style.background = "#e2e8f0";
+              }
             }}
           />
         ) : (
@@ -734,7 +812,6 @@ function PostTile({ post, onDelete, onClick }) {
           </div>
         )}
 
-        {/* Video badge */}
         {isVid && (
           <div className="absolute top-1.5 right-1.5 bg-black/50 rounded-full p-1">
             <svg className="w-3 h-3 text-white fill-white" viewBox="0 0 24 24">
@@ -743,10 +820,10 @@ function PostTile({ post, onDelete, onClick }) {
           </div>
         )}
 
-        {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50
           transition-all duration-200 flex flex-col items-center justify-center gap-2
-          opacity-0 group-hover:opacity-100">
+          opacity-0 group-hover:opacity-100"
+        >
           <div className="flex gap-3 text-white text-xs font-semibold">
             <span>❤ {post.likesCount ?? 0}</span>
             <span>💬 {post.commentsCount ?? 0}</span>
@@ -754,7 +831,9 @@ function PostTile({ post, onDelete, onClick }) {
           <p className="text-white text-[10px] px-2 text-center opacity-70">
             {formatDate(post.createdAt)}
           </p>
+          {/* FIX: type="button" on all buttons */}
           <button
+            type="button"
             onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
             className="mt-1 flex items-center gap-1 bg-red-500 hover:bg-red-600
               text-white text-xs font-bold px-3 py-1.5 rounded-full transition-colors"
@@ -768,12 +847,11 @@ function PostTile({ post, onDelete, onClick }) {
         </div>
       </div>
 
-      {/* Delete confirm overlay */}
       {confirmDel && (
         <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center
-          justify-center gap-3 p-3 rounded-xl">
+          justify-center gap-3 p-3 rounded-xl"
+        >
           <p className="text-xs font-bold text-slate-800 text-center">Delete this post?</p>
-          {/* FIX: onChange updates ref value, no DOM query needed */}
           <input
             type="text"
             placeholder="Reason (optional)"
@@ -786,6 +864,7 @@ function PostTile({ post, onDelete, onClick }) {
           />
           <div className="flex gap-2 w-full">
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }}
               className="flex-1 py-1.5 rounded-lg border border-slate-200 text-xs
                 font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
@@ -793,6 +872,7 @@ function PostTile({ post, onDelete, onClick }) {
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleConfirmDelete}
               className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600
                 text-white text-xs font-bold transition-colors"
@@ -804,46 +884,68 @@ function PostTile({ post, onDelete, onClick }) {
       )}
     </div>
   );
-}
+});
 
-// ── Status change modal ───────────────────────────────────────────────────────
-function StatusModal({ user, onClose, onConfirm, loading }) {
+// ─── Status change modal ───────────────────────────────────────────────────────
+
+const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loading }) {
   const [status, setStatus] = useState("");
   const [reason, setReason] = useState("");
-  const opts = ["active","suspended","banned","deactivated"]
-    .filter(s => s !== user?.status);
+
+  // FIX: useMemo — opts was rebuilt every render
+  const opts = useMemo(
+    () => ["active", "suspended", "banned", "deactivated"].filter((s) => s !== user?.status),
+    [user?.status],
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose}/>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
         <h3 className="text-sm font-bold text-slate-800 mb-1">Change Account Status</h3>
         <p className="text-xs text-slate-400 mb-4">@{user?.username}</p>
         <div className="space-y-2 mb-4">
-          {opts.map(opt => (
-            <label key={opt}
+          {opts.map((opt) => (
+            <label
+              key={opt}
               className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors
-                ${status === opt ? "border-violet-400 bg-violet-50" : "border-slate-200 hover:border-slate-300"}`}>
-              <input type="radio" name="status" value={opt}
-                checked={status === opt} onChange={() => setStatus(opt)}
-                className="accent-violet-600"/>
+                ${status === opt ? "border-violet-400 bg-violet-50" : "border-slate-200 hover:border-slate-300"}`}
+            >
+              <input
+                type="radio"
+                name="status"
+                value={opt}
+                checked={status === opt}
+                onChange={() => setStatus(opt)}
+                className="accent-violet-600"
+              />
               <span className="text-sm font-semibold capitalize text-slate-700">{opt}</span>
             </label>
           ))}
         </div>
-        <textarea value={reason} onChange={e => setReason(e.target.value)}
-          placeholder="Reason (optional)" rows={2}
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Reason (optional)"
+          rows={2}
           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm
-            text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400 mb-4"/>
+            text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400 mb-4"
+        />
         <div className="flex gap-3">
-          <button onClick={onClose}
-            className="flex-1 py-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-600 hover:bg-slate-200">
+          {/* FIX: type="button" on all buttons */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+          >
             Cancel
           </button>
           <button
+            type="button"
             onClick={() => onConfirm({ status, reason })}
             disabled={!status || loading}
-            className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+            className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm
+              font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
           >
             {loading && (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -857,11 +959,11 @@ function StatusModal({ user, onClose, onConfirm, loading }) {
       </div>
     </div>
   );
-}
+});
 
-// ── Error State ───────────────────────────────────────────────────────────────
-// FIX: Added error state component so infinite skeleton doesn't show on fetch failure
-function ErrorState({ onRetry }) {
+// ─── Error state ──────────────────────────────────────────────────────────────
+
+const ErrorState = memo(function ErrorState({ onRetry }) {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
       <div className="text-center">
@@ -874,6 +976,7 @@ function ErrorState({ onRetry }) {
         <p className="text-sm font-semibold text-slate-700 mb-1">Failed to load user</p>
         <p className="text-xs text-slate-400 mb-4">Something went wrong while fetching user details.</p>
         <button
+          type="button"
           onClick={onRetry}
           className="px-4 py-2 rounded-xl bg-violet-600 text-white text-xs font-semibold hover:bg-violet-500 transition-colors"
         >
@@ -882,9 +985,10 @@ function ErrorState({ onRetry }) {
       </div>
     </div>
   );
-}
+});
 
-// ── MAIN PAGE ─────────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function UserDetailPage() {
   const { id }   = useParams();
   const navigate = useNavigate();
@@ -899,9 +1003,9 @@ export default function UserDetailPage() {
   const [statusModal,  setStatusModal]  = useState(false);
   const [postsPage,    setPostsPage]    = useState(1);
   const [selectedPost, setSelectedPost] = useState(null);
-  const [fetchError,   setFetchError]   = useState(false); // FIX: track fetch error
+  const [fetchError,   setFetchError]   = useState(false);
 
-  // FIX: useRef for toast timer — prevents memory leak on unmount
+  // FIX: ref for timer — prevents memory leak when component unmounts mid-countdown
   const toastTimer = useRef(null);
 
   const showToast = useCallback((msg, type = "success") => {
@@ -910,18 +1014,18 @@ export default function UserDetailPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // FIX: cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-    };
+  // Cleanup timer on unmount
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
   }, []);
 
   // ── Fetch user detail ────────────────────────────────────────
+
   const loadUser = useCallback(async () => {
     setFetchError(false);
+    // FIX: use RTK's rejected action check — res.meta.requestStatus is the correct field
     const res = await dispatch(fetchUserById(id));
-    if (res.error) setFetchError(true);
+    if (res.meta?.requestStatus === "rejected") setFetchError(true);
   }, [id, dispatch]);
 
   useEffect(() => {
@@ -929,14 +1033,16 @@ export default function UserDetailPage() {
   }, [loadUser]);
 
   // ── Fetch posts when page changes ────────────────────────────
+
   useEffect(() => {
     dispatch(fetchUserPosts({ userId: id, page: postsPage, limit: 18 }));
   }, [id, postsPage, dispatch]);
 
-  // ── Handlers ─────────────────────────────────────────────────
+  // ── Action handlers ──────────────────────────────────────────
+
   const handleStatusConfirm = useCallback(async ({ status, reason }) => {
     const res = await dispatch(updateUserStatus({ userId: id, status, reason }));
-    if (!res.error) {
+    if (res.meta?.requestStatus !== "rejected") {
       showToast(`Status updated to ${status}`);
       setStatusModal(false);
       dispatch(fetchUserById(id));
@@ -947,62 +1053,72 @@ export default function UserDetailPage() {
 
   const handleToggleVerify = useCallback(async () => {
     const res = await dispatch(toggleVerifiedBadge(id));
-    if (!res.error) showToast("Verified badge updated");
+    if (res.meta?.requestStatus !== "rejected") showToast("Verified badge updated");
     else showToast("Failed to update badge", "error");
   }, [dispatch, id, showToast]);
 
+  // FIX: stable reference — PostTile's useCallback depends on this
   const handleDeletePost = useCallback(async (postId, reason) => {
     const res = await dispatch(adminDeletePost({
       postId,
       reason: reason || "Violation of community guidelines",
     }));
-    if (!res.error) showToast("Post deleted");
+    if (res.meta?.requestStatus !== "rejected") showToast("Post deleted");
     else showToast("Failed to delete post", "error");
   }, [dispatch, showToast]);
 
-  // ── FIX: proper loading / error / empty guards ───────────────
+  // FIX: stable close handler for PostDetailModal — avoids inline arrow on every render
+  const handleClosePost = useCallback(() => setSelectedPost(null), []);
+
+  const handleModalDelete = useCallback(async (postId, reason) => {
+    await handleDeletePost(postId, reason);
+    setSelectedPost(null);
+  }, [handleDeletePost]);
+
+  // ── FIX: actionLoading is boolean — cast once, don't compare to id string ──
+  const isActioning = Boolean(actionLoading);
+
+  // ── Guards ───────────────────────────────────────────────────
   if (detailLoading) return <UserDetailSkeleton />;
   if (fetchError)    return <ErrorState onRetry={loadUser} />;
-  if (!detail)       return <UserDetailSkeleton />;  // still hydrating from cache
+  if (!detail)       return <UserDetailSkeleton />;
 
+  // FIX: guard user explicitly — if API returns detail without user, render below would throw
   const { user, posts = [], reportStats = {}, postsPagination = {} } = detail;
-  const totalPostPages = postsPagination.totalPages ?? 1;
+  if (!user) return <ErrorState onRetry={loadUser} />;
 
-  // FIX: actionLoading is likely boolean — don't compare to id string
-  const isActioning = Boolean(actionLoading);
+  const totalPostPages = postsPagination.totalPages ?? 1;
 
   return (
     <>
-      {/* Toast — FIX: z-[100] instead of invalid z-100 */}
+      {/* FIX: z-[100] — z-100 is not a valid Tailwind class */}
       {toast && (
-        <div className={`fixed top-5 right-5 z-[100] px-4 py-3 rounded-xl text-sm
-          font-semibold shadow-lg border ${
-            toast.type === "error"
-              ? "bg-red-50 border-red-200 text-red-700"
-              : "bg-emerald-50 border-emerald-200 text-emerald-700"
-          }`}>
+        <div
+          className={`fixed top-5 right-5 z-[100] px-4 py-3 rounded-xl text-sm
+            font-semibold shadow-lg border ${
+              toast.type === "error"
+                ? "bg-red-50 border-red-200 text-red-700"
+                : "bg-emerald-50 border-emerald-200 text-emerald-700"
+            }`}
+        >
           {toast.msg}
         </div>
       )}
 
       <PostDetailModal
         post={selectedPost}
-        onClose={() => setSelectedPost(null)}
-        onDelete={async (postId, reason) => {
-          await handleDeletePost(postId, reason);
-          setSelectedPost(null);
-        }}
+        onClose={handleClosePost}
+        onDelete={handleModalDelete}
         deleteLoading={isActioning}
         hideAuthorNav={true}
       />
 
-      {/* Status Modal */}
       {statusModal && (
         <StatusModal
           user={user}
           onClose={() => setStatusModal(false)}
           onConfirm={handleStatusConfirm}
-          loading={isActioning} // FIX: was actionLoading === id (always false)
+          loading={isActioning}
         />
       )}
 
@@ -1012,6 +1128,7 @@ export default function UserDetailPage() {
           {/* Breadcrumb */}
           <nav className="flex items-center gap-1.5 text-xs mb-6">
             <button
+              type="button"
               onClick={() => navigate("/users")}
               className="text-slate-400 hover:text-violet-600 font-medium transition-colors"
             >
@@ -1021,7 +1138,7 @@ export default function UserDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
             </svg>
             <span className="text-slate-700 font-semibold truncate max-w-48">
-              {user?.fullName || user?.username || "..."}
+              {user.fullName || user.username || "..."}
             </span>
           </nav>
 
@@ -1077,6 +1194,7 @@ export default function UserDetailPage() {
               {/* Actions */}
               <div className="flex flex-row sm:flex-col gap-2 shrink-0">
                 <button
+                  type="button"
                   onClick={() => setStatusModal(true)}
                   className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-50
                     hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors"
@@ -1084,8 +1202,9 @@ export default function UserDetailPage() {
                   Change Status
                 </button>
                 <button
+                  type="button"
                   onClick={handleToggleVerify}
-                  disabled={isActioning} // FIX: was actionLoading === id (always false)
+                  disabled={isActioning}
                   className="px-4 py-2 rounded-xl text-xs font-semibold bg-sky-50
                     hover:bg-sky-100 text-sky-700 border border-sky-200 transition-colors
                     disabled:opacity-40"
@@ -1097,11 +1216,11 @@ export default function UserDetailPage() {
 
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5">
-              <StatBox label="Posts"           value={user.postsCount}      color="text-violet-600" />
-              <StatBox label="Followers"       value={user.followersCount}  color="text-sky-600" />
-              <StatBox label="Following"       value={user.followingCount}  color="text-slate-800" />
-              <StatBox label="Reports"         value={reportStats.total}    color="text-amber-600" />
-              <StatBox label="Pending Reports" value={reportStats.pending}  color="text-red-600" />
+              <StatBox label="Posts"           value={user.postsCount}     color="text-violet-600" />
+              <StatBox label="Followers"       value={user.followersCount} color="text-sky-600" />
+              <StatBox label="Following"       value={user.followingCount} color="text-slate-800" />
+              <StatBox label="Reports"         value={reportStats.total}   color="text-amber-600" />
+              <StatBox label="Pending Reports" value={reportStats.pending} color="text-red-600" />
             </div>
           </div>
 
@@ -1138,10 +1257,14 @@ export default function UserDetailPage() {
                 <>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                     {postsLoading
-                      ? [...Array(12)].map((_, i) => (
-                          <div key={i} style={{ paddingBottom: "100%", height: 0 }}
-                            className="relative rounded-xl overflow-hidden">
-                            <div className="absolute inset-0 bg-slate-100 animate-pulse rounded-xl"/>
+                      // FIX: SKELETON_POST_KEYS is module-level — no inline array allocation
+                      ? SKELETON_POST_KEYS.map((i) => (
+                          <div
+                            key={i}
+                            style={{ paddingBottom: "100%", height: 0 }}
+                            className="relative rounded-xl overflow-hidden"
+                          >
+                            <div className="absolute inset-0 bg-slate-100 animate-pulse rounded-xl" />
                           </div>
                         ))
                       : posts.map((post) => (
@@ -1162,7 +1285,8 @@ export default function UserDetailPage() {
                       </p>
                       <div className="flex gap-1.5">
                         <button
-                          onClick={() => setPostsPage(p => Math.max(1, p - 1))}
+                          type="button"
+                          onClick={() => setPostsPage((p) => Math.max(1, p - 1))}
                           disabled={postsPage <= 1}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white
                             border border-slate-200 hover:bg-slate-50 text-slate-600
@@ -1171,7 +1295,8 @@ export default function UserDetailPage() {
                           ← Prev
                         </button>
                         <button
-                          onClick={() => setPostsPage(p => Math.min(totalPostPages, p + 1))}
+                          type="button"
+                          onClick={() => setPostsPage((p) => Math.min(totalPostPages, p + 1))}
                           disabled={postsPage >= totalPostPages}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white
                             border border-slate-200 hover:bg-slate-50 text-slate-600

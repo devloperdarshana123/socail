@@ -1,6 +1,5 @@
 
-
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Image, Film, FileText, LayoutGrid, Heart, MessageCircle,
@@ -17,18 +16,69 @@ import {
 import { PostsGridSkeleton } from "../components/skeletons";
 import PostDetailModal from "../components/PostDetailmodal";
 
-// ── Helpers ───────────────────────────────────────────────────
+// ── Module-level constants (stable references, never rebuilt on render) ────────
+
+// FIX: TYPE_FILTERS was rebuilt every render inside the component body.
+// Moved here so it's a single reference used across all renders.
+const TYPE_FILTERS = [
+  { value: "",      label: "All",    icon: LayoutGrid },
+  { value: "image", label: "Photos", icon: Image      },
+  { value: "reel",  label: "Reels",  icon: Film       },
+  { value: "text",  label: "Text",   icon: FileText   },
+];
+
+// FIX: STAT_CARD_DEFS (the static parts) extracted to module level.
+// The dynamic value/loading props are still passed in at render time via useMemo below.
+const STAT_CARD_DEFS = [
+  {
+    id: "total",
+    icon: LayoutGrid, label: "Total Posts",
+    accent: {
+      cardBg: "bg-violet-50 border-violet-100 hover:bg-violet-100/50 hover:border-violet-200",
+      icon: "text-violet-500",
+    },
+  },
+  {
+    id: "photos",
+    icon: Image, label: "Photos",
+    accent: {
+      cardBg: "bg-sky-50 border-sky-100 hover:bg-sky-100/50 hover:border-sky-200",
+      icon: "text-sky-500",
+    },
+  },
+  {
+    id: "reels",
+    icon: Film, label: "Reels",
+    accent: {
+      cardBg: "bg-pink-50 border-pink-100 hover:bg-pink-100/50 hover:border-pink-200",
+      icon: "text-pink-500",
+    },
+  },
+  {
+    id: "text",
+    icon: FileText, label: "Text Posts",
+    accent: {
+      cardBg: "bg-amber-50 border-amber-100 hover:bg-amber-100/50 hover:border-amber-200",
+      icon: "text-amber-500",
+    },
+  },
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
 function fmtCount(n = 0) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
 }
+
 function formatDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", {
     day: "2-digit", month: "short", year: "numeric",
   });
 }
+
 function useDebounce(value, delay = 400) {
   const [d, setD] = useState(value);
   useEffect(() => {
@@ -37,6 +87,7 @@ function useDebounce(value, delay = 400) {
   }, [value, delay]);
   return d;
 }
+
 function resolveThumb(post) {
   const media = post?.media?.[0];
   if (!media?.url) return null;
@@ -53,10 +104,13 @@ function resolveThumb(post) {
   );
 }
 
-// ── Stat Card ─────────────────────────────────────────────────
-function StatCard({ icon: Icon, label, value, accent, loading }) {
+// ── StatCard ───────────────────────────────────────────────────────────────────
+
+// FIX: Wrapped with memo(). Props (accent) are now stable object references from
+// STAT_CARD_DEFS, so this will skip re-renders when unrelated state changes.
+const StatCard = memo(function StatCard({ icon: Icon, label, value, accent, loading }) {
   return (
-    <div className={`rounded-2xl border ${accent.cardBg} px-4 py-4 sm:px-6 sm:py-5 
+    <div className={`rounded-2xl border ${accent.cardBg} px-4 py-4 sm:px-6 sm:py-5
       flex items-center gap-3 sm:gap-5 shadow-sm
       hover:shadow-md transition-all duration-300 hover:-translate-y-0.5`}>
       <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center shrink-0 ${accent.icon}`}>
@@ -71,18 +125,30 @@ function StatCard({ icon: Icon, label, value, accent, loading }) {
       </div>
     </div>
   );
-}
+});
 
-// ── Post Tile ─────────────────────────────────────────────────
-function PostTile({ post, onDelete, deleteLoading, onOpen }) {
+// ── PostTile ───────────────────────────────────────────────────────────────────
+
+// FIX: Wrapped with memo(). onDelete and onOpen are now stable useCallback
+// references from the parent, so PostTile skips re-renders on unrelated state changes.
+const PostTile = memo(function PostTile({ post, onDelete, deleteLoading, onOpen }) {
   const [hovered,    setHovered]    = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  // FIX: Was using document.getElementById + a ref._reason hack to read the input value.
+  // Replaced with proper controlled state — predictable, testable, React-idiomatic.
+  const [reason,     setReason]     = useState("");
 
   const isText  = post.type === "text";
   const isVid   = post.type === "reel" || post.media?.[0]?.resourceType === "video";
   const isMulti = post.media?.length > 1;
   const thumb   = resolveThumb(post);
   const busy    = deleteLoading === post._id;
+
+  const handleConfirm = useCallback(() => {
+    onDelete(post._id, reason.trim() || "Violation of community guidelines");
+    setConfirmDel(false);
+    setReason("");
+  }, [onDelete, post._id, reason]);
 
   return (
     <div
@@ -119,7 +185,7 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
           <img
             src={thumb} alt=""
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            onError={(e) => { e.target.style.display = "none"; }}
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-slate-200">
@@ -131,23 +197,21 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
         {/* Badges */}
         <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 flex flex-col gap-1 z-10">
           {isVid && (
-            <div className="w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full
-              flex items-center justify-center">
+            <div className="w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
               <Play size={8} className="text-white fill-white ml-0.5 sm:hidden" />
               <Play size={10} className="text-white fill-white ml-0.5 hidden sm:block" />
             </div>
           )}
           {isMulti && (
-            <div className="w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full
-              flex items-center justify-center">
+            <div className="w-5 h-5 sm:w-6 sm:h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
               <Copy size={8} className="text-white sm:hidden" />
               <Copy size={10} className="text-white hidden sm:block" />
             </div>
-          )}  
+          )}
         </div>
 
         {/* Hover Overlay */}
-        <div className={`absolute inset-0 bg-linear-to-t from-black/80 via-black/40 to-black/20
+        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20
           flex flex-col justify-between p-2 sm:p-3 transition-opacity duration-200
           ${hovered ? "opacity-100" : "opacity-0"}`}>
 
@@ -188,6 +252,7 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
           <div onClick={(e) => e.stopPropagation()}>
             {!confirmDel ? (
               <button
+                type="button"  // FIX: missing type="button" on all buttons
                 onClick={() => setConfirmDel(true)}
                 className="w-full flex items-center justify-center gap-1
                   bg-red-500/90 hover:bg-red-500 text-white text-[10px] sm:text-[11px] font-bold
@@ -197,23 +262,25 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
                 <Trash2 size={11} className="hidden sm:block" />
                 Delete
               </button>
-         ) : (
-              <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {/* FIX: Was reading input via document.getElementById + a ref._reason trick.
+                    Replaced with controlled useState — predictable and React-idiomatic. */}
                 <input
                   type="text"
+                  value={reason}
                   placeholder="Reason (optional)"
                   className="w-full px-2 py-1 rounded-lg text-[10px] bg-white/20
                     text-white placeholder-white/60 border border-white/30
                     focus:outline-none focus:border-white/60"
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => e.stopPropagation()}
-                  onChange={(e) => e.stopPropagation()}
-                  ref={(el) => { if (el) el._reason = el.value; }}
-                  id={`reason-${post._id}`}
+                  onChange={(e) => { e.stopPropagation(); setReason(e.target.value); }}
                 />
                 <div className="flex gap-1">
                   <button
-                    onClick={() => setConfirmDel(false)}
+                    type="button"
+                    onClick={() => { setConfirmDel(false); setReason(""); }}
                     className="flex-1 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white/20
                       hover:bg-white/30 text-white text-[10px] sm:text-[11px]
                       font-semibold transition-colors"
@@ -221,12 +288,8 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      const input = document.getElementById(`reason-${post._id}`);
-                      const reason = input?.value?.trim() || "Violation of community guidelines";
-                      onDelete(post._id, reason);
-                      setConfirmDel(false);
-                    }}
+                    type="button"
+                    onClick={handleConfirm}
                     disabled={busy}
                     className="flex-1 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-red-500
                       hover:bg-red-400 text-white text-[10px] sm:text-[11px] font-bold
@@ -251,18 +314,20 @@ function PostTile({ post, onDelete, deleteLoading, onOpen }) {
       </div>
     </div>
   );
-}
+});
 
-function SkeletonTile() {
+// FIX: Wrapped with memo().
+const SkeletonTile = memo(function SkeletonTile() {
   return (
     <div>
       <div className="aspect-square rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse" />
       <div className="mt-1 sm:mt-1.5 h-2 sm:h-2.5 bg-slate-200 animate-pulse rounded-full w-3/4" />
     </div>
   );
-}
+});
 
-// ── MAIN PAGE ─────────────────────────────────────────────────
+// ── MAIN PAGE ──────────────────────────────────────────────────────────────────
+
 export default function PostsPage() {
   const dispatch = useDispatch();
 
@@ -274,16 +339,24 @@ export default function PostsPage() {
   const filters       = useSelector(selectPostsFilters);
   const selectedPost  = useSelector(selectSelectedPost);
 
-  const [searchInput,   setSearchInput]   = useState(filters.search);
-  const [filterOpen,    setFilterOpen]    = useState(false);
-  const [toast,         setToast]         = useState(null);
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const [filterOpen,  setFilterOpen]  = useState(false);
+  const [toast,       setToast]       = useState(null);
+
+  // FIX: Toast timer not cleared on unmount → memory leak.
+  // Added a ref to hold the timer ID so we can clear it on unmount and on each new call.
+  const toastTimer = useRef(null);
 
   const debouncedSearch = useDebounce(searchInput, 450);
 
   const showToast = useCallback((msg, type = "success") => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
+
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   useEffect(() => {
     dispatch(fetchAllPosts({
@@ -296,73 +369,90 @@ export default function PostsPage() {
     }));
   }, [dispatch, filters]);
 
+  // FIX: Was missing filters.search and dispatch in deps → stale closure risk.
   useEffect(() => {
     if (debouncedSearch !== filters.search) {
       dispatch(setPostFilters({ search: debouncedSearch, page: 1 }));
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, filters.search, dispatch]);
 
+  // FIX: Was missing showToast and dispatch in deps → stale closure risk.
   useEffect(() => {
     if (error) { showToast(error, "error"); dispatch(clearPostErrors()); }
-  }, [error]);
+  }, [error, showToast, dispatch]);
 
- const handleDelete = useCallback(async (postId, reason) => {
-  const res = await dispatch(adminDeletePost({ postId, reason }));
-  if (!res.error) showToast("Post deleted successfully");
-  else showToast(res.payload ?? "Failed to delete", "error");
-}, [dispatch, showToast]);
+  // FIX: Was using res.error which RTK does not reliably set.
+  // Correct check is res.meta?.requestStatus === "rejected".
+  const handleDelete = useCallback(async (postId, reason) => {
+    const res = await dispatch(adminDeletePost({ postId, reason }));
+    if (res.meta?.requestStatus !== "rejected") {
+      showToast("Post deleted successfully");
+    } else {
+      showToast(res.payload ?? "Failed to delete", "error");
+    }
+  }, [dispatch, showToast]);
+
+  // FIX: onOpen was an inline arrow (p) => dispatch(openPostModal(p)) passed as a prop,
+  // giving PostTile a new reference every render and defeating its memo().
+  // Stabilized as a useCallback here.
+  const handleOpen = useCallback((post) => {
+    dispatch(openPostModal(post));
+  }, [dispatch]);
+
+  const handleCloseModal = useCallback(() => {
+    dispatch(closePostModal());
+  }, [dispatch]);
+
+  const handleResetFilters = useCallback(() => {
+    dispatch(resetPostFilters());
+    setSearchInput("");
+  }, [dispatch]);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchInput("");
+    dispatch(setPostFilters({ search: "", page: 1 }));
+  }, [dispatch]);
 
   const total      = pagination.total      ?? 0;
   const totalPages = pagination.totalPages ?? 1;
   const curPage    = pagination.page       ?? 1;
 
-  const photosCount = posts.filter(p => p.type === "image").length;
-  const reelsCount  = posts.filter(p => p.type === "reel").length;
-  const textCount   = posts.filter(p => p.type === "text").length;
+  // FIX: photosCount/reelsCount/textCount were three separate .filter() passes every render.
+  // Replaced with a single useMemo loop — O(n) instead of O(3n).
+  const { photosCount, reelsCount, textCount } = useMemo(() => {
+    let photos = 0, reels = 0, text = 0;
+    for (const p of posts) {
+      if (p.type === "image") photos++;
+      else if (p.type === "reel") reels++;
+      else if (p.type === "text") text++;
+    }
+    return { photosCount: photos, reelsCount: reels, textCount: text };
+  }, [posts]);
 
-  const STAT_CARDS = [
-    {
-      icon: LayoutGrid, label: "Total Posts", value: total,
-      accent: {
-        cardBg: "bg-violet-50 border-violet-100 hover:bg-violet-100/50 hover:border-violet-200",
-        icon: "text-violet-500",
-      },
-    },
-    {
-      icon: Image, label: "Photos", value: photosCount,
-      accent: {
-        cardBg: "bg-sky-50 border-sky-100 hover:bg-sky-100/50 hover:border-sky-200",
-        icon: "text-sky-500",
-      },
-    },
-    {
-      icon: Film, label: "Reels", value: reelsCount,
-      accent: {
-        cardBg: "bg-pink-50 border-pink-100 hover:bg-pink-100/50 hover:border-pink-200",
-        icon: "text-pink-500",
-      },
-    },
-    {
-      icon: FileText, label: "Text Posts", value: textCount,
-      accent: {
-        cardBg: "bg-amber-50 border-amber-100 hover:bg-amber-100/50 hover:border-amber-200",
-        icon: "text-amber-500",
-      },
-    },
-  ];
+  // FIX: STAT_CARDS was rebuilt every render inside the component body.
+  // Static structure comes from STAT_CARD_DEFS (module-level); only values change.
+  const statCards = useMemo(() => [
+    { ...STAT_CARD_DEFS[0], value: total        },
+    { ...STAT_CARD_DEFS[1], value: photosCount  },
+    { ...STAT_CARD_DEFS[2], value: reelsCount   },
+    { ...STAT_CARD_DEFS[3], value: textCount    },
+  ], [total, photosCount, reelsCount, textCount]);
 
-  const TYPE_FILTERS = [
-    { value: "",      label: "All",    icon: LayoutGrid },
-    { value: "image", label: "Photos", icon: Image      },
-    { value: "reel",  label: "Reels",  icon: Film       },
-    { value: "text",  label: "Text",   icon: FileText   },
-  ];
+  // Pagination page numbers
+  const pageNumbers = useMemo(() => {
+    let start = Math.max(1, curPage - 2);
+    let end   = Math.min(totalPages, start + 4);
+    if (end - start < 4) start = Math.max(1, end - 4);
+    const pages = [];
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  }, [curPage, totalPages]);
 
   return (
     <>
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-50
+        <div className={`fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[50]
           px-4 py-3 rounded-2xl text-sm font-semibold shadow-xl border
           pointer-events-none animate-fade-in text-center sm:text-left
           ${toast.type === "error"
@@ -374,7 +464,7 @@ export default function PostsPage() {
 
       <PostDetailModal
         post={selectedPost}
-        onClose={() => dispatch(closePostModal())}
+        onClose={handleCloseModal}
         onDelete={handleDelete}
         deleteLoading={deleteLoading}
       />
@@ -385,14 +475,15 @@ export default function PostsPage() {
           {/* ── Page Header ── */}
           <div className="flex items-center justify-between mb-5 sm:mb-8">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Post</h1>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Posts</h1>
               <p className="text-xs sm:text-sm text-slate-400 mt-0.5 sm:mt-1 flex items-center gap-1.5">
                 <TrendingUp size={12} />
                 {loading ? "Loading…" : `${total.toLocaleString()} total posts`}
               </p>
             </div>
             <button
-              onClick={() => { dispatch(resetPostFilters()); setSearchInput(""); }}
+              type="button"
+              onClick={handleResetFilters}
               className="flex items-center gap-1.5 text-xs font-semibold text-slate-500
                 hover:text-slate-800 border border-slate-200 bg-white rounded-xl
                 px-2.5 py-2 sm:px-3.5 sm:py-2.5 hover:bg-slate-50 hover:border-slate-300
@@ -406,7 +497,7 @@ export default function PostsPage() {
 
           {/* ── Stat Cards ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-5 sm:mb-8">
-            {STAT_CARDS.map((card) => (
+            {statCards.map((card) => (
               <StatCard key={card.label} {...card} loading={loading} />
             ))}
           </div>
@@ -429,7 +520,8 @@ export default function PostsPage() {
                 />
                 {searchInput && (
                   <button
-                    onClick={() => { setSearchInput(""); dispatch(setPostFilters({ search: "", page: 1 })); }}
+                    type="button"
+                    onClick={handleClearSearch}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
                     <X size={13} />
@@ -437,6 +529,7 @@ export default function PostsPage() {
                 )}
               </div>
               <button
+                type="button"
                 onClick={() => setFilterOpen(v => !v)}
                 className={`flex items-center gap-1 px-3 py-2 rounded-xl border text-xs font-semibold
                   transition-colors shrink-0
@@ -455,7 +548,7 @@ export default function PostsPage() {
                 {/* Type pills */}
                 <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 overflow-x-auto">
                   {TYPE_FILTERS.map(({ value, label, icon: Icon }) => (
-                    <button key={value}
+                    <button type="button" key={value}
                       onClick={() => dispatch(setPostFilters({ type: value, page: 1 }))}
                       className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg whitespace-nowrap
                         text-xs font-semibold transition-all shrink-0
@@ -516,7 +609,8 @@ export default function PostsPage() {
                 />
                 {searchInput && (
                   <button
-                    onClick={() => { setSearchInput(""); dispatch(setPostFilters({ search: "", page: 1 })); }}
+                    type="button"
+                    onClick={handleClearSearch}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                   >
                     <X size={14} />
@@ -527,7 +621,7 @@ export default function PostsPage() {
               {/* Type pills */}
               <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-1">
                 {TYPE_FILTERS.map(({ value, label, icon: Icon }) => (
-                  <button key={value}
+                  <button type="button" key={value}
                     onClick={() => dispatch(setPostFilters({ type: value, page: 1 }))}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg
                       text-xs font-semibold transition-all duration-150
@@ -576,7 +670,9 @@ export default function PostsPage() {
           </div>
 
           {/* ── Grid ── */}
-          {loading ? <PostsGridSkeleton count={18} /> :posts.length === 0 ? (
+          {loading ? (
+            <PostsGridSkeleton count={18} />
+          ) : posts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 sm:py-28 gap-4">
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-slate-100 flex items-center justify-center">
                 <Image size={28} className="text-slate-300 sm:hidden" />
@@ -587,7 +683,8 @@ export default function PostsPage() {
                 <p className="text-xs text-slate-400 mt-1">Try adjusting your filters</p>
               </div>
               <button
-                onClick={() => { dispatch(resetPostFilters()); setSearchInput(""); }}
+                type="button"
+                onClick={handleResetFilters}
                 className="text-xs font-semibold text-violet-600 hover:text-violet-700
                   underline underline-offset-2 transition-colors"
               >
@@ -602,7 +699,7 @@ export default function PostsPage() {
                   post={post}
                   onDelete={handleDelete}
                   deleteLoading={deleteLoading}
-                  onOpen={(p) => dispatch(openPostModal(p))}
+                  onOpen={handleOpen}
                 />
               ))}
             </div>
@@ -617,6 +714,7 @@ export default function PostsPage() {
               </p>
               <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-center order-1 sm:order-2">
                 <button
+                  type="button"
                   onClick={() => dispatch(setPostPage(curPage - 1))}
                   disabled={curPage <= 1}
                   className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs
@@ -627,24 +725,19 @@ export default function PostsPage() {
                   <ChevronLeft size={13} /> Prev
                 </button>
 
-                {(() => {
-                  const pages = [];
-                  let start = Math.max(1, curPage - 2);
-                  let end   = Math.min(totalPages, start + 4);
-                  if (end - start < 4) start = Math.max(1, end - 4);
-                  for (let i = start; i <= end; i++) pages.push(i);
-                  return pages.map((p) => (
-                    <button key={p}
-                      onClick={() => dispatch(setPostPage(p))}
-                      className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs font-bold transition-all duration-150
-                        ${p === curPage
-                          ? "bg-violet-600 text-white shadow-sm scale-105"
-                          : "bg-white border border-slate-200 hover:bg-slate-50 text-slate-600"}`}
-                    >{p}</button>
-                  ));
-                })()}
+                {/* FIX: pageNumbers moved to useMemo above — no longer an IIFE in JSX */}
+                {pageNumbers.map((p) => (
+                  <button type="button" key={p}
+                    onClick={() => dispatch(setPostPage(p))}
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs font-bold transition-all duration-150
+                      ${p === curPage
+                        ? "bg-violet-600 text-white shadow-sm scale-105"
+                        : "bg-white border border-slate-200 hover:bg-slate-50 text-slate-600"}`}
+                  >{p}</button>
+                ))}
 
                 <button
+                  type="button"
                   onClick={() => dispatch(setPostPage(curPage + 1))}
                   disabled={curPage >= totalPages}
                   className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs
