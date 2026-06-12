@@ -11,6 +11,7 @@ import {
   setActiveType,
   setSearchMode,
   clearExplore,
+  setPostsFromCache,
 } from "../lib/redux/exploreSlice";
 
 // ── Theme ──────────────────────────────────────────────────────
@@ -182,11 +183,18 @@ function MasonryGrid({ posts, onPostClick, loading }) {
 // ── MAIN ──────────────────────────────────────────────────────
 export default function Explore() {
   const dispatch = useDispatch();
+  // const {
+  //   posts, nextCursor, hasMore, activeType, loading, loadingMore,
+  //   searchPosts, searchCursor, searchHasMore, isSearchMode,
+  //   searchLoading, searchLoadingMore, error,
+  // } = useSelector((s) => s.explore);
+
+
   const {
-    posts, nextCursor, hasMore, activeType, loading, loadingMore,
-    searchPosts, searchCursor, searchHasMore, isSearchMode,
-    searchLoading, searchLoadingMore, error,
-  } = useSelector((s) => s.explore);
+  posts, nextCursor, hasMore, activeType, loading, loadingMore,
+  searchPosts, searchCursor, searchHasMore, isSearchMode,
+  searchLoading, searchLoadingMore, error, postsByType,
+} = useSelector((s) => s.explore);
 
  const [searchInput, setSearchInput] = useState("");
 const [selectedPost, setSelectedPost] = useState(null);
@@ -209,14 +217,29 @@ useEffect(() => {
   if (tab && tab !== activeType) dispatch(setActiveType(tab));
 }, []);
   // ── Initial fetch ──
+  // useEffect(() => {
+  //   dispatch(clearExplore());
+  //   dispatch(fetchExplorePosts({ type: activeType }));
+  // }, [activeType, dispatch]);
+
+
+//   useEffect(() => {
+//   if (posts.length > 0) return;
+//   dispatch(fetchExplorePosts({ type: activeType }));
+// }, [activeType, dispatch]);
+//   // ── Cleanup on unmount ──
+//   // useEffect(() => () => dispatch(clearExplore()), [dispatch]);
+
+useEffect(() => {
+  if (postsByType[activeType]?.length > 0) {
+    dispatch(setPostsFromCache(activeType));
+    return;
+  }
+  dispatch(fetchExplorePosts({ type: activeType }));
+}, [activeType, dispatch]);
   useEffect(() => {
-    dispatch(clearExplore());
-    dispatch(fetchExplorePosts({ type: activeType }));
-  }, [activeType, dispatch]);
-
-  // ── Cleanup on unmount ──
-  useEffect(() => () => dispatch(clearExplore()), [dispatch]);
-
+  return () => dispatch(clearExplore());
+}, []);
   // ── Infinite scroll — IntersectionObserver ──
   const handleLoadMore = useCallback(() => {
     if (isSearchMode) {

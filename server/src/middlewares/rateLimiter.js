@@ -1,25 +1,4 @@
-/**
- * middlewares/rateLimiter.js
- *
- * Redis-backed rate limiter — sliding window counter.
- *
- * Why not express-rate-limit?
- *   - express-rate-limit with MemoryStore resets on server restart
- *   - Not shared across multiple server instances (doesn't scale)
- *   - Redis store is shared, persistent, and works across all pods
- *
- * Algorithm: Fixed window counter (simple, production-proven)
- *   Key: `rl:{route}:{identifier}` (identifier = userId or IP)
- *   On each request:
- *     1. INCR counter
- *     2. If counter === 1, set TTL (window start)
- *     3. If counter > limit, reject with 429
- *
- * Graceful degradation:
- *   If Redis is down, ALL requests are ALLOWED (fail open).
- *   This is intentional — rate limiting is defence-in-depth,
- *   not the only protection. App should not go down if Redis does.
- */
+
 
 import redis from "../config/redis.js";
 import logger from "../config/logger.js";
@@ -55,12 +34,10 @@ export function createRateLimiter({
       const key     = `rl:${route}:${identifier}`;
 
       // ── Atomic increment ──────────────────────────────────────────
-      const count   = await redis.incr(key);
-
-      // Set TTL only on first request in window
-      if (count === 1) {
-        await redis.expire(key, windowSecs);
-      }
+     const [count] = await redis.pipeline()
+  .incr(key)
+  .expire(key, windowSecs)
+  .exec();
 
       // ── Attach headers (like standard rate-limit middleware) ──────
       const ttl = await redis.ttl(key);

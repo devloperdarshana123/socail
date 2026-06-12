@@ -467,17 +467,23 @@ userSchema.methods.generateAdminRefreshToken = async function (
 userSchema.methods.generateRefreshToken = async function (
   deviceInfo = "unknown",
   ipAddress  = null,
+  rememberMe = false,
 ) {
-  const rawToken = jwt.sign(
+//   const rawToken = jwt.sign(
+//     { _id: this._id },
+//     ENV.USER_REFRESH_TOKEN_SECRET,
+// { expiresIn: ENV.REFRESH_TOKEN_EXPIRY },
+//   );
+const rawToken = jwt.sign(
     { _id: this._id },
     ENV.USER_REFRESH_TOKEN_SECRET,
-{ expiresIn: ENV.REFRESH_TOKEN_EXPIRY },
+    { expiresIn: rememberMe ? "30d" : ENV.REFRESH_TOKEN_EXPIRY },
   );
-
   const tokenHash = hashToken(rawToken);
   const now       = new Date();
-  const expiresAt = new Date(now.getTime() + REFRESH_TOKEN_EXPIRY_MS);
-
+  // const expiresAt = new Date(now.getTime() + REFRESH_TOKEN_EXPIRY_MS);
+const EXPIRY_MS = rememberMe ? 30 * 24 * 60 * 60 * 1000 : REFRESH_TOKEN_EXPIRY_MS;
+const expiresAt = new Date(now.getTime() + EXPIRY_MS);
   const newEntry = {
     tokenHash,
     deviceInfo,

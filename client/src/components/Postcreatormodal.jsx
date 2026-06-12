@@ -178,29 +178,27 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  useEffect(() => {
-    const h = (e) => { if (e.key === "Escape") handleClose(); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, [handleClose]);
 
-  // ✅ reset: no URL.revokeObjectURL needed — we store Cloudinary URLs now
   const reset = useCallback(() => {
-    setTab("image");
-    setCaption("");
-    setMediaItems([]);
-    setVis("public");
-    setLocation("");
-    setCommentsOff(false);
-    setLikesHide(false);
-    setShowAdv(false);
-    setShowVis(false);
-    setError("");
-  }, []);
+  setTab("image");
+  setCaption("");
+  setMediaItems([]);
+  setVis("public");
+  setLocation("");
+  setCommentsOff(false);
+  setLikesHide(false);
+  setShowAdv(false);
+  setShowVis(false);
+  setError("");
+}, []);
 
-  const handleClose = () => { reset(); onClose(); };
+const handleClose = useCallback(() => { reset(); onClose(); }, [reset, onClose]);
 
-  // ✅ resolveType uses mediaItems (correct state name)
+useEffect(() => {
+  const h = (e) => { if (e.key === "Escape") handleClose(); };
+  document.addEventListener("keydown", h);
+  return () => document.removeEventListener("keydown", h);
+}, [handleClose]);
   const resolveType = () => {
     if (tab === "reel")                               return "reel";
     if (tab === "image" && mediaItems.length > 0)     return "image";

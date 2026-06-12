@@ -96,6 +96,9 @@ const exploreSlice = createSlice({
     searchLoading:    false,
     searchLoadingMore: false,
     error:            null,
+    postsByType: { all: [], image: [], reel: [], text: [] },
+cursorByType: { all: null, image: null, reel: null, text: null },
+hasMoreByType: { all: true, image: true, reel: true, text: true },
   },
 
   reducers: {
@@ -122,6 +125,12 @@ const exploreSlice = createSlice({
       state.hasMore     = true;
       state.error       = null;
     },
+    setPostsFromCache(state, action) {
+  const type = action.payload;
+  state.posts      = state.postsByType[type]   || [];
+  state.nextCursor = state.cursorByType[type]  || null;
+  state.hasMore    = state.hasMoreByType[type] ?? true;
+},
   },
 
   extraReducers: (builder) => {
@@ -131,12 +140,23 @@ const exploreSlice = createSlice({
         state.loading = true;
         state.error   = null;
       })
+      // .addCase(fetchExplorePosts.fulfilled, (state, action) => {
+      //   state.loading    = false;
+      //   state.posts      = action.payload.posts;
+      //   state.nextCursor = action.payload.nextCursor;
+      //   state.hasMore    = action.payload.hasMore;
+      // })
+
       .addCase(fetchExplorePosts.fulfilled, (state, action) => {
-        state.loading    = false;
-        state.posts      = action.payload.posts;
-        state.nextCursor = action.payload.nextCursor;
-        state.hasMore    = action.payload.hasMore;
-      })
+  state.loading    = false;
+  state.posts      = action.payload.posts;
+  state.nextCursor = action.payload.nextCursor;
+  state.hasMore    = action.payload.hasMore;
+  const type = action.meta.arg?.type || "all";
+  state.postsByType[type]   = action.payload.posts;
+  state.cursorByType[type]  = action.payload.nextCursor;
+  state.hasMoreByType[type] = action.payload.hasMore;
+})
       .addCase(fetchExplorePosts.rejected, (state, action) => {
         state.loading = false;
         state.error   = action.payload;
@@ -241,5 +261,5 @@ builder.addCase(recordPostView.fulfilled, (state, action) => {
   
 });
 
-export const { setActiveType, setSearchMode, clearExplore } = exploreSlice.actions;
+export const { setActiveType, setSearchMode, clearExplore , setPostsFromCache } = exploreSlice.actions;
 export default exploreSlice.reducer;

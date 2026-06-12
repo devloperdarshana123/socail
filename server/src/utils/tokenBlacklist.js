@@ -1,27 +1,3 @@
-/**
- * utils/tokenBlacklist.js
- *
- * Access token blacklist using Redis.
- *
- * Problem it solves:
- *   JWTs are stateless — even after logout, the token is valid until expiry.
- *   If a token is stolen post-logout, attacker can still use it.
- *   This blacklist invalidates tokens immediately on logout.
- *
- * Design:
- *   - Key:   `bl:at:{jti}`  (jti = JWT ID — unique per token)
- *   - Value: "1"
- *   - TTL:   remaining token lifetime (auto-cleanup, no memory leak)
- *
- * Why jti and not the full token?
- *   - jti is 21 chars vs ~200+ chars for full token — saves Redis memory
- *   - Security equivalent — jti is cryptographically random
- *
- * Graceful degradation:
- *   If Redis is down, blacklist check is SKIPPED (not blocked).
- *   Log warning so ops team knows. Token rotation + short expiry (15min)
- *   limits the risk window.
- */
 
 import redis from "../config/redis.js";
 import logger from "../config/logger.js";

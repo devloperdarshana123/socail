@@ -7,7 +7,7 @@ import logger from "../config/logger.js";
 import { ENV } from "../config/env.js";
 import { isTokenBlacklisted } from "../utils/tokenBlacklist.js";  // ← NEW
 import { USER_COOKIE_ACCESS } from "../utils/authCookies.js";
-
+import redis from "../config/redis.js";
 export const isAuthenticated = asyncHandler(async (req, res, next) => {
   const authHeader  = req.headers?.authorization;
 const accessToken =
@@ -46,14 +46,40 @@ const accessToken =
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  const user = await User.findById(decoded._id).select(
-    "-password -refreshTokens -firebaseUid",
-  );
+  // const user = await User.findById(decoded._id).select(
+  //   "-password -refreshTokens -firebaseUid",
+  // );
 
-  if (!user) {
-    return next(new AppError("User no longer exists.", 401));
+  // if (!user) {
+  //   return next(new AppError("User no longer exists.", 401));
+  // }
+
+
+  let user;
+const cacheKey = `user:${decoded._id}`;
+
+try {
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    user = cached; // Upstash auto-parses JSON
+  } else {
+    user = await User.findById(decoded._id).select(
+      "-password -refreshTokens -firebaseUid"
+    );
+    if (user) {
+      await redis.set(cacheKey, user, { ex: 300 }); // 5 min TTL
+    }
   }
+} catch {
+  // Redis fail → fallback to DB (graceful degradation)
+  user = await User.findById(decoded._id).select(
+    "-password -refreshTokens -firebaseUid"
+  );
+}
 
+if (!user) {
+  return next(new AppError("User no longer exists.", 401));
+}
   if (user.accountStatus === "banned") {
     return next(new AppError("Your account has been permanently banned.", 403));
   }
@@ -68,7 +94,9 @@ req.user = user;
 const FIVE_MIN = 5 * 60 * 1000;
 const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt) : null;
 if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
+  const now = new Date();
   User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).catch(() => {});
+  redis.set(cacheKey, { ...user.toObject?.() ?? user, lastActiveAt: now }, { ex: 300 }).catch(() => {});
 }
 
   logger.debug("User authenticated", { userId: user._id, path: req.originalUrl });

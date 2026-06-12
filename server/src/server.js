@@ -17,7 +17,7 @@ process.on("uncaughtException", (err) => {
 
 connectDatabase();
 connectRedis();
-
+const PORT = process.env.PORT || 5000;
 const server = app.listen(process.env.PORT, () => {
   logger.info(`Server is running on http://localhost:${process.env.PORT}`);
 });

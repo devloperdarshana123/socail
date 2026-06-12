@@ -7,6 +7,8 @@ import OTP from "../../models/otp.model.js";
 import { sendTemplateMail } from "../../mail/index.js";
 import { notifyAdmin } from "../../utils/adminNotify.js";
 import logger from "../../config/logger.js";
+import redis from "../../config/redis.js";
+import { generateJti } from "../../utils/tokenBlacklist.js";
 import { sendUserToken }              from "../../utils/sendUserToken.js";
 import { 
   clearUserCookies, 
@@ -277,7 +279,7 @@ export const logout = asyncHandler(async (req, res, next) => {
       await userWithTokens.removeRefreshToken(incomingRefreshToken);
     }
   }
-
+await redis.del(`user:${req.user._id}`).catch(() => {});
   logger.info("User logged out", { userId: req.user._id });
   return clearUserCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
 });
@@ -364,6 +366,7 @@ if (oldAccessToken) {
 const refreshTokenOptions = buildCookieOptions({ maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
  
 
+await redis.del(`user:${user._id}`).catch(() => {});
   logger.info("Access token refreshed", { userId: user._id });
 
 
@@ -392,7 +395,11 @@ export const getMe = asyncHandler(async (req, res) => {
     else if (user.onboardingStep === 2) nextRoute = "/onboarding/username";
   }
 
-  return res.status(200).json({ success: true, data: user.toSafeObject(), nextRoute });
+const safeUser = typeof user.toSafeObject === "function"
+  ? user.toSafeObject()
+  : (({ password, refreshTokens, firebaseUid, __v, ...rest }) => rest)(user);
+
+return res.status(200).json({ success: true, data: safeUser, nextRoute });
 });
 
 // ═════════════════════════════════════════════
@@ -632,10 +639,10 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
 // ═════════════════════════════════════════════
 
 export const getSocketToken = asyncHandler(async (req, res) => {
-  const token = jwt.sign(
-    { _id: req.user._id, id: req.user._id },
-    ENV.USER_ACCESS_TOKEN_SECRET,
-    { expiresIn: "1m" }
-  );
+ const token = jwt.sign(
+  { _id: req.user._id, id: req.user._id, jti: generateJti() },
+  ENV.USER_ACCESS_TOKEN_SECRET,
+  { expiresIn: "1m" }
+);
   return res.status(200).json({ success: true, data: { token } });
 });

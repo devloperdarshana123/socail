@@ -57,7 +57,7 @@ const initAdminNamespace = (io) => {
 };
 
 // ── Main Socket ──────────────────────────────────────────────────────────────
-const initSocket = (server) => {
+const initSocket = (server, pubClient, subClient) => {
   const ALLOWED_ORIGINS = process.env.CLIENT_URL
     ? process.env.CLIENT_URL.split(",")
     : ["http://localhost:5173", "http://localhost:5174"];
@@ -85,23 +85,47 @@ const initSocket = (server) => {
 
     if (!token) return next(new Error("Unauthorized"));
 
-    try {
-      const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {
-        ignoreExpiration: true,
-      });
+    // try {
+    //   const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, {
+    //     ignoreExpiration: true,
+    //   });
 
-      const now       = Math.floor(Date.now() / 1000);
-      const isExpired = decoded.exp && decoded.exp < now;
+    //   const now       = Math.floor(Date.now() / 1000);
+    //   const isExpired = decoded.exp && decoded.exp < now;
+
+    //   if (isExpired) {
+    //     logger.warn(`⚠️ Token expired for user: ${decoded._id}`);
+    //     socket.user         = decoded;
+    //     socket.tokenExpired = true;
+    //   } else {
+    //     socket.user         = decoded;
+    //     socket.tokenExpired = false;
+    //   }
+try {
+      let decoded;
+      let isExpired = false;
+
+      try {
+        decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+      } catch (err) {
+        if (err.name === "TokenExpiredError") {
+          decoded   = jwt.decode(token);
+          isExpired = true;
+          logger.warn(`⚠️ Token expired for user: ${decoded?._id}`);
+        } else {
+          throw err;
+        }
+      }
+
+      if (!decoded) return next(new Error("Invalid token"));
 
       if (isExpired) {
-        logger.warn(`⚠️ Token expired for user: ${decoded._id}`);
         socket.user         = decoded;
         socket.tokenExpired = true;
       } else {
         socket.user         = decoded;
         socket.tokenExpired = false;
       }
-
       next();
     } catch (err) {
       logger.error("❌ JWT Error", { message: err.message });

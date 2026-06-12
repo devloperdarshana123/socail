@@ -43,10 +43,32 @@ const startServer = async () => {
 
 startServer();
 
+// const shutdown = async (signal) => {
+//   logger.warn(`⚠️ ${signal} received — shutting down gracefully`);
+
+//   server.close(async () => {
+//     await mongoose.connection.close();
+//     logger.info("✅ MongoDB closed");
+
+//     await disconnectRedis();
+//     logger.info("✅ Redis closed");
+
+//     logger.info("✅ Server closed");
+//     process.exit(0);
+//   });
+// };
+
+
 const shutdown = async (signal) => {
   logger.warn(`⚠️ ${signal} received — shutting down gracefully`);
 
+  const forceExit = setTimeout(() => {
+    logger.error("❌ Forced exit after timeout");
+    process.exit(1);
+  }, 30_000);
+
   server.close(async () => {
+    clearTimeout(forceExit);
     await mongoose.connection.close();
     logger.info("✅ MongoDB closed");
 
@@ -57,7 +79,6 @@ const shutdown = async (signal) => {
     process.exit(0);
   });
 };
-
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 process.on("unhandledRejection", (reason) => {

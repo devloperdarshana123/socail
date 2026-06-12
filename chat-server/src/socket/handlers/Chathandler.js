@@ -38,14 +38,6 @@ const syncLastMessage = async (conversationId, msg) => {
   }
 };
 
-// const normalizeParticipants = (conv) => ({
-//   ...conv,
-//   participants: (conv.participants || []).map((p) => ({
-//     ...p,
-//     avatar: p.avatar?.url ? p.avatar : { url: null, publicId: null },
-//   })),
-// });
-
 
 
 const PARTICIPANT_SELECT = "_id fullName username avatar isVerifiedBadge accountStatus";
@@ -133,7 +125,6 @@ export default async (io, socket) => {
   const conv = await Conversation.findById(conversationId)
     .populate("participants", PARTICIPANT_SELECT)
     .lean();
-     console.log("DEBUG raw conv:", conv?._id, "participants count:", conv?.participants?.length);
   return normalizeParticipants(conv);
 };
 
@@ -162,18 +153,10 @@ const getParticipantIds = (conv) =>
       return socket.emit("error", { message: "Message too long." });
 
     try {
-      // const conv = await Conversation.findById(conversationId).lean();
-      // if (!conv) return socket.emit("error", { message: "Conversation not found." });
-
-      // const participants = conv.participants.map((p) => p.toString());
-
       const conv = await getPopulatedConversation(conversationId);
 if (!conv) return socket.emit("error", { message: "Conversation not found." });
 
 const participants = getParticipantIds(conv);
-console.log("DEBUG participants:", participants);
-console.log("DEBUG userId:", userId);
-console.log("DEBUG includes:", participants.includes(userId));
       if (!participants.includes(userId))
         return socket.emit("error", { message: "Unauthorized." });
 
@@ -212,7 +195,7 @@ console.log("DEBUG includes:", participants.includes(userId));
         conversation: conversationId,
         sender:       userId,
         text:         message.text?.trim() || "",
-        image:        message.image || null,
+       image: message.image?.url || message.image || null,
         audio:        message.audio || null,
         replyTo:      replyPreview,
         type:         msgType,
@@ -229,8 +212,7 @@ console.log("DEBUG includes:", participants.includes(userId));
 
       const msgToEmit = { ...newMsg.toObject(), sender: senderObj };
 
-      await syncLastMessage(conversationId, newMsg);
-
+      // await syncLastMessage(conversationId, newMsg);
       const isNewConversation = !conv.lastMessage;
 
       // Unread count increment
@@ -247,20 +229,6 @@ if (recipientIds.length) {
   );
 }
 
-      // message:receive — sab participants ko
-      // for (const pid of participants) {
-      //   if (pid !== userId) {
-      //     const blocked = await isBlocked(userId, pid);
-      //     if (blocked) continue;
-      //   }
-      //   await notifyUser(pid, "message:receive", {
-      //     conversationId,
-      //     message: msgToEmit,
-      //     tempId:  message.tempId || null,
-      //   });
-      // }
-
-
       for (const pid of participants) {
   if (pid !== userId) {
     const blocked = await isBlocked(userId, pid);
@@ -272,31 +240,6 @@ if (recipientIds.length) {
     tempId: pid === userId ? (message.tempId || null) : null,
   });
 }
-      // conversation:new — stranger ka pehla message
-//      if (isNewConversation) {
-//   const populatedConv = await Conversation.findById(conversationId)
-//     .populate("participants", "_id fullName username avatar isVerifiedBadge accountStatus")
-//     .lean();
-
-//   const safeNewConv = normalizeParticipants(populatedConv);
-
-//   for (const pid of participants) {
-//     await notifyUser(pid, "conversation:new", {
-//       conversation: {
-//         ...safeNewConv,
-//         lastMessage: {
-//           messageId: newMsg._id,
-//           text:      newMsg.text?.slice(0, 100) ?? "",
-//           senderId:  userId,
-//           sentAt:    newMsg.createdAt,
-//           isDeleted: false,
-//         },
-//         unreadCount: pid === userId ? 0 : 1,
-//         updatedAt:   new Date().toISOString(),
-//       },
-//     });
-//   }
-// }
 
 
 if (isNewConversation) {
@@ -317,43 +260,17 @@ if (isNewConversation) {
     });
   }
 }
-// ✅ Har message pe sidebar update — stranger ho ya follow kiya ho
-// const updatedConv = await Conversation.findById(conversationId)
-//   .populate("participants", "_id fullName username avatar isVerifiedBadge accountStatus")
-//   .lean();
-
-// // ✅ avatar nested object fix — frontend ko sahi structure chahiye
 
 
-// const safeConv = normalizeParticipants(updatedConv);
-
-// for (const pid of participants) {
-//   const member = await ConversationMember.findOne({
-//     conversationId, userId: pid,
-//   }).lean();
-
-//   await notifyUser(pid, "conversation:updated", {
-//   conversation: {
-//     ...safeConv,
-//       lastMessage: {
-//         messageId: newMsg._id,
-//         text:      newMsg.text?.slice(0, 100) ?? "",
-//         senderId:  userId,
-//         sentAt:    newMsg.createdAt,
-//         isDeleted: false,
-//       },
-//       unreadCount: pid === userId ? 0 : (member?.unreadCount ?? 0),
-//       updatedAt:   new Date().toISOString(),
-//     },
-//   });
-// }
-      // notification:message — online users ko toast
 
 
-      const members = await ConversationMember.find({
-  conversationId,
-  userId: { $in: participants },
-}).lean();
+const [members] = await Promise.all([
+  ConversationMember.find({
+    conversationId,
+    userId: { $in: participants },
+  }).lean(),
+  syncLastMessage(conversationId, newMsg),
+]);
 
 const unreadMap = Object.fromEntries(
   members.map((m) => [m.userId.toString(), m.unreadCount ?? 0])

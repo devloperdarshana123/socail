@@ -13,7 +13,7 @@ const connectDatabase = async () => {
 
     await mongoose.connect(mongoURI, {
       // CHANGE 1: Connection pool — production mein multiple requests handle hoti hain
-      maxPoolSize: 50,
+      maxPoolSize: 10,
       minPoolSize: 5,
       // CHANGE 2: Timeouts — hang nahi karega
       serverSelectionTimeoutMS: 5000,

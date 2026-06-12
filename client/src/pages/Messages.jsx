@@ -1040,12 +1040,28 @@ const unread = typeof conv.unreadCount === "object"
                           fontStyle: isDeleted ? "italic" : "normal",
                           wordBreak: "break-word",
                         }}>
-                        {!isDeleted && isAudio && msg.audio && (
+                        {/* {!isDeleted && isAudio && msg.audio && (
                           <AudioPlayer
                             url={typeof msg.audio === "object" ? msg.audio.url : msg.audio}
                             duration={msg.audio?.duration} isMine={isMine}
                           />
-                        )}
+                        )} */}
+
+                        {!isDeleted && !isAudio && msg.image && (
+  <img
+    src={typeof msg.image === "object" ? msg.image.url : msg.image}
+    alt="sent"
+    onClick={(e) => {
+      e.stopPropagation();
+      window.open(typeof msg.image === "object" ? msg.image.url : msg.image, "_blank");
+    }}
+    style={{
+      maxWidth: isMobile ? 200 : 220, borderRadius: 8,
+      display: "block", marginBottom: msg.text ? 6 : 0,
+      cursor: "pointer",
+    }}
+  />
+)}
                         {!isDeleted && !isAudio && msg.image && (
                           <img src={typeof msg.image === "object" ? msg.image.url : msg.image} alt="sent"
                             style={{ maxWidth: isMobile ? 200 : 220, borderRadius: 8, display: "block", marginBottom: msg.text ? 6 : 0 }} />
