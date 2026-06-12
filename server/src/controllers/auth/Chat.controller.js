@@ -58,14 +58,25 @@ if (history.length > 50) {
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     // Last 10 messages history (5 turns) for context
-    ...history.slice(-10).map((msg) => ({
-      role: msg.from === "user" ? "user" : "assistant",
-      content: msg.text,
-    })),
+    // ...history.slice(-10).map((msg) => ({
+    //   role: msg.from === "user" ? "user" : "assistant",
+    //   content: msg.text,
+    // })),
+    ...history.slice(-10)
+  .filter((msg) => msg?.text?.trim())
+  .map((msg) => ({
+    role: msg.from === "user" ? "user" : "assistant",
+    content: String(msg.text).slice(0, 1000),
+  })),
     { role: "user", content: message.trim() },
   ];
 
-  const groqRes = await fetch(GROQ_API_URL, {
+  // const groqRes = await fetch(GROQ_API_URL, {
+  const controller = new AbortController();
+const timeout = setTimeout(() => controller.abort(), 15_000);
+
+const groqRes = await fetch(GROQ_API_URL, {
+  signal: controller.signal,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -81,12 +92,14 @@ if (history.length > 50) {
   });
 
   if (!groqRes.ok) {
+    clearTimeout(timeout);
     const err = await groqRes.json().catch(() => ({}));
     return next(new AppError(err?.error?.message || "AI service error.", 502));
   }
 
   const data = await groqRes.json();
   const reply = data.choices?.[0]?.message?.content?.trim();
+   clearTimeout(timeout);
 
   if (!reply) {
     return next(new AppError("No response from AI.", 502));

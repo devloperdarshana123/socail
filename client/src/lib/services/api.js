@@ -29,8 +29,7 @@ const forceLogout = () => {
   tokenExpiresAt = null;
   _clearProactiveTimer();
   window.dispatchEvent(new CustomEvent("auth:logout"));
-  // Reset flag so next login works fresh
-  setTimeout(() => { isLoggingOut = false; }, 3000);
+
 };
 
 // ─────────────────────────────────────────────
@@ -130,6 +129,7 @@ document.addEventListener("visibilitychange", _handleVisibilityChange);
 //  Public: call this after login + page reload
 // ─────────────────────────────────────────────
 export const setTokenExpiry = (expiresAt) => {
+  isLoggingOut = false;
   _setExpiryAndSchedule(expiresAt);
 };
 
@@ -158,7 +158,7 @@ api.interceptors.request.use(
         try {
           await doRefresh();
         } catch {
-          return Promise.reject(new axios.Cancel("Session expired"));
+          return Promise.reject(new axios.CanceledError("Session expired"));
         }
       }
     }

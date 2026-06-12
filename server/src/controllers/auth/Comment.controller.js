@@ -184,16 +184,28 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
 
   if (isAdmin) {
     // Hard delete: removes comment + all replies, returns { deletedCount }
-    const { deletedCount } = await Comment.hardDelete(commentId, userId, true);
-    if (!deletedCount) return next(new AppError("Comment not found", 404));
+  //   const { deletedCount } = await Comment.hardDelete(commentId, userId, true);
+  //   if (!deletedCount) return next(new AppError("Comment not found", 404));
 
-    logger.info("Admin hard-deleted comment", { adminId: userId, commentId, deletedCount });
-    return res.status(200).json({
-      success: true,
-      message: `Comment and ${deletedCount - 1} replies deleted`,
-    });
+  //   logger.info("Admin hard-deleted comment", { adminId: userId, commentId, deletedCount });
+  //   return res.status(200).json({
+  //     success: true,
+  //     message: `Comment and ${deletedCount - 1} replies deleted`,
+  //   });
+  // }
+const { deletedCount, postId } = await Comment.hardDelete(commentId, userId, true);
+if (!deletedCount) return next(new AppError("Comment not found", 404));
+
+if (postId) {
+  await Post.updateCount(postId.toString(), "commentsCount", -deletedCount);
+}
+
+logger.info("Admin hard-deleted comment", { adminId: userId, commentId, deletedCount });
+return res.status(200).json({
+  success: true,
+  message: `Comment and ${deletedCount - 1} replies deleted`,
+});
   }
-
   // Regular user: soft delete
   const comment = await Comment.softDelete(commentId, userId);
   if (!comment) return next(new AppError("Comment not found or unauthorized", 404));

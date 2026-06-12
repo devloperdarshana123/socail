@@ -9,8 +9,8 @@ import logger from "../../config/logger.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { ENV } from "../../config/env.js";
-import { blacklistToken } from "../../utils/tokenBlacklist.js";
-
+import { blacklistToken ,  generateJti }  from "../../utils/tokenBlacklist.js";
+import redis from "../../config/redis.js";
 // ─────────────────────────────────────────────
 //  Internal helper — must match User model's hashToken
 // ─────────────────────────────────────────────
@@ -184,7 +184,7 @@ const newRefreshToken = await user.generateAdminRefreshToken(
       ? { domain: process.env.COOKIE_DOMAIN }
       : {}),
   };
-
+await redis.del(`user:${user._id}`).catch(() => {});
   logger.info("Admin token refreshed", {
     userId:     user._id,
     deviceInfo: storedToken.deviceInfo,
@@ -228,14 +228,25 @@ export const getAdminMe = asyncHandler(async (req, res) => {
 // ═════════════════════════════════════════════
 
 export const getAdminSocketToken = asyncHandler(async (req, res) => {
+  // const token = jwt.sign(
+  //   {
+  //     _id:  req.user._id,
+  //     id:   req.user._id,
+  //     role: req.user.role,
+  //   },
+  //   ENV.ADMIN_ACCESS_TOKEN_SECRET,
+  //   { expiresIn: "1m" }
+  // );
+
   const token = jwt.sign(
-    {
-      _id:  req.user._id,
-      id:   req.user._id,
-      role: req.user.role,
-    },
-    ENV.ADMIN_ACCESS_TOKEN_SECRET,
-    { expiresIn: "1m" }
-  );
+  {
+    _id:  req.user._id,
+    id:   req.user._id,
+    role: req.user.role,
+    jti:  generateJti(),
+  },
+  ENV.ADMIN_ACCESS_TOKEN_SECRET,
+  { expiresIn: "1m" }
+);
   return res.status(200).json({ success: true, data: { token } });
 });

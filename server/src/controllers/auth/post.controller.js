@@ -307,11 +307,19 @@ export const deletePost = asyncHandler(async (req, res) => {
   }
 
   // Cloudinary se media delete karo
-  for (const item of post.media) {
-    await deleteFromCloudinary(item.publicId, item.resourceType).catch((err) => {
-      logger.warn("Cloudinary delete failed", { publicId: item.publicId, error: err.message });
-    });
-  }
+  // for (const item of post.media) {
+  //   await deleteFromCloudinary(item.publicId, item.resourceType).catch((err) => {
+  //     logger.warn("Cloudinary delete failed", { publicId: item.publicId, error: err.message });
+  //   });
+  // }
+
+  await Promise.all(
+  post.media.map((item) =>
+    deleteFromCloudinary(item.publicId, item.resourceType).catch((err) =>
+      logger.warn("Cloudinary delete failed", { publicId: item.publicId, error: err.message })
+    )
+  )
+);
 
   await Post.softDelete(postId, authorId);
 
@@ -385,25 +393,43 @@ export const recordView = asyncHandler(async (req, res) => {
 export const getDraftPosts = asyncHandler(async (req, res) => {
   const authorId = req.user._id;
 
-  const drafts = await Post.find({
-    author:    authorId,
-    isDraft:   true,
-    isDeleted: false,
-  })
-    .sort({ createdAt: -1 })
-    .select("media type caption likesCount commentsCount viewsCount createdAt isDraft");
+  // const drafts = await Post.find({
+  //   author:    authorId,
+  //   isDraft:   true,
+  //   isDeleted: false,
+  // })
+  //   .sort({ createdAt: -1 })
+  //   .select("media type caption likesCount commentsCount viewsCount createdAt isDraft");
 
-  return res.status(200).json({
-    success: true,
-    posts:   drafts,
-  });
+
+  const limit  = Math.min(20, Math.max(1, parseInt(req.query.limit) || 20));
+const beforeId = req.query.beforeId?.trim() || null;
+
+const query = { author: authorId, isDraft: true, isDeleted: false };
+if (beforeId) query._id = { $lt: new mongoose.Types.ObjectId(beforeId) };
+
+const drafts = await Post.find(query)
+  .sort({ createdAt: -1 })
+  .limit(limit + 1)
+  .select("media type caption likesCount commentsCount viewsCount createdAt isDraft");
+
+const hasMore = drafts.length > limit;
+const items   = hasMore ? drafts.slice(0, limit) : drafts;
+
+return res.status(200).json({
+  success: true,
+  posts:   items,
+  hasMore,
+  nextCursor: hasMore ? items[items.length - 1]._id : null,
 });
+});
+
 
 // ─────────────────────────────────────────────
 //  PUBLISH DRAFT
 //  PATCH /api/v2/posts/:postId/publish
 // ─────────────────────────────────────────────
-export const publishDraft = asyncHandler(async (req, res) => {
+export const publishDraft = asyncHandler(async (req, res , next) => {
   const { postId } = req.params;
   const authorId   = req.user._id;
 
@@ -417,7 +443,13 @@ export const publishDraft = asyncHandler(async (req, res) => {
   if (!post) {
     return res.status(404).json({ success: false, message: "Draft not found" });
   }
-
+// post.isDraft = false; se pehle add karo:
+if (post.type === "image" && post.media.length < 1) {
+  return next(new AppError("Image post requires at least one image.", 400));
+}
+if (post.type === "reel" && post.media.length !== 1) {
+  return next(new AppError("Reel must have exactly one video.", 400));
+}
   post.isDraft = false;
   await post.save();
 

@@ -36,8 +36,16 @@ export default (io, socket) => {
     }
 
     // ── Step 2: fetchSender — userService se (duplicate hata diya) ────────
-    const senderObj = await fetchSender(userId);
+    // const senderObj = await fetchSender(userId);
 
+    // ── Step 2: fetchSender — userService se (duplicate hata diya) ────────
+let senderObj;
+try {
+  senderObj = await fetchSender(userId);
+} catch (err) {
+  logger.error(`❌ fetchSender failed`, { message: err.message });
+  return;
+}
     // ── Step 3: Emit ──────────────────────────────────────────────────────
     const payload = {
       _id:      saved._id,
@@ -112,6 +120,7 @@ export default (io, socket) => {
       socket.emit("notification:unread_count", { count });
     } catch (err) {
      logger.error("❌ Mark read failed", { message: err.message });
+       socket.emit("notification:error", { message: "Failed to mark as read" });
     }
   });
 
@@ -123,6 +132,7 @@ export default (io, socket) => {
       socket.emit("notification:unread_count", { count });
     } catch (err) {
      logger.error("❌ Delete failed", { message: err.message });
+      socket.emit("notification:error", { message: "Failed to delete notification" });
     }
   });
 };

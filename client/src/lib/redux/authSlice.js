@@ -1,8 +1,7 @@
 
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import api  from "../services/api";
-
+import api , { setTokenExpiry } from "../services/api";
 // ─────────────────────────────────────────────
 //  Thunks
 // ─────────────────────────────────────────────
@@ -312,7 +311,8 @@ setPending(state, action) {
         state.user = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
-        state.expiresAt = action.payload.expiresAt || null; 
+        state.expiresAt = action.payload.expiresAt || null;
+         if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
         state.pendingUserId = null;
         state.pendingPurpose = null;
         
@@ -332,10 +332,16 @@ setPending(state, action) {
         state.fetchMe.loading = true;
         state.fetchMe.error = null;
       })
-      .addCase(fetchMe.fulfilled, (state, action) => {
+//       .addCase(fetchMe.fulfilled, (state, action) => {
+//   state.fetchMe.loading = false;
+//   state.user = action.payload.data?.user || action.payload.data || null;
+//   state.isAuthenticated = !!state.user;
+// })
+.addCase(fetchMe.fulfilled, (state, action) => {
   state.fetchMe.loading = false;
   state.user = action.payload.data?.user || action.payload.data || null;
   state.isAuthenticated = !!state.user;
+  if (state.expiresAt) setTokenExpiry(state.expiresAt);
 })
     .addCase(fetchMe.rejected, (state, action) => {
   state.fetchMe.loading  = false;
@@ -357,7 +363,8 @@ setPending(state, action) {
         state.user = action.payload.data || null;
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
-        state.expiresAt = action.payload.expiresAt || null; 
+state.expiresAt = action.payload.expiresAt || null;
+if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
          
         if (action.payload.nextRoute === "/verify-otp") {
           state.pendingUserId = action.payload.data?._id || null;
@@ -470,6 +477,7 @@ builder
     state.isAuthenticated = !!action.payload.data;
     state.nextRoute       = action.payload.nextRoute || "/feed";
     state.expiresAt       = action.payload.expiresAt || null; 
+    if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
     
 
   })
