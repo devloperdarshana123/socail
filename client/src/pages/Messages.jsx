@@ -298,7 +298,13 @@ function BlockedBanner({ iBlockedThem, onUnblock }) {
 
 // ─── ImagePreview ─────────────────────────────────────────────────────────────
 function ImagePreview({ file, onRemove }) {
-  const url = URL.createObjectURL(file);
+  const [url, setUrl] = useState("");   // ← useState add karo
+
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
   return (
     <div style={{ position: "relative", display: "inline-block", margin: "6px 0" }}>
       <img src={url} alt="preview"
@@ -438,7 +444,7 @@ useEffect(() => {
       if (action?.payload?._id) dispatch(setActiveConversation(action.payload._id));
     });
   }
-}, [openUserId, conversations, loadingConvs]);
+}, [openUserId, conversations, loadingConvs , dispatch]);
 
  useEffect(() => { if (myId) dispatch(fetchFollowing({ userId: myId })); }, [myId, dispatch]);
 
@@ -1164,7 +1170,7 @@ const unread = typeof conv.unreadCount === "object"
                       </button>
                       <button aria-label="Attach image" onClick={() => fileInputRef.current?.click()} disabled={imgUploading}
                         style={{ background: "none", border: "none", cursor: imgUploading ? "wait" : "pointer", flexShrink: 0, padding: 0, opacity: imgUploading ? 0.5 : 1, display: "flex", alignItems: "center" }}>
-                        <svg width="18" height="18" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                        <svg width="18" height="18" fill="none" stroke="#888888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                           <circle cx="8.5" cy="8.5" r="1.5"/>
                           <polyline points="21 15 16 10 5 21"/>

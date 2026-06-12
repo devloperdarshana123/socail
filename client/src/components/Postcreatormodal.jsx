@@ -160,7 +160,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
   const [submitting, setSub]        = useState(false);
   const [error,      setError]      = useState("");
   const [isDark,     setIsDark]     = useState(false);
-  const [isMobile,   setIsMobile]   = useState(window.innerWidth < 768);
+ const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   const visRef = useRef(null);
   const accent = "#1e3a5f";
@@ -182,7 +182,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
     const h = (e) => { if (e.key === "Escape") handleClose(); };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
-  }, []);
+  }, [handleClose]);
 
   // ✅ reset: no URL.revokeObjectURL needed — we store Cloudinary URLs now
   const reset = useCallback(() => {

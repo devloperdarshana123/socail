@@ -92,21 +92,12 @@ window.addEventListener("auth:logout", handleForceLogout);
 return () => window.removeEventListener("auth:logout", handleForceLogout);
   }, [dispatch, navigate]);
 
-  // Token refresh — localStorage update
-  // useEffect(() => {
-  //   const handleTokenRefreshed = (e) => {
-  //     if (e.detail?.token) localStorage.setItem("accessToken", e.detail.token);
-  //   };
-  //   window.addEventListener("auth:tokenRefreshed", handleTokenRefreshed);
-  //   return () => window.removeEventListener("auth:tokenRefreshed", handleTokenRefreshed);
-  // }, []);
-
 
   useEffect(() => {
   if (user?._id) {
     dispatch(fetchNotifications({ page: 1 }));
   }
-}, [user?._id]);
+}, [user?._id ,dispatch]);
 
 
 

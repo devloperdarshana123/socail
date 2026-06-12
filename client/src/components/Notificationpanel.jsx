@@ -220,6 +220,7 @@ export default function NotificationPanel() {
 
 // ── Single notification row ────────────────────────────────────────────────
 function NotificationItem({ notification: n, onClick, onDelete }) {
+  const [hovered, setHovered] = useState(false);
   const sender  = n.sender;
   const initials = sender?.fullName
     ? sender.fullName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
@@ -232,6 +233,8 @@ function NotificationItem({ notification: n, onClick, onDelete }) {
   return (
     <div
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}   // ← yahan add karo
+  onMouseLeave={() => setHovered(false)}
       style={{
         display:       "flex",
         alignItems:    "flex-start",
@@ -279,9 +282,9 @@ function NotificationItem({ notification: n, onClick, onDelete }) {
           overflow:       "hidden",
         }}
       >
-        {sender?.avatar ? (
+        {sender?.avatar?.url ? (
           <img
-            src={sender.avatar}
+            src={sender.avatar.url}
             alt={sender.username}
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
@@ -318,11 +321,12 @@ function NotificationItem({ notification: n, onClick, onDelete }) {
           padding:      "4px",
           borderRadius: "6px",
           color:        "var(--color-text-tertiary)",
-          opacity:      0,
+          opacity: hovered ? 1 : 0,
+transition: "opacity 0.15s",
           fontSize:     "14px",
           flexShrink:   0,
         }}
-        className="notif-del-btn"
+       
         aria-label="Delete notification"
       >
         ✕

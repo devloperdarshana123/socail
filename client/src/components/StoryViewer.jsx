@@ -44,6 +44,7 @@ const [likesCount, setLikesCount] = useState(0);
   const [newTitle, setNewTitle]             = useState("");
   const [creatingNew, setCreatingNew]       = useState(false);
   const [savedHighlights, setSavedHighlights] = useState(new Set());
+const [replyText, setReplyText] = useState("");
 
   const timerRef   = useRef(null);
   const startRef   = useRef(null);
@@ -92,7 +93,7 @@ setLikesCount(story?.reactionsCount ?? 0);
 
     if (story?._id) dispatch(viewStory(story._id));
     return () => clearInterval(timerRef.current);
-  }, [userIdx, storyIdx]);
+  }, [userIdx, storyIdx, dispatch]);
 
  useEffect(() => {
   if (paused) {
@@ -433,11 +434,14 @@ const createNewHighlight = async () => {
                   }
                 </div>
                 <div className="flex-1 border border-white/50 rounded-full px-4 py-2">
-                  <input type="text"
+                  <input
+                   type="text"
                     placeholder={`Reply to ${story?.author?.username}...`}
                     className="w-full bg-transparent text-white text-sm outline-none placeholder:text-white/60"
                     onFocus={() => setPaused(true)}
                     onBlur={() => setPaused(false)}
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
                   />
                 </div>
               </div>

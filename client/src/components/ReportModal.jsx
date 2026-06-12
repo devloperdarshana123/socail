@@ -81,16 +81,18 @@ export default function ReportModal({ onSubmit, onClose, targetModel = "User" })
   const [selected, setSelected] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!selected || submitting) return;
-    setSubmitting(true);
-    try {
-      await onSubmit(selected);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
+ const handleSubmit = async () => {
+  if (!selected || submitting) return;
+  setSubmitting(true);
+  try {
+    await onSubmit(selected);
+  } catch (err) {
+    console.error("Report submission failed:", err);
+    throw err;
+  } finally {
+    setSubmitting(false);
+  }
+};
   return createPortal(
     <div
       onClick={onClose}

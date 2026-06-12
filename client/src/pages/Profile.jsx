@@ -160,11 +160,11 @@ const coverPreview = localCoverPreview || coverPhoto?.url || user?.coverPhoto?.u
  
   useEffect(() => {
     if (user?._id) dispatch(fetchMyPosts(user._id));
-  }, [user?._id]);
+  }, [user?._id, dispatch]);
 
   useEffect(() => {
     dispatch(fetchMyHighlights());
-  }, []);
+  }, [dispatch]);
 
 
 useEffect(() => {
@@ -240,6 +240,7 @@ useEffect(() => {
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+     if (localAvatarPreview) URL.revokeObjectURL(localAvatarPreview);
     setLocalAvatarPreview(URL.createObjectURL(file));
     dispatch(uploadAvatar(file));
   };
@@ -247,6 +248,7 @@ useEffect(() => {
   const handleCoverChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (localCoverPreview) URL.revokeObjectURL(localCoverPreview); 
     setLocalCoverPreview(URL.createObjectURL(file));
     dispatch(uploadCoverPhoto(file));
   };

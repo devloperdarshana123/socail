@@ -38,23 +38,7 @@ const [loadingMore,   setLoadingMore]   = useState(false);
     if (currentUser?.username && username === currentUser.username) {
       navigate("/profile", { replace: true });
     }
-  }, [username, currentUser]);
-
-  // useEffect(() => {
-  //   if (!username) return;
-  //   setLoading(true);
-  //   setError(null);
-  //   api.get(`/explore/user/${username}`)
-  //     .then(({ data }) => {
-  //       if (data.success) {
-  //         setProfile(data.user);
-  //         setPosts(data.posts || []);
-  //         setFollowState(data.user.isFollowing ? "following" : "none");
-  //       } else setError("User not found.");
-  //     })
-  //     .catch(() => setError("Could not load profile."))
-  //     .finally(() => setLoading(false));
-  // }, [username]);
+  }, [username, currentUser, navigate]);
 
 
    useEffect(() => {
@@ -93,7 +77,7 @@ const [loadingMore,   setLoadingMore]   = useState(false);
       viewedPosts.current.add(postId);
       dispatch(recordPostView(postId));
     }
-  }, [selectedPost?._id]);
+  }, [selectedPost?._id, dispatch]);
 
 useEffect(() => {
   const observer = new IntersectionObserver(

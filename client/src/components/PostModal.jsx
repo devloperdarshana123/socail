@@ -249,7 +249,7 @@ viewTimerRef.current = setTimeout(() => {
   sessionStorage.setItem(`view_${postId}`, "1");
 }, 3000);
   return () => clearTimeout(viewTimerRef.current);
-}, [postId, isOwner]);
+}, [postId, isOwner, dispatch]);
   // ── key fix: hasMedia checks properly ──
  const hasMedia = post?.type !== "text" && Array.isArray(post?.media) && post.media.length > 0;
 const isText   = post?.type === "text";
@@ -814,11 +814,22 @@ Report post
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    dispatch(deletePost(post._id));
-                    setDeleteConfirm(false);
-                    onClose();
-                  }}
+                  // onClick={() => {
+                  //   dispatch(deletePost(post._id));
+                  //   setDeleteConfirm(false);
+                  //   onClose();
+                  // }}
+
+                  onClick={async () => {
+  try {
+    await dispatch(deletePost(post._id)).unwrap();
+    setDeleteConfirm(false);
+    onClose();
+  } catch {
+    setDeleteConfirm(false);
+    toast.error("Failed to delete post. Please try again.");
+  }
+}}
                   style={{
                     flex: 1, padding: "10px 0", borderRadius: 10,
                     border: "none", background: "#ef4444",

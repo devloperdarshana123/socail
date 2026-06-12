@@ -16,7 +16,7 @@ export default function StoryBar() {
 
   useEffect(() => {
   dispatch(fetchStoriesFeed());
-}, []);
+}, [dispatch]);
 
   const myGroup = feed.find(
     (g) => g.author?._id === currentUser?._id || g.author === currentUser?._id
@@ -66,10 +66,10 @@ export default function StoryBar() {
         {sorted.map((group, idx) => (
           <div key={group.author?._id || idx}
             className="shrink-0 flex flex-col items-center gap-1.5 cursor-pointer"
-            onClick={() => { setViewerStart(idx); setViewerOpen(true); }}>
+            onClick={() => { setViewerStart(sorted.indexOf(group)); setViewerOpen(true); }} >
             <div className={`w-14 h-14 rounded-full p-0.5 ${
               group.hasUnwatched
-                ? "bg-gradient-to-tr from-[#c09a6e] to-[#8b6343]"
+                ? "bg-linear-to-tr from-[#c09a6e] to-[#8b6343]"
                 : "bg-[#e8d5be]"
             }`}>
               <div className="w-full h-full rounded-full overflow-hidden border-2 border-white">

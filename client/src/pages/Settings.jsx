@@ -177,6 +177,11 @@ function ProfileTab({ user }) {
   const [selectedCountry,   setSelectedCountry]   = useState(null);
   const [selectedState,     setSelectedState]     = useState(null);
   const [selectedCity,      setSelectedCity]      = useState(null);
+  const [countryOptions] = useState(() =>
+  Country.getAllCountries().map(c => ({
+    label: c.name, value: c.isoCode, flag: c.flag,
+  }))
+);
 
   // ── Sync when user changes ──
   useEffect(() => {
@@ -354,9 +359,7 @@ function ProfileTab({ user }) {
         <div>
           <label className="block text-xs font-semibold mb-1.5" style={{ color: T.brownMid }}>Country</label>
           <Select
-            options={Country.getAllCountries().map(c => ({
-              label: c.name, value: c.isoCode, flag: c.flag,
-            }))}
+        options={countryOptions}
             value={selectedCountry}
             onChange={(val) => { setSelectedCountry(val); setSelectedState(null); setSelectedCity(null); }}
             placeholder="Select country..."
@@ -540,9 +543,9 @@ function DeactivateTab() {
     dispatch(deactivateAccount())
       .unwrap()
       .then(() => {
-        // resetAuth already dispatched inside thunk
         window.location.href = "/";
       })
+       .catch((err) => toast.error(err || "Deactivation failed"));
       
   };
 

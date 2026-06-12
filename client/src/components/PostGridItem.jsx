@@ -229,7 +229,13 @@ export default function PostGridItem({
       {confirmDel && (
         <DeleteConfirm
           onCancel={() => setConfirmDel(false)}
-          onConfirm={() => { onDelete?.(); setConfirmDel(false); }}
+         onConfirm={async () => {
+  try {
+    await onDelete?.();
+  } finally {
+    setConfirmDel(false);
+  }
+}}
         />
       )}
     </>
