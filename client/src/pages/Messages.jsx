@@ -1062,10 +1062,6 @@ const unread = typeof conv.unreadCount === "object"
     }}
   />
 )}
-                        {!isDeleted && !isAudio && msg.image && (
-                          <img src={typeof msg.image === "object" ? msg.image.url : msg.image} alt="sent"
-                            style={{ maxWidth: isMobile ? 200 : 220, borderRadius: 8, display: "block", marginBottom: msg.text ? 6 : 0 }} />
-                        )}
                         {isDeleted ? "This message was deleted" : (!isAudio && msg.text)}
                         {msg.isEdited && !isDeleted && (
                           <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 4 }}>(edited)</span>

@@ -16,6 +16,9 @@ import {
   selectBulkLoading, selectSelectedIds,
 } from "../lib/redux/reportsSlice";
 
+// Top pe import add karo
+import { getAdminSocket } from "../lib/adminSocket";
+
 // ─────────────────────────────────────────────────────────────
 //  Constants  (module-level — never recreated)
 // ─────────────────────────────────────────────────────────────
@@ -991,6 +994,20 @@ export default function ReportsPage() {
   ]);
 
   useEffect(() => { loadReports(); }, [loadReports]);
+
+  useEffect(() => {
+  const s = getAdminSocket();
+  if (!s) return;
+
+  const handler = (payload) => {
+    if (payload.type !== "admin_new_report") return;
+    loadReports();
+    showToast("New report received");
+  };
+
+  s.on("admin:notification", handler);
+  return () => s.off("admin:notification", handler);
+}, [loadReports, showToast]);
 
   const handleRowClick = useCallback((report) => {
     dispatch(fetchReportById(report._id));

@@ -54,6 +54,16 @@ export const addComment = asyncHandler(async (req, res, next) => {
 
   // ── Increment post commentsCount ──────────────────────────────────────────
   await Post.updateCount(postId, "commentsCount", 1);
+  notifyChat("/notify/admin-notify", {
+  type: "admin_new_comment",
+  meta: {
+    commentId: comment._id.toString(),
+    postId,
+    authorId: userId.toString(),
+  },
+}).catch((err) =>
+  logger.error("Admin comment notification failed", { error: err.message })
+);
 
   logger.info("Comment added", {
     userId, postId,

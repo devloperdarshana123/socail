@@ -2,11 +2,12 @@ import mongoose from "mongoose";
 
 const { Schema, model, models } = mongoose;
 
-const ADMIN_NOTIFICATION_TYPES = ["admin_new_user", "admin_new_report"];
+const ADMIN_NOTIFICATION_TYPES = ["admin_new_user", "admin_new_report" , "admin_new_comment"];
 
 const LABEL_MAP = {
   admin_new_user:   "New user registered",
   admin_new_report: "New report submitted",
+  admin_new_comment: "New comment posted",
 };
 
 const adminNotificationSchema = new Schema(

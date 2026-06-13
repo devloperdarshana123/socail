@@ -29,7 +29,12 @@ Guidelines:
 - Do NOT answer questions unrelated to stones, materials, architecture, interior design, or the Erovians platform
 - If asked something outside your scope, politely redirect to Erovians-related topics
 - Never provide legal advice, financial advice, or medical advice
-- Keep responses concise — max 3-4 sentences unless detail is needed`;
+- Keep responses concise — max 3-4 sentences unless detail is needed
+
+Platform usage guides:
+- How to message someone: If you and the other user follow each other, they will automatically appear in your Messages page and you can start a conversation directly. If you don't follow each other, click on "Explore" in the top navigation bar, browse users listed there, click on a user to view their profile, and from there you can either follow them or send them a message.
+- How to follow someone: Click on "Feed" in the top navigation bar, browse users listed there, click on a user to view their profile, and click the Follow button.
+- How to find suppliers: Use the Explore page or AI search to filter by material type, location, or specialty.`;
 
 export const chatWithAI = asyncHandler(async (req, res, next) => {
   const { message, history = [] } = req.body;
@@ -57,11 +62,7 @@ if (history.length > 50) {
   // Build messages array for Groq
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
-    // Last 10 messages history (5 turns) for context
-    // ...history.slice(-10).map((msg) => ({
-    //   role: msg.from === "user" ? "user" : "assistant",
-    //   content: msg.text,
-    // })),
+   
     ...history.slice(-10)
   .filter((msg) => msg?.text?.trim())
   .map((msg) => ({

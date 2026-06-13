@@ -504,13 +504,14 @@ export const bulkUpdateComments = asyncHandler(async (req, res) => {
     userAgent: req.headers["user-agent"] || null,
   });
 
-  res.status(200).json({
-    success: true,
-    message: `Bulk ${action} completed`,
-    data: {
-      requested: ids.length,
-      modified:  result.modifiedCount,
-      failed:    ids.length - result.modifiedCount,
-    },
-  });
+ res.status(200).json({
+  success: true,
+  message: `Bulk ${action} completed`,
+  data: {
+    action,                              // ← yeh add karo
+    requested: ids.length,
+    modified:  result.modifiedCount,
+    failed:    ids.length - result.modifiedCount,
+  },
+});
 });

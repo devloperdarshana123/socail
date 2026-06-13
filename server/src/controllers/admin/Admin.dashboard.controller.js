@@ -5,6 +5,7 @@ import User         from "../../models/user.model.js";
 import Post         from "../../models/post.model.js";
 import Report       from "../../models/report.model.js";
 import logger       from "../../config/logger.js";
+import Comment from "../../models/comment.model.js";
 import { REGULAR_USER_FILTER } from "../../utils/adminQueryFilters.js";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     Post.countDocuments({ createdAt: { $gte: startOfThisMonth }, isDeleted: { $ne: true } }),
     Post.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth }, isDeleted: { $ne: true } }),
     Post.aggregate([{ $group: { _id: null, total: { $sum: "$likesCount" } } }]),
-    Post.aggregate([{ $group: { _id: null, total: { $sum: "$commentsCount" } } }]),
+    Comment.countDocuments({ isDeleted: false }),
    Post.aggregate([{ $group: { _id: null, total: { $sum: "$viewsCount" } } }]),
   ]);
 
@@ -73,7 +74,8 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
       totalUsers,
       totalPosts,
       totalLikes:    likesAgg[0]?.total    ?? 0,
-      totalComments: commentsAgg[0]?.total ?? 0,
+      totalComments: commentsAgg,
+
       totalViews:    viewsAgg[0]?.total    ?? 0,
       activeToday,
       newSignups:       newSignupsThisMonth,

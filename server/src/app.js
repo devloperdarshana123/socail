@@ -125,11 +125,12 @@ app.use("/api/v2/admin/login", adminAuthRouteLimiter);
 app.use("/api/v2/admin/auth", adminAuthRoute);
 app.use("/api/v2/admin/dashboard", dashboardRoutes);
 app.use("/api/v2/admin/comments", commentRoutes);
+app.use("/api/v2/admin/notifications", adminNotificationRoute);
 app.use("/api/v2/admin",      adminUserRoute); 
 app.use("/api/v2/admin", adminReportRoute);
 app.use("/api/v2/admin/settings", adminSettingsRoute);
 app.use("/api/v2/admin/audit-logs", auditLogRoute);
-app.use("/api/v2/admin/notifications", adminNotificationRoute);
+
 
 
 

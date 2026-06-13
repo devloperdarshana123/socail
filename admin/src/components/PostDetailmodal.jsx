@@ -259,7 +259,7 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                  {hideAuthorNav ? (
   <span className="text-sm font-bold text-slate-800 truncate leading-none">
     @{author?.username}

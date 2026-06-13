@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { useDispatch, useSelector } from "react-redux";
 import ReportModal from "./ReportModal";
@@ -190,6 +191,7 @@ function CommentItem({ comment, onReply }) {
 
 export default function PostModal({ post, onClose }) {
   const dispatch = useDispatch();
+  const navigate = useNavigate(); 
   const { user: me } = useSelector((s) => s.auth);
   const interactions = useSelector((s) => s.posts.interactions);
 
@@ -463,14 +465,36 @@ const isText   = post?.type === "text";
             borderBottom: `1px solid ${T.border}`,
             flexShrink: 0,
           }}>
-            <Avatar user={post.author} size={38} />
+            {/* <Avatar user={post.author} size={38} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontWeight: 700, fontSize: 14, color: T.text,
                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {post.author?.fullName}
               </p>
               <p style={{ fontSize: 12, color: T.textLt }}>@{post.author?.username}</p>
-            </div>
+            </div> */}
+
+           <div
+  onClick={() => {
+    if (!post.author?.username) return;
+    onClose();
+    if (post.author?.username === me?.username) {
+      navigate("/profile");
+    } else {
+      navigate(`/profile/${post.author.username}`);
+    }
+  }}
+  style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }}
+>
+  <Avatar user={post.author} size={38} />
+  <div style={{ flex: 1, minWidth: 0 }}>
+    <p style={{ fontWeight: 700, fontSize: 14, color: T.text,
+      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {post.author?.fullName}
+    </p>
+    <p style={{ fontSize: 12, color: T.textLt }}>@{post.author?.username}</p>
+  </div>
+</div> 
            <span style={{ fontSize: 11, color: T.textLt, flexShrink: 0 }}>
   {timeAgo(post.createdAt)}
 </span>
