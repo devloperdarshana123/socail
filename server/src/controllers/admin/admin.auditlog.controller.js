@@ -1,6 +1,6 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError      from "../../utils/AppError.js";
-import AuditLog, { AUDIT_ACTIONS, AUDIT_CATEGORIES } from "../../models/auditLog.model.js";
+import AuditLog, { AUDIT_ACTIONS, AUDIT_CATEGORIES } from "../../models/auditlog.model.js";
 import logger        from "../../config/logger.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
