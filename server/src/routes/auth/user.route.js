@@ -1,6 +1,6 @@
 import express from "express";
 import { isAuthenticated, isActive} from "../../middlewares/auth.js";
-import { uploadSingle } from "../../middlewares/multer.middleware.js";
+import { uploadSingle } from "../../middlewares/multer.middleware.js"
 import { generalLimiter } from "../../middlewares/rateLimiter.js";
 import {
   updateAvatar,
