@@ -22,7 +22,7 @@ import onboardingRoute from "./routes/auth/onboarding.route.js";
 import postRouter from "./routes/auth/post.route.js";
 import userRouter from "./routes/auth/user.route.js";
 import likeRouter from "./routes/auth/Like.route.js";
-import commentRouter from "./routes/auth/comment.route.js";
+import commentRouter from "./routes/auth/Comment.route.js";
 import savedRouter from "./routes/auth/saved.route.js";
 import settingRoute from "./routes/auth/Setting.route.js";
 import exploreRoute from "./routes/auth/Explore.route.js";
