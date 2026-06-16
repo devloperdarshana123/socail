@@ -11,8 +11,8 @@ import {
 import authReducer        from "../lib/redux/authSlice";
 import postReducer        from "../lib/redux/postSlice";
 import userProfileReducer from "../lib/redux/userprofileslice";
-import settingsReducer    from "../lib/redux/Settingslice";
-import exploreReducer     from "../lib/redux/Exploreslice";
+import settingsReducer from "../lib/redux/settingSlice";
+import exploreReducer  from "../lib/redux/exploreSlice";
 import storyReducer       from "../lib/redux/storySlice";
 import chatReducer        from "../lib/redux/chatSlice";
 import followReducer      from "../lib/redux/followSlice";
