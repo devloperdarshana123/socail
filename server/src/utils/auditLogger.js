@@ -153,7 +153,7 @@
 
 // server/src/utils/auditLogger.js
 
-import AuditLog, { AUDIT_ACTIONS } from "../models/auditLog.model.js";
+import AuditLog, { AUDIT_ACTIONS } from "../models/auditlog.model.js";
 import logger from "../config/logger.js";
 
 export { AUDIT_ACTIONS };
