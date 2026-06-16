@@ -176,15 +176,16 @@ export const connectSocket = async (userId) => {
   currentUserId = userId;
 
   socket = io(CHAT_SERVER, {
-    auth: { token },
-    transports: ["websocket"],
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 2000,
-    reconnectionDelayMax: 10000,
-    pingTimeout: 60000,
-    pingInterval: 25000,
-  });
+  auth: { token },
+  transports: ["polling", "websocket"],  // ← polling pehle, phir upgrade
+  upgrade: true,
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 2000,
+  reconnectionDelayMax: 10000,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+});
 
   registerSocketEvents(socket);
 
