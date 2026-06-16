@@ -19,10 +19,22 @@ import AppError from "../utils/AppError.js";
  */
 
 // ✅ ADD KARO — import redis, logger, AppError ke baad
+// const getClientIp = (req) => {
+//   const forwarded = req.headers["x-forwarded-for"];
+//   if (forwarded) return forwarded.split(",")[0].trim();
+//   return req.ip || req.socket?.remoteAddress || "unknown";
+// };
+
 const getClientIp = (req) => {
   const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.ip || req.socket?.remoteAddress || "unknown";
+  if (forwarded) {
+    // Pehla IP real user ka hota hai, baad wale Render ke proxies hain
+    return forwarded.split(",")[0].trim();
+  }
+  // req.ip already trust proxy se process hua hai
+  const ip = req.ip || req.socket?.remoteAddress || "unknown";
+  // IPv6 loopback ko IPv4 mein convert karo
+  return ip === "::1" ? "127.0.0.1" : ip.replace(/^::ffff:/, "");
 };
 export function createRateLimiter({
   route,
@@ -240,7 +252,7 @@ export const transcribeLimiter = createRateLimiter({
  */
 export const globalRouteLimiter = createRateLimiter({
   route      : "global",
-  limit      : process.env.NODE_ENV === "production" ? 500 : 10000,
+  limit      : process.env.NODE_ENV === "production" ? 2000 : 10000,
   windowSecs : 15 * 60,
   message    : "Too many requests, please try again later.",
   // keyFn      : (req) => req.ip,
