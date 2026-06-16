@@ -1,7 +1,7 @@
 
 import { useEffect, useRef, useState, useCallback,useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import EmojiPicker from "emoji-picker-react";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 import { useVoiceToText } from "../lib/hooks/useVoiceToText";
@@ -325,6 +325,7 @@ export default function Messages() {
   const { user } = useSelector((s) => s.auth);
   const myId     = user?._id?.toString();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   const conversations  = useSelector(selectConversations);
   const activeConvId   = useSelector(selectActiveConvId);
@@ -780,8 +781,19 @@ const unread = typeof conv.unreadCount === "object"
                       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--color-background-primary)"; }}
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
                     >
-                      <Avatar name={other?.fullName || other?.username || "U"} userId={cOtherId}
-                        src={other?.avatar?.url || null} online={isOnline} size={42} />
+                      {/* <Avatar name={other?.fullName || other?.username || "U"} userId={cOtherId}
+                        src={other?.avatar?.url || null} online={isOnline} size={42} /> */}
+
+                        <div
+  onClick={(e) => {
+    e.stopPropagation();
+    if (other?.username) navigate(`/profile/${other.username}`);
+  }}
+  style={{ cursor: "pointer" }}
+>
+  <Avatar name={other?.fullName || other?.username || "U"} userId={cOtherId}
+    src={other?.avatar?.url || null} online={isOnline} size={42} />
+</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
                           <p style={{ fontSize: 14, fontWeight: unread > 0 ? 700 : 500, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>
@@ -883,9 +895,19 @@ const unread = typeof conv.unreadCount === "object"
                   </svg>
                 </button>
               )}
-              <Avatar name={otherParticipant?.fullName || otherParticipant?.username || "U"}
+              {/* <Avatar name={otherParticipant?.fullName || otherParticipant?.username || "U"}
                 userId={otherId} src={otherParticipant?.avatar?.url || null}
-                online={otherOnline} size={isMobile ? 34 : 38} />
+                online={otherOnline} size={isMobile ? 34 : 38} /> */}
+                <div
+  onClick={() => {
+    if (otherParticipant?.username) navigate(`/profile/${otherParticipant.username}`);
+  }}
+  style={{ cursor: "pointer" }}
+>
+  <Avatar name={otherParticipant?.fullName || otherParticipant?.username || "U"}
+    userId={otherId} src={otherParticipant?.avatar?.url || null}
+    online={otherOnline} size={isMobile ? 34 : 38} />
+</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {otherParticipant?.fullName || otherParticipant?.username}
