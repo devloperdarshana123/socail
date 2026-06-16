@@ -24,11 +24,13 @@ import CommentsPage from "./pages/Commentspage";
 
 
 import DashboardPage from "./pages/DashboardPage";
-import PostsPage from "./pages/PostsPage";
+
 import ReportsPage from "./pages/Reportspage";
 import SettingsPage from "./pages/Settings";
 import UserDetailPage from "./pages/UserDetailPage";
-import AuditLog from "./pages/AuditLog";
+import AuditLog from "./pages/Auditlog";    // ✅
+import PostsPage from "./pages/Postspage"; 
+
 
 // ─────────────────────────────────────────────
 //  Protected Route — sirf super_admin access
