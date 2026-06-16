@@ -448,7 +448,10 @@ export const setUsername = asyncHandler(async (req, res, next) => {
   const existing = await User.findByUsername(trimmed);
   if (existing) return next(new AppError("This username is already taken", 409));
 
-  const user = req.user;
+  // ✅ Redis cached plain object hai req.user — isliye fresh DB fetch zaroori hai
+  const user = await User.findById(req.user._id);
+  if (!user) return next(new AppError("User not found", 404));
+
   user.username             = trimmed;
   user.onboardingStep       = 3;
   user.accountStatus        = "active";
@@ -458,14 +461,14 @@ export const setUsername = asyncHandler(async (req, res, next) => {
   logger.info("Username set, onboarding complete", { userId: user._id, username: trimmed });
 
   notifyAdmin({
-  type: "admin_new_user",
-  meta: {
-    userId:   user._id.toString(),
-    username: trimmed,
-    email:    user.email    ?? null,
-    fullName: user.fullName ?? null,
-  },
-}).catch(() => {});
+    type: "admin_new_user",
+    meta: {
+      userId:   user._id.toString(),
+      username: trimmed,
+      email:    user.email    ?? null,
+      fullName: user.fullName ?? null,
+    },
+  }).catch(() => {});
 
   await sendUserToken(user, 200, res, {
     message   : "Welcome to Erovians! 🎉",
