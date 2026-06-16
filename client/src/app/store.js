@@ -46,7 +46,7 @@ const chatPersistConfig = {
 const userProfilePersistConfig = {
   key: "userProfile",
   storage,
-  whitelist: [], // kuch persist nahi
+  whitelist: ["avatarLoading"], // kuch persist nahi
 };
 
 // ── Root Reducer ──────────────────────────────────────────────────────────────
