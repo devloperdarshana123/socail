@@ -842,8 +842,18 @@ const unread = typeof conv.unreadCount === "object"
                     }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-primary)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                      <Avatar name={u.fullName || u.username || "U"} userId={uid}
-                        src={u.avatar?.url || null} online={isOnline} size={42} />
+                      {/* <Avatar name={u.fullName || u.username || "U"} userId={uid}
+                        src={u.avatar?.url || null} online={isOnline} size={42} /> */}
+                        <div
+  onClick={(e) => {
+    e.stopPropagation();
+    if (u.username) navigate(`/profile/${u.username}`);
+  }}
+  style={{ cursor: "pointer" }}
+>
+  <Avatar name={u.fullName || u.username || "U"} userId={uid}
+    src={u.avatar?.url || null} online={isOnline} size={42} />
+</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)", margin: 0 }}>
                           {u.fullName || u.username}
