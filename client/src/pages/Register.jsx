@@ -430,7 +430,6 @@ const Register = () => {
               <button
                 type="submit"
                 disabled={loading}
-                 onClick={handleGoogleRegister} 
                 className="
                   w-full h-12 rounded-xl font-semibold text-sm
                   bg-[#0f2557] text-white
