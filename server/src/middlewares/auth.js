@@ -46,37 +46,69 @@ const accessToken =
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  // const user = await User.findById(decoded._id).select(
-  //   "-password -refreshTokens -firebaseUid",
-  // );
-
-  // if (!user) {
-  //   return next(new AppError("User no longer exists.", 401));
-  // }
+ 
 
 
-  let user;
-const cacheKey = `user:${decoded._id}`;
+//   let user;
+// const cacheKey = `user:${decoded._id}`;
+
+// try {
+//   const cached = await redis.get(cacheKey);
+//   if (cached) {
+//     user = cached; // Upstash auto-parses JSON
+//   } else {
+//     user = await User.findById(decoded._id).select(
+//       "-password -refreshTokens -firebaseUid"
+//     );
+//     if (user) {
+//       await redis.set(cacheKey, user, { ex: 300 }); // 5 min TTL
+//     }
+//   }
+// } catch {
+//   // Redis fail → fallback to DB (graceful degradation)
+//   user = await User.findById(decoded._id).select(
+//     "-password -refreshTokens -firebaseUid"
+//   );
+// }
+
+
+// ✅ REPLACE KARO
+let user;
+const cacheKey = `user:auth:${decoded._id}`; // ← key change — stale cache invalidate
 
 try {
   const cached = await redis.get(cacheKey);
   if (cached) {
-    user = cached; // Upstash auto-parses JSON
+    // Production safety — critical fields missing hain toh DB se lo
+    const missingCriticalFields =
+      !cached.accountStatus ||
+      !cached.role ||
+      cached.isOnboardingComplete === undefined;
+
+    if (missingCriticalFields) {
+      user = await User.findById(decoded._id).select(
+        "-password -refreshTokens -firebaseUid"
+      );
+      if (user) {
+        await redis.set(cacheKey, user.toObject(), { ex: 300 });
+      }
+    } else {
+      user = cached;
+    }
   } else {
     user = await User.findById(decoded._id).select(
       "-password -refreshTokens -firebaseUid"
     );
     if (user) {
-      await redis.set(cacheKey, user, { ex: 300 }); // 5 min TTL
+      await redis.set(cacheKey, user.toObject(), { ex: 300 }); // ← toObject() ensure karo
     }
   }
 } catch {
-  // Redis fail → fallback to DB (graceful degradation)
+  // Redis down — DB se serve karo
   user = await User.findById(decoded._id).select(
     "-password -refreshTokens -firebaseUid"
   );
 }
-
 if (!user) {
   return next(new AppError("User no longer exists.", 401));
 }
@@ -96,7 +128,8 @@ const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt) : null;
 if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
   const now = new Date();
   User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).catch(() => {});
-  redis.set(cacheKey, { ...user.toObject?.() ?? user, lastActiveAt: now }, { ex: 300 }).catch(() => {});
+  // redis.set(cacheKey, { ...user.toObject?.() ?? user, lastActiveAt: now }, { ex: 300 }).catch(() => {});
+  edis.set(cacheKey, { ...(user.toObject?.() ?? user), lastActiveAt: now }, { ex: 300 }).catch(() => {})
 }
 
   logger.debug("User authenticated", { userId: user._id, path: req.originalUrl });
