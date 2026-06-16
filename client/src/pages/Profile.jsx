@@ -158,10 +158,15 @@ const coverPreview  = localCoverPreview  || user?.coverPhoto?.url || null;
   const viewedPosts = useRef(new Set());
   const loadMoreRef = useRef(null);   
  
-  useEffect(() => {
-    if (user?._id) dispatch(fetchMyPosts(user._id));
-  }, [user?._id, dispatch]);
+  // useEffect(() => {
+  //   if (user?._id) dispatch(fetchMyPosts(user._id));
+  // }, [user?._id, dispatch]);
 
+  useEffect(() => {
+  if (user?._id && myPosts.length === 0) {
+    dispatch(fetchMyPosts(user._id));
+  }
+}, [user?._id]);
   useEffect(() => {
     dispatch(fetchMyHighlights());
   }, [dispatch]);

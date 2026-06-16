@@ -363,15 +363,30 @@ builder
   .addCase(fetchMyPosts.pending, (state) => {
     state.myPostsLoading = true;
   })
+  // .addCase(fetchMyPosts.fulfilled, (state, action) => {
+  //   state.myPostsLoading    = false;
+  //   state.myPosts           = Array.isArray(action.payload.posts) ? action.payload.posts : [];
+  //   state.myPostsHasMore    = action.payload.hasMore    ?? false;
+  //   state.myPostsNextCursor = action.payload.nextCursor ?? null;
+  //   if (action.payload.postsCount !== null) {
+  //     state.serverPostsCount = action.payload.postsCount;
+  //   }
+  // })
   .addCase(fetchMyPosts.fulfilled, (state, action) => {
-    state.myPostsLoading    = false;
-    state.myPosts           = Array.isArray(action.payload.posts) ? action.payload.posts : [];
-    state.myPostsHasMore    = action.payload.hasMore    ?? false;
-    state.myPostsNextCursor = action.payload.nextCursor ?? null;
-    if (action.payload.postsCount !== null) {
-      state.serverPostsCount = action.payload.postsCount;
-    }
-  })
+  state.myPostsLoading = false;
+  const incoming = Array.isArray(action.payload.posts) ? action.payload.posts : [];
+  const incomingIds = new Set(incoming.map((p) => p._id));
+
+  // Jo posts locally hain but server pe nahi aaye (naye posts) unhe rakho
+  const localOnly = state.myPosts.filter((p) => !incomingIds.has(p._id));
+
+  state.myPosts = [...localOnly, ...incoming];
+  state.myPostsHasMore    = action.payload.hasMore    ?? false;
+  state.myPostsNextCursor = action.payload.nextCursor ?? null;
+  if (action.payload.postsCount !== null) {
+    state.serverPostsCount = action.payload.postsCount;
+  }
+})
   .addCase(fetchMyPosts.rejected, (state, action) => {
     state.myPostsLoading = false;
     state.myPostsError   = action.payload;
