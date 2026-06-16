@@ -13,7 +13,7 @@ import {
   reactToMessage,
   deleteConversation,
    clearChat, 
-} from "../../controllers/auth/Message.controller.js";
+} from "../../controllers/auth/message.controller.js";
 
 const router = express.Router();
 

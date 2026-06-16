@@ -7,7 +7,7 @@ import {
   getEngagementTrend,
   getTopPosts,
   getHourlyActivity,
-} from "../../controllers/admin/Admin.dashboard.controller.js";
+} from "../../controllers/admin/admin.dashboard.controller.js";
 import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 
 const router = express.Router();

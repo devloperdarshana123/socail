@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { transcribeAudio } from "../../controllers/auth/Transcribe.controller.js";
+import { transcribeAudio } from "../../controllers/auth/transcribe.controller.js";
 import { isAuthenticated } from "../../middlewares/auth.js"; // tumhara existing auth middleware
 
 const router = express.Router();

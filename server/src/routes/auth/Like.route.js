@@ -7,7 +7,7 @@ import {
   getPostLikeStatus,
   getPostLikers,
    getPostReactions, 
-} from "../../controllers/auth/Like.controller.js";
+} from "../../controllers/auth/like.controller.js";
 import { likeLimiter } from "../../middlewares/rateLimiter.js";
 const router = express.Router();
 router.use(isAuthenticated, isActive);

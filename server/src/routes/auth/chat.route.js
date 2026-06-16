@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { chatWithAI } from "../../controllers/auth/Chat.controller.js";
+import { chatWithAI } from "../../controllers/auth/chat.controller.js";
 import { isAuthenticated, isActive } from "../../middlewares/auth.js";
 
 const router = Router();

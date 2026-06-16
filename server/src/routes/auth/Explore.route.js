@@ -1,5 +1,5 @@
 import express from "express";
-import { getExplorePosts, searchPosts ,getPublicProfile } from "../../controllers/auth/Explore.controller.js";
+import { getExplorePosts, searchPosts ,getPublicProfile } from "../../controllers/auth/explore.controller.js";
 import { isAuthenticated, isActive } from "../../middlewares/auth.js";
 import { generalLimiter } from "../../middlewares/rateLimiter.js";
 const router = express.Router();

@@ -1,4 +1,3 @@
-// server/src/routes/auth/notification.route.js
 
 import express from "express";
 import {
@@ -9,7 +8,7 @@ import {
   deleteNotification,
   clearAllNotifications,
 } from "../../controllers/auth/notification.controller.js";
-import { isAuthenticated } from "../../middlewares/auth.js"; // tumhara existing auth middleware
+import { isAuthenticated } from "../../middlewares/auth.js"; 
 
 const router = express.Router();
 

@@ -2,7 +2,7 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import Story from "../../models/story.model.js";
-import StoryView from "../../models/storyView.model.js";
+import StoryView from "../../models/storyview.model.js";
 import Highlight from "../../models/highlight.model.js";
 import {
   deleteFromCloudinary,

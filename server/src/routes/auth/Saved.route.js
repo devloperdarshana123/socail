@@ -7,7 +7,7 @@ import {
   getSavedPosts,
   getSaveStatus,
   getBulkSaveStatus,
-} from "../../controllers/auth/Saved.controller.js";
+} from "../../controllers/auth/saved.controller.js";
 import { generalLimiter } from "../../middlewares/rateLimiter.js";
 const router = express.Router();
 router.use(isAuthenticated, isActive);

@@ -1,23 +1,4 @@
-// server/src/middlewares/auditMiddleware.js
-// ─────────────────────────────────────────────────────────────────────────────
-//  Production Audit Middleware — Route-level, zero guesswork
-//
-//  Usage: pass config directly on each route definition
-//
-//  router.patch("/users/:id/status", auditLog({ 
-//    action: (req, res) => STATUS_ACTION_MAP[req.body?.status],
-//    targetId: (req) => req.params.id,
-//    targetType: "user",
-//    targetMeta: (req, res) => ({ username: res.locals.auditMeta?.username, status: req.body?.status, reason: req.body?.reason }),
-//  }), updateUserStatus);
-//
-//  Design:
-//  1. Config is declared at route definition — no URL parsing, no guesswork
-//  2. res.locals.auditMeta — controllers can stash extra data for middleware
-//  3. action can be static string or function(req, resBody) => string
-//  4. All fields accept static value OR function(req, resBody) => value
-//  5. Fires AFTER response sent — zero latency impact
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 import { auditLogger } from "../utils/auditLogger.js";
 

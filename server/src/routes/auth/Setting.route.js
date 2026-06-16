@@ -4,7 +4,7 @@ import {
   updateProfile,
   updatePassword,
   deactivateAccount,
-} from "../../controllers/auth/Setting.controller.js";
+} from "../../controllers/auth/setting.controller.js";
 import { isAuthenticated, isActive } from "../../middlewares/auth.js";
 
 const router = express.Router();

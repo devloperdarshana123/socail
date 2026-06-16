@@ -1,7 +1,6 @@
 import express from "express";
 import upload from "../../middlewares/upload.js";
 import { isAuthenticated, isActive } from "../../middlewares/auth.js";
-// import { uploadRateLimiter } from "../../middlewares/rateLimit.js";
 import { createPostLimiter, generalLimiter , uploadRateLimiter } from "../../middlewares/rateLimiter.js"; 
 import {
   createPost,

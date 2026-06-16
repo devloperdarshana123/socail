@@ -21,28 +21,28 @@ import consentRouter from "./routes/auth/consent.route.js";
 import onboardingRoute from "./routes/auth/onboarding.route.js";
 import postRouter from "./routes/auth/post.route.js";
 import userRouter from "./routes/auth/user.route.js";
-import likeRouter from "./routes/auth/Like.route.js";
+import likeRouter from "./routes/auth/like.route.js";
 import commentRouter from "./routes/auth/Comment.route.js";
 import savedRouter from "./routes/auth/saved.route.js";
-import settingRoute from "./routes/auth/Setting.route.js";
-import exploreRoute from "./routes/auth/Explore.route.js";
+import settingRoute from "./routes/auth/setting.route.js";
+import exploreRoute from "./routes/auth/explore.route.js";
 import chatRoute from "./routes/auth/chat.route.js";
 import storyRouter from "./routes/auth/story.route.js";
 import followRouter from "./routes/auth/follow.route.js";
 import messageRouter from "./routes/auth/message.route.js";
 import notificationRoutes from "./routes/auth/notification.route.js";
-import transcribeRoute from "./routes/auth/Transcribe.route.js";
+import transcribeRoute from "./routes/auth/transcribe.route.js";
 import reportRouter from "./routes/auth/report.route.js";
 import "./cron/suspensionCron.js";
 
 
 //admin//
-import adminAuthRoute from "./routes/admin/Admin.auth.route.js";
+import adminAuthRoute from "./routes/admin/admin.auth.route.js";
 import adminSettingsRoute from "./routes/admin/admin.settings.route.js";
-import adminUserRoute from "./routes/admin/Admin.user.routes.js";
-import adminReportRoute from "./routes/admin/Admin.report.routes.js";
-import dashboardRoutes from "./routes/admin/Admin.dashboard.route.js";
-import auditLogRoute from "./routes/admin/Admin.auditlog.route.js";
+import adminUserRoute from "./routes/admin/admin.user.routes.js";
+import adminReportRoute from "./routes/admin/admin.report.routes.js";
+import dashboardRoutes from "./routes/admin/admin.dashboard.route.js";
+import auditLogRoute from "./routes/admin/admin.auditlog.route.js";
 import commentRoutes from "./routes/admin/admin.comment.routes.js";
 import adminNotificationRoute from "./routes/admin/adminNotification.routes.js";
 const app = express();
