@@ -192,13 +192,23 @@ useEffect(() => {
     if (activeTab === "saved") dispatch(fetchSavedPosts(1));
   }, [activeTab]);
 
-  useEffect(() => {
-    if (avatar?.url) setLocalAvatarPreview(null);
-  }, [avatar?.url]);
+  // useEffect(() => {
+  //   if (avatar?.url) setLocalAvatarPreview(null);
+  // }, [avatar?.url]);
 
-  useEffect(() => {
-    if (coverPhoto?.url) setLocalCoverPreview(null);
-  }, [coverPhoto?.url]);
+  // useEffect(() => {
+  //   if (coverPhoto?.url) setLocalCoverPreview(null);
+  // }, [coverPhoto?.url]);
+
+
+  // ✅ REPLACE KARO — user se check karo
+useEffect(() => {
+  if (user?.avatar?.url) setLocalAvatarPreview(null);
+}, [user?.avatar?.url]);
+
+useEffect(() => {
+  if (user?.coverPhoto?.url) setLocalCoverPreview(null);
+}, [user?.coverPhoto?.url]);
 
 useEffect(() => {
   if (!selectedPost) return;
