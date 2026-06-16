@@ -350,7 +350,6 @@ savedPostsNextCursor: null,
  } else {
     // Published post: goes into feed and profile grid
     state.feed.unshift(action.payload);
-    state.myPosts.unshift(action.payload);
     // ✅ FIX: count increment
     if (state.serverPostsCount !== null) {
       state.serverPostsCount += 1;

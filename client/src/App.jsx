@@ -29,7 +29,7 @@ import Messages from "./pages/Messages";
 import PublicProfile from "./pages/PublicProfile";
 import { fetchMe, resetAuth } from "./lib/redux/authSlice";
 import { resetProfile } from "./lib/redux/userprofileslice";
-import { createPost } from "./lib/redux/postSlice";
+import { createPost , fetchMyPosts  } from "./lib/redux/postSlice";
 import { fetchNotifications } from "./lib/redux/notificationSlice";
 // existing imports ke saath
 import { setTokenExpiry } from "./lib/services/api";
@@ -101,16 +101,29 @@ return () => window.removeEventListener("auth:logout", handleForceLogout);
 
 
 
-  const handlePostSubmit = async (postData) => {
+//   const handlePostSubmit = async (postData) => {
+//   const result = await dispatch(createPost(postData));
+//   if (createPost.fulfilled.match(result)) {
+//     setShowPostModal(false);
+//     toast.success(postData.isDraft ? "Draft saved! 📝" : "Post shared! 🎉");
+//   } else {
+//     throw new Error(result.payload);
+//   }
+// };
+
+const handlePostSubmit = async (postData) => {
   const result = await dispatch(createPost(postData));
   if (createPost.fulfilled.match(result)) {
     setShowPostModal(false);
     toast.success(postData.isDraft ? "Draft saved! 📝" : "Post shared! 🎉");
+    if (!postData.isDraft && user?._id) {
+      dispatch(fetchMyPosts(user._id));
+    }
   } else {
     throw new Error(result.payload);
   }
 };
-  return (
+return (
     <>
       {showNavbar && (
         <Navbar onCreatePost={() => {
