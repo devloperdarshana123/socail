@@ -118,7 +118,7 @@ function PostGridMenu({ onDelete }) {
 export default function Profile() {
   const dispatch = useDispatch();
 
-  const { avatar, coverPhoto, avatarLoading, coverLoading } = useSelector(
+  const {avatarLoading, coverLoading } = useSelector(
     (state) => state.userProfile
   );
 
@@ -150,8 +150,8 @@ const {
   const [selectedHighlight, setSelectedHighlight] = useState(null);
   const [editingDraft, setEditingDraft] = useState(null);
 const [showStoryCreate, setShowStoryCreate] = useState(false);
-const avatarPreview = localAvatarPreview || avatar?.url || user?.avatar?.url || null;
-const coverPreview = localCoverPreview || coverPhoto?.url || user?.coverPhoto?.url || null;
+const avatarPreview = localAvatarPreview || user?.avatar?.url || null;
+const coverPreview  = localCoverPreview  || user?.coverPhoto?.url || null;
 
   const avatarInputRef = useRef(null);
   const coverInputRef = useRef(null);
