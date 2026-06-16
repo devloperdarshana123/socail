@@ -17,6 +17,13 @@ import AppError from "../utils/AppError.js";
  * @param {Function} [options.keyFn]     - Custom key function (req) => string
  *                                         Default: userId if authenticated, else IP
  */
+
+// ✅ ADD KARO — import redis, logger, AppError ke baad
+const getClientIp = (req) => {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.ip || req.socket?.remoteAddress || "unknown";
+};
 export function createRateLimiter({
   route,
   limit,
@@ -27,9 +34,12 @@ export function createRateLimiter({
   return async function rateLimiterMiddleware(req, res, next) {
     try {
       // ── Build identifier ──────────────────────────────────────────
+      // const identifier = keyFn
+      //   ? keyFn(req)
+      //   : req.user?._id?.toString() ?? req.ip;
       const identifier = keyFn
-        ? keyFn(req)
-        : req.user?._id?.toString() ?? req.ip;
+  ? keyFn(req)
+  : req.user?._id?.toString() ?? getClientIp(req);
 
       const key     = `rl:${route}:${identifier}`;
 
@@ -81,7 +91,8 @@ export const loginLimiter = createRateLimiter({
   limit      : 10,
   windowSecs : 15 * 60,
   message    : "Too many login attempts. Please try again after 15 minutes.",
-  keyFn      : (req) => req.ip, // IP-based (user not authenticated yet)
+  // keyFn      : (req) => req.ip, // IP-based (user not authenticated yet)
+  keyFn: (req) => getClientIp(req),
 });
 
 /**
@@ -92,7 +103,8 @@ export const otpResendLimiter = createRateLimiter({
   limit      : 5,
   windowSecs : 10 * 60,
   message    : "Too many OTP requests. Please wait before requesting again.",
-  keyFn      : (req) => req.body?.userId ?? req.ip,
+  // keyFn      : (req) => req.body?.userId ?? req.ip,
+  keyFn: (req) => req.body?.userId ?? getClientIp(req),
 });
 
 /**
@@ -136,7 +148,8 @@ export const forgotPasswordLimiter = createRateLimiter({
   limit      : 5,
   windowSecs : 60 * 60,
   message    : "Too many password reset requests. Please try again after an hour.",
-  keyFn      : (req) => req.ip,
+  // keyFn      : (req) => req.ip,
+  keyFn: (req) => getClientIp(req),
 });
 
 /**
@@ -196,7 +209,8 @@ export const authRouteLimiter = createRateLimiter({
   limit      : 20,
   windowSecs : 15 * 60,
   message    : "Too many attempts, please try again later.",
-  keyFn      : (req) => req.ip,
+  // keyFn      : (req) => req.ip,
+  keyFn: (req) => getClientIp(req),
 });
 
 /**
@@ -207,7 +221,8 @@ export const adminAuthRouteLimiter = createRateLimiter({
   limit      : 10,
   windowSecs : 15 * 60,
   message    : "Too many admin login attempts. Please try again later.",
-  keyFn      : (req) => req.ip,
+  // keyFn      : (req) => req.ip,
+  keyFn: (req) => getClientIp(req),
 });
 
 /**
@@ -228,5 +243,6 @@ export const globalRouteLimiter = createRateLimiter({
   limit      : process.env.NODE_ENV === "production" ? 500 : 10000,
   windowSecs : 15 * 60,
   message    : "Too many requests, please try again later.",
-  keyFn      : (req) => req.ip,
+  // keyFn      : (req) => req.ip,
+  keyFn: (req) => getClientIp(req),
 });

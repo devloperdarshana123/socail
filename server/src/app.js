@@ -46,7 +46,7 @@ import auditLogRoute from "./routes/admin/admin.auditlog.route.js";
 import commentRoutes from "./routes/admin/admin.comment.routes.js";
 import adminNotificationRoute from "./routes/admin/adminNotification.routes.js";
 const app = express();
-
+app.set("trust proxy", 1);
 // ── Security ──
 app.use(helmet());
 app.use(compression());
