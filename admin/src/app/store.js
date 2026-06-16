@@ -1,13 +1,12 @@
 import { configureStore } from "@reduxjs/toolkit";
 import adminAuthReducer from "../lib/redux/AdminauthSlice";
-
-import usersReducer     from "../lib/redux/usersSlice";  
-import adminPostsReducer from "../lib/redux/Postsslice";
-import reportsReducer from "../lib/redux/Reportsslice";
+import usersReducer from "../lib/redux/usersSlice";  
+import adminPostsReducer from "../lib/redux/postsSlice";      // ✅ fix
+import reportsReducer from "../lib/redux/reportsSlice";        // ✅ fix
 import dashboardReducer from "../lib/redux/dashboardSlice";
-import settingReducer from "../lib/redux/Adminsettingsslice";
+import settingReducer from "../lib/redux/adminSettingsSlice";  // ✅ fix
 import auditLogReducer from "../lib/redux/auditLogSlice";
-import commentsReducer from "../lib/redux/Commentsslice";
+import commentsReducer from "../lib/redux/commentsSlice";      // ✅ fix
 
 
 // ─────────────────────────────────────────────
