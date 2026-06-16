@@ -129,7 +129,7 @@ if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
   const now = new Date();
   User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).catch(() => {});
   // redis.set(cacheKey, { ...user.toObject?.() ?? user, lastActiveAt: now }, { ex: 300 }).catch(() => {});
-  edis.set(cacheKey, { ...(user.toObject?.() ?? user), lastActiveAt: now }, { ex: 300 }).catch(() => {})
+  redis.set(cacheKey, { ...(user.toObject?.() ?? user), lastActiveAt: now }, { ex: 300 }).catch(() => {})
 }
 
   logger.debug("User authenticated", { userId: user._id, path: req.originalUrl });
