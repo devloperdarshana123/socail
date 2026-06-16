@@ -18,7 +18,7 @@ import Contact from "./pages/Contact";
 import CookieBanner from "./components/CookieBanner";
 import FeedPage from "./pages/FeedPage";
 import Navbar from "./components/Navbar";
-import PostCreatorModal from "./components/PostCreatorModal";
+import PostCreatorModal from "./components/PostCreatorModal"
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Explore from "./pages/Explore";
