@@ -1,12 +1,27 @@
-/**
- * mediaUtils.js — Central media resolution utility
- * 
- * Import karo aur use karo:
- *   import { resolvePostThumb, resolveMediaUrl, generateCloudinaryThumb } from "../utils/mediaUtils";
- * 
- * Sab jagah same logic — Profile, Explore, Feed, PostCard — sab ek hi file se.
- */
 
+// ─── Cloudinary image URL optimize karo (resize + compress + WebP) ───────────
+export const optimizeCloudinaryImage = (url, options = {}) => {
+  if (!url || !url.includes("res.cloudinary.com")) return url;
+
+  const {
+    width   = 400,
+    quality = "auto",
+    format  = "auto",
+    crop    = "fill",
+  } = options;
+
+  try {
+    if (url.includes("/upload/w_") || url.includes("/upload/f_") || url.includes("/upload/q_")) {
+      return url;
+    }
+    return url.replace(
+      "/upload/",
+      `/upload/w_${width},c_${crop},f_${format},q_${quality}/`
+    );
+  } catch {
+    return url;
+  }
+};
 // ─── Core: Cloudinary video URL se thumbnail URL generate karo ───────────────
 export const generateCloudinaryThumb = (videoUrl, options = {}) => {
   if (!videoUrl || !videoUrl.includes("res.cloudinary.com")) return null;
@@ -48,23 +63,37 @@ export const isVideoMedia = (post) => {
 // Layer 1: DB mein saved thumbnailUrl (upload time eager se aaya)
 // Layer 2: Cloudinary URL manipulation (runtime, zero cost)
 // Layer 3: Raw video URL (browser khud poster frame dikhayega)
+// export const resolvePostThumb = (post) => {
+//   const media = post?.media?.[0];
+//   if (!media?.url) return null;
+
+//   if (!isVideoMedia(post)) {
+//     // Image post — seedha URL
+//     return media.url;
+//   }
+
+//   // Video post — 3-layer fallback
+//   return (
+//     media.thumbnailUrl ||
+//     generateCloudinaryThumb(media.url) ||
+//     media.url
+//   );
+// };
+
 export const resolvePostThumb = (post) => {
   const media = post?.media?.[0];
   if (!media?.url) return null;
 
   if (!isVideoMedia(post)) {
-    // Image post — seedha URL
-    return media.url;
+    return optimizeCloudinaryImage(media.url, { width: 400, quality: "auto", format: "auto" });
   }
 
-  // Video post — 3-layer fallback
   return (
     media.thumbnailUrl ||
     generateCloudinaryThumb(media.url) ||
     media.url
   );
 };
-
 // ─── Feed / PostCard ke liye full media array resolve karo ───────────────────
 // Har media item mein thumbnailUrl inject karo agar missing hai
 export const resolveMediaArray = (mediaArr = [], postType) => {

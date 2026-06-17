@@ -77,6 +77,7 @@ const thumb = resolvePostThumb(post);
               alt={post.caption || "post"}
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               loading="lazy"
+              decoding="async"
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center"
@@ -259,7 +260,7 @@ useEffect(() => {
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => { if (entries[0].isIntersecting) handleLoadMore(); },
-      { threshold: 0.1 }
+      { threshold: 0.1 , rootMargin: "400px" }
     );
     if (loaderRef.current) observer.observe(loaderRef.current);
     return () => observer.disconnect();
