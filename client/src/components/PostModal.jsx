@@ -161,10 +161,17 @@ function MediaCarousel({ media, type }) {
   );
 }
 
-function CommentItem({ comment, onReply }) {
+// function CommentItem({ comment, onReply }) {
+//   return (
+//     <div style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
+//       <Avatar user={comment.author} size={32} />
+function CommentItem({ comment, onReply, onAvatarClick }) {
   return (
     <div style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-      <Avatar user={comment.author} size={32} />
+      <div onClick={() => onAvatarClick(comment.author)} style={{ cursor: "pointer" }}>
+        <Avatar user={comment.author} size={32} />
+      </div>
+
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
           <span style={{ fontWeight: 700, fontSize: 13, color: T.text }}>
@@ -628,9 +635,26 @@ Report post
               </div>
     ) : (
               <>
-                {comments.map((c) => (
+                {/* {comments.map((c) => (
                   <CommentItem key={c._id} comment={c} onReply={handleReply} />
-                ))}
+                ))} */}
+
+                {comments.map((c) => (
+  <CommentItem
+    key={c._id}
+    comment={c}
+    onReply={handleReply}
+    onAvatarClick={(author) => {
+      if (!author?.username) return;
+      onClose();
+      if (author.username === me?.username) {
+        navigate("/profile");
+      } else {
+        navigate(`/profile/${author.username}`);
+      }
+    }}
+  />
+))}
                 {commentsLoadingMore && (
                   <div style={{ display: "flex", justifyContent: "center", padding: "14px 0" }}>
                     <Loader2
