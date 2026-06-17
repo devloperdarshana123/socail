@@ -457,6 +457,7 @@ export const setUsername = asyncHandler(async (req, res, next) => {
   user.accountStatus        = "active";
   user.isOnboardingComplete = true;
   await user.save({ validateBeforeSave: false });
+  await redis.del(`user:auth:${user._id}`).catch(() => {});
 
   logger.info("Username set, onboarding complete", { userId: user._id, username: trimmed });
 

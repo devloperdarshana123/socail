@@ -1,6 +1,7 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import User from "../../models/user.model.js";
+import redis from "../../config/redis.js"
 // ─────────────────────────────────────────────
 //  GET /api/v2/settings/me
 //  Logged-in user ka profile fetch karo
@@ -82,22 +83,39 @@ if (bio !== undefined) {
     }
   }
 
-  await User.findByIdAndUpdate(
-    req.user._id,
-    { $set: updateFields },
-    { runValidators: true }
-  );
+//   await User.findByIdAndUpdate(
+//     req.user._id,
+//     { $set: updateFields },
+//     { runValidators: true }
+//   );
 
-  const updatedUser = await User.findById(req.user._id);
-  if (!updatedUser) return next(new AppError("User not found.", 404));
+//   const updatedUser = await User.findById(req.user._id);
+//   if (!updatedUser) return next(new AppError("User not found.", 404));
 
-  res.status(200).json({
-    success: true,
-    message: "Profile updated successfully.",
-    data: updatedUser.toSafeObject(),  // ← { user: ... } hata do, directly data
-  });
+//   res.status(200).json({
+//     success: true,
+//     message: "Profile updated successfully.",
+//     data: updatedUser.toSafeObject(),  // ← { user: ... } hata do, directly data
+//   });
+// });
+await User.findByIdAndUpdate(
+  req.user._id,
+  { $set: updateFields },
+  { runValidators: true }
+);
+
+const updatedUser = await User.findById(req.user._id);
+if (!updatedUser) return next(new AppError("User not found.", 404));
+
+// Redis cache clear karo — refresh pe stale data na aaye
+await redis.del(`user:auth:${req.user._id}`).catch(() => {});
+
+res.status(200).json({
+  success: true,
+  message: "Profile updated successfully.",
+  data: updatedUser.toSafeObject(),
 });
-
+});
 // ─────────────────────────────────────────────
 //  PATCH /api/v2/settings/password
 //  Old password verify → naya hash karke save

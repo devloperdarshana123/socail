@@ -37,10 +37,31 @@ import { setTokenExpiry } from "./lib/services/api";
 import useSocketInit from "./lib/hooks/useSocketInit";
 
 
+// const ProtectedRoute = ({ children }) => {
+//   const { user, fetchMe: { loading } } = useSelector((s) => s.auth);
+//   if (loading) return null;
+//   if (!user) return <Navigate to="/" replace />;
+//   return children;
+// };
+
+
 const ProtectedRoute = ({ children }) => {
   const { user, fetchMe: { loading } } = useSelector((s) => s.auth);
+  
   if (loading) return null;
   if (!user) return <Navigate to="/" replace />;
+
+  // Onboarding incomplete — redirect karo sahi step pe
+  if (!user.isOnboardingComplete) {
+    if (user.onboardingStep === 1) return <Navigate to="/verify-otp" replace />;
+    if (user.onboardingStep === 2) return <Navigate to="/onboarding/username" replace />;
+  }
+
+  // Account active nahi — login pe bhejo
+  if (user.accountStatus === "banned" || user.accountStatus === "suspended" || user.accountStatus === "deactivated") {
+    return <Navigate to="/" replace />;
+  }
+
   return children;
 };
 const HIDE_NAVBAR_ON = ["/", "/register", "/verify-otp", "/onboarding/username", "/forgot-password", "/reset-password"];

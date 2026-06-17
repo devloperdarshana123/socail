@@ -6,6 +6,7 @@ import AppError from "../../utils/AppError.js";
 import Follow from "../../models/follow.model.js";
 import User from "../../models/user.model.js";
 import { notifyChat } from "../../helper/notifyChat.js";
+import redis from "../../config/redis.js";
 
 // ─────────────────────────────────────────────
 //  Helper — validate ObjectId
@@ -61,6 +62,9 @@ export const followUser = asyncHandler(async (req, res, next) => {
       ? `You are now following ${targetUser.username}.`
       : "Follow request sent.";
 
+      await redis.del(`user:auth:${followerId}`).catch(() => {});
+await redis.del(`user:auth:${followingId}`).catch(() => {});
+
   return res.status(200).json({ success: true, status, message });
 });
 
@@ -80,7 +84,8 @@ export const unfollowUser = asyncHandler(async (req, res, next) => {
 
   if (!unfollowed)
     return next(new AppError("You are not following this user.", 404));
-
+await redis.del(`user:auth:${followerId}`).catch(() => {});
+await redis.del(`user:auth:${followingId}`).catch(() => {});
   return res.status(200).json({ success: true, message: "Unfollowed successfully." });
 });
 
@@ -106,7 +111,8 @@ export const acceptFollowRequest = asyncHandler(async (req, res, next) => {
     to:   followerId.toString(),
     from: recipientId.toString(),
   }).catch(() => {});
-
+await redis.del(`user:auth:${followerId}`).catch(() => {});
+await redis.del(`user:auth:${recipientId}`).catch(() => {});
   return res.status(200).json({ success: true, message: "Follow request accepted." });
 });
 

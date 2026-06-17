@@ -27,8 +27,14 @@ export const updateProfile = createAsyncThunk(
   "settings/updateProfile",
   async (formData, { rejectWithValue, dispatch }) => {
     try {
+// const res = await api.patch(`/settings/profile`, formData);
+// dispatch({ type: "auth/setUser", payload: res.data.data }); // ← .user hata do
+// return res.data;
 const res = await api.patch(`/settings/profile`, formData);
-dispatch({ type: "auth/setUser", payload: res.data.data }); // ← .user hata do
+dispatch({ type: "auth/setUser", payload: res.data.data });
+dispatch({ type: "auth/fetchMe/pending" }); // loading state
+const meRes = await api.get("/auth/me");
+dispatch({ type: "auth/fetchMe/fulfilled", payload: meRes.data });
 return res.data;
     } catch (err) {
       return rejectWithValue(

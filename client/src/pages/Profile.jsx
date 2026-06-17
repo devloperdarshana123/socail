@@ -29,6 +29,7 @@ import {
    fetchDraftPosts, publishDraftPost, deletePost ,   recordPostView,
 } from "../lib/redux/postSlice";
 
+
 import PostModal from "../components/PostModal";
 import FollowListModal from "../components/FollowListModal";
 import HighlightViewer from "../components/HighlightViewer";
@@ -162,7 +163,7 @@ const coverPreview  = localCoverPreview  || user?.coverPhoto?.url || null;
   useEffect(() => {
     if (user?._id) dispatch(fetchMyPosts(user._id));
   }, [user?._id]);
-
+  
   useEffect(() => {
     dispatch(fetchMyHighlights());
   }, [dispatch]);

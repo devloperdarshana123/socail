@@ -449,9 +449,16 @@ if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
 
 
       // ── Follow User ──
+// builder
+//   .addCase(followUser.fulfilled, (state) => {
+//     if (state.user) {
+//       state.user.followingCount = (state.user.followingCount || 0) + 1;
+//     }
+//   });
+
 builder
-  .addCase(followUser.fulfilled, (state) => {
-    if (state.user) {
+  .addCase(followUser.fulfilled, (state, action) => {
+    if (state.user && action.payload?.status === "accepted") {
       state.user.followingCount = (state.user.followingCount || 0) + 1;
     }
   });
