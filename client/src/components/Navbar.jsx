@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Search, X, User, Settings, LogOut, Menu, Bell,
-  Heart, MessageCircle, UserPlus, UserCheck, Repeat2,
+  Heart, MessageCircle, UserPlus, UserCheck,
 } from "lucide-react";
 import EroviansLogo from "../assets/seller_logo.png";
 import { logoutUser } from "../lib/redux/authSlice";
@@ -66,7 +66,6 @@ export default function Navbar({ onCreatePost }) {
   const [dropdownOpen,   setDropdownOpen]   = useState(false);
   const [showNotifs,     setShowNotifs]     = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchOpen,     setSearchOpen]     = useState(false);
   const [activeLink,     setActiveLink]     = useState("Feed");
 
   const dropdownRef = useRef(null);
@@ -163,17 +162,9 @@ export default function Navbar({ onCreatePost }) {
           <div className="w-px h-6 bg-gray-200" />
         </div>
 
-        {/* Search — desktop */}
-        <div className="hidden md:flex flex-1 max-w-sm border border-gray-300 rounded-lg overflow-hidden">
-          <input type="text" placeholder="Search Users..."
-            className="flex-1 px-3 py-2 text-sm outline-none text-gray-800" autoComplete="off" />
-          <button className="px-3 flex items-center justify-center" style={{ background: "#1e3a5f", minWidth: 40 }}>
-            <Search size={15} color="#fff" />
-          </button>
-        </div>
 
         {/* Desktop nav links */}
-        <div className="hidden lg:flex items-center gap-0.5 ml-1">
+        <div className="hidden lg:flex items-center gap-0.5 ml-8">
           {NAV_LINKS.map(({ label, path, badge }) => (
             <button
               key={label}
@@ -298,11 +289,6 @@ export default function Navbar({ onCreatePost }) {
           )}
         </div>
 
-        {/* Mobile search toggle */}
-        <button className="md:hidden p-2 rounded-full hover:bg-gray-100 text-gray-500"
-          onClick={() => setSearchOpen((v) => !v)}>
-          <Search size={18} />
-        </button>
 
         {/* ── Avatar + Dropdown ── */}
         <div ref={dropdownRef} className="relative shrink-0">
@@ -381,19 +367,7 @@ export default function Navbar({ onCreatePost }) {
         </div>
       </div>
 
-      {/* ── MOBILE SEARCH ── */}
-      {searchOpen && (
-        <div className="md:hidden px-3 pb-2.5">
-          <div className="flex border border-gray-300 rounded-lg overflow-hidden">
-            <input type="text" placeholder="Search Users..." autoFocus
-              className="flex-1 px-3 py-2 text-sm outline-none text-gray-800" />
-            <button className="px-3 flex items-center" style={{ background: "#1e3a5f", minWidth: 40 }}>
-              <Search size={15} color="#fff" />
-            </button>
-          </div>
-        </div>
-      )}
-
+    
       {/* ── MOBILE NAV MENU ── */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-gray-100 px-3 py-2 bg-white">

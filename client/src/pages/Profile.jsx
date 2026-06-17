@@ -3,6 +3,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { motion , AnimatePresence} from "framer-motion";
 import EditDraftModal from "../components/EditDraftModal";
 import { createPortal } from "react-dom";
@@ -117,7 +118,7 @@ function PostGridMenu({ onDelete }) {
 
 export default function Profile() {
   const dispatch = useDispatch();
-
+const navigate = useNavigate();
   const {avatarLoading, coverLoading } = useSelector(
     (state) => state.userProfile
   );
@@ -350,7 +351,9 @@ const isLoadingPosts = activeTab === "saved" ? savedPostsLoading : activeTab ===
           </div>
 
           <div className="flex items-center gap-2 pb-1">
-            <button className="flex items-center gap-1.5 bg-white hover:bg-[#f5ece0] border border-[#ddd0c0] text-[#5a3e2b] text-sm font-semibold px-4 py-2 rounded-full shadow-sm transition-all duration-200">
+            <button 
+            onClick={() => navigate("/settings")}
+            className="flex items-center gap-1.5 bg-white hover:bg-[#f5ece0] border border-[#ddd0c0] text-[#5a3e2b] text-sm font-semibold px-4 py-2 rounded-full shadow-sm transition-all duration-200">
               <Pencil size={13} />
               Edit Profile
             </button>

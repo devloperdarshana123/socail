@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import EmojiPicker from "emoji-picker-react";
 import { X, Trash2, Eye, Bookmark, Plus, Check } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import {
   viewStory,
   reactToStory as reactToStoryThunk,
@@ -23,6 +24,7 @@ const QUICK_EMOJIS = ["❤️", "🔥", "😮", "😂", "😢", "👏", "😍", 
 
 export default function StoryViewer({ feed, startIndex = 0, onClose, onDelete }) {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 const currentUser = useSelector((s) => s.auth.user);
 const {
   viewers: viewersMap,
@@ -279,7 +281,15 @@ const createNewHighlight = async () => {
 
           {/* Header */}
           <div className="absolute top-6 left-0 right-0 z-20 flex items-center justify-between px-4 pt-3">
-            <div className="flex items-center gap-2.5">
+            <div
+    className="flex items-center gap-2.5 cursor-pointer"
+    onClick={(e) => {
+      e.stopPropagation();
+      if (!story.author?.username) return;
+      onClose?.();
+      navigate(`/profile/${story.author.username}`);
+    }}
+  >
               <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-white shrink-0">
                 {story.author?.avatar?.url ? (
                   <img src={story.author.avatar.url} alt="" className="w-full h-full object-cover" />

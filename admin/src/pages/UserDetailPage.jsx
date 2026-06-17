@@ -38,6 +38,14 @@ const STATUS_BADGE_MAP = {
   pending:     "bg-sky-50 text-sky-700 border-sky-200",
   deactivated: "bg-slate-100 text-slate-600 border-slate-200",
 };
+const DURATION_OPTIONS = [
+  { value: "1d",   label: "1 Day"    },
+  { value: "3d",   label: "3 Days"   },
+  { value: "7d",   label: "7 Days"   },
+  { value: "14d",  label: "14 Days"  },
+  { value: "30d",  label: "30 Days"  },
+  { value: "perm", label: "Permanent" },
+];
 
 // ─── Pure utilities ────────────────────────────────────────────────────────────
 
@@ -268,15 +276,91 @@ const PostTile = memo(function PostTile({ post, onDelete, onClick }) {
 
 // ─── Status change modal ───────────────────────────────────────────────────────
 
-const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loading }) {
-  const [status, setStatus] = useState("");
-  const [reason, setReason] = useState("");
+// const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loading }) {
+//   const [status, setStatus] = useState("");
+//   const [reason, setReason] = useState("");
 
-  // FIX: useMemo — opts was rebuilt every render
+//   // FIX: useMemo — opts was rebuilt every render
+//   const opts = useMemo(
+//     () => ["active", "suspended", "banned", "deactivated"].filter((s) => s !== user?.status),
+//     [user?.status],
+//   );
+
+//   return (
+//     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+//       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+//       <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+//         <h3 className="text-sm font-bold text-slate-800 mb-1">Change Account Status</h3>
+//         <p className="text-xs text-slate-400 mb-4">@{user?.username}</p>
+//         <div className="space-y-2 mb-4">
+//           {opts.map((opt) => (
+//             <label
+//               key={opt}
+//               className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors
+//                 ${status === opt ? "border-violet-400 bg-violet-50" : "border-slate-200 hover:border-slate-300"}`}
+//             >
+//               <input
+//                 type="radio"
+//                 name="status"
+//                 value={opt}
+//                 checked={status === opt}
+//                 onChange={() => setStatus(opt)}
+//                 className="accent-violet-600"
+//               />
+//               <span className="text-sm font-semibold capitalize text-slate-700">{opt}</span>
+//             </label>
+//           ))}
+//         </div>
+//         <textarea
+//           value={reason}
+//           onChange={(e) => setReason(e.target.value)}
+//           placeholder="Reason (optional)"
+//           rows={2}
+//           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm
+//             text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400 mb-4"
+//         />
+//         <div className="flex gap-3">
+//           {/* FIX: type="button" on all buttons */}
+//           <button
+//             type="button"
+//             onClick={onClose}
+//             className="flex-1 py-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+//           >
+//             Cancel
+//           </button>
+//           <button
+//             type="button"
+//             onClick={() => onConfirm({ status, reason })}
+//             disabled={!status || loading}
+//             className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm
+//               font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+//           >
+//             {loading && (
+//               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+//                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+//                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+//               </svg>
+//             )}
+//             Update
+//           </button>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// });
+
+const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loading }) {
+  const [status,   setStatus]   = useState("");
+  const [reason,   setReason]   = useState("");
+  const [duration, setDuration] = useState("7d");
+
   const opts = useMemo(
     () => ["active", "suspended", "banned", "deactivated"].filter((s) => s !== user?.status),
     [user?.status],
   );
+
+  const needsDuration = status === "suspended";
+  const canSubmit = Boolean(status && reason.trim() && (!needsDuration || duration));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -303,16 +387,39 @@ const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loadin
             </label>
           ))}
         </div>
+
+        {needsDuration && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+              Duration <span className="text-red-400">*</span>
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {DURATION_OPTIONS.map((d) => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setDuration(d.value)}
+                  className={`rounded-xl border py-2 px-2 text-center text-xs font-semibold transition-all
+                    ${duration === d.value
+                      ? "border-violet-400 bg-violet-50 text-violet-700"
+                      : "border-slate-200 hover:border-slate-300 bg-slate-50 text-slate-600"}`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Reason (optional)"
+          placeholder="Reason (required)"
           rows={2}
           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm
             text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400 mb-4"
         />
         <div className="flex gap-3">
-          {/* FIX: type="button" on all buttons */}
           <button
             type="button"
             onClick={onClose}
@@ -322,8 +429,8 @@ const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loadin
           </button>
           <button
             type="button"
-            onClick={() => onConfirm({ status, reason })}
-            disabled={!status || loading}
+            onClick={() => onConfirm({ status, reason, duration: needsDuration ? duration : undefined })}
+            disabled={!canSubmit || loading}
             className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm
               font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
           >
@@ -340,7 +447,6 @@ const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loadin
     </div>
   );
 });
-
 // ─── Error state ──────────────────────────────────────────────────────────────
 
 const ErrorState = memo(function ErrorState({ onRetry }) {
@@ -420,16 +526,27 @@ export default function UserDetailPage() {
 
   // ── Action handlers ──────────────────────────────────────────
 
-  const handleStatusConfirm = useCallback(async ({ status, reason }) => {
-    const res = await dispatch(updateUserStatus({ userId: id, status, reason }));
-    if (res.meta?.requestStatus !== "rejected") {
-      showToast(`Status updated to ${status}`);
-      setStatusModal(false);
-      dispatch(fetchUserById(id));
-    } else {
-      showToast("Failed to update status", "error");
-    }
-  }, [dispatch, id, showToast]);
+  // const handleStatusConfirm = useCallback(async ({ status, reason }) => {
+  //   const res = await dispatch(updateUserStatus({ userId: id, status, reason }));
+  //   if (res.meta?.requestStatus !== "rejected") {
+  //     showToast(`Status updated to ${status}`);
+  //     setStatusModal(false);
+  //     dispatch(fetchUserById(id));
+  //   } else {
+  //     showToast("Failed to update status", "error");
+  //   }
+  // }, [dispatch, id, showToast]);
+
+  const handleStatusConfirm = useCallback(async ({ status, reason, duration }) => {
+  const res = await dispatch(updateUserStatus({ userId: id, status, reason, duration }));
+  if (res.meta?.requestStatus !== "rejected") {
+    showToast(`Status updated to ${status}`);
+    setStatusModal(false);
+    dispatch(fetchUserById(id));
+  } else {
+    showToast("Failed to update status", "error");
+  }
+}, [dispatch, id, showToast]);
 
   const handleToggleVerify = useCallback(async () => {
     const res = await dispatch(toggleVerifiedBadge(id));
