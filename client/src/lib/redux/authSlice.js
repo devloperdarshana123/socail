@@ -332,11 +332,7 @@ setPending(state, action) {
         state.fetchMe.loading = true;
         state.fetchMe.error = null;
       })
-//       .addCase(fetchMe.fulfilled, (state, action) => {
-//   state.fetchMe.loading = false;
-//   state.user = action.payload.data?.user || action.payload.data || null;
-//   state.isAuthenticated = !!state.user;
-// })
+
 .addCase(fetchMe.fulfilled, (state, action) => {
   state.fetchMe.loading = false;
   state.user = action.payload.data?.user || action.payload.data || null;
@@ -448,13 +444,7 @@ if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
       });
 
 
-      // ── Follow User ──
-// builder
-//   .addCase(followUser.fulfilled, (state) => {
-//     if (state.user) {
-//       state.user.followingCount = (state.user.followingCount || 0) + 1;
-//     }
-//   });
+
 
 builder
   .addCase(followUser.fulfilled, (state, action) => {

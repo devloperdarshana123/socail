@@ -14,15 +14,7 @@ const isValidUrl = (v) => v === null || /^https?:\/\/.+/.test(v);
 // ─────────────────────────────────────────────
 const noHtmlChars = (v) => !v || !/[<>"']/.test(v);
 
-// ─────────────────────────────────────────────
-//  ConversationMember Schema  ← FIX #3 #4 #13
-//
-//  Per-user state (unread, archive, delete)
-//  moved OUT of Conversation document into its
-//  own collection. This eliminates the 16MB
-//  ceiling risk for large groups and makes
-//  per-user inbox queries indexable.
-// ─────────────────────────────────────────────
+
 const conversationMemberSchema = new Schema(
   {
     conversationId: {
@@ -201,7 +193,11 @@ const conversationSchema = new Schema(
       type: Boolean,
       default: true,
     },
-
+participantsKey: {
+  type: String,
+  default: null,
+  // sorted "userIdA_userIdB" string — sirf 1:1 DMs ke liye set hota hai
+},
     disbandedAt: {
       type: Date,
       default: null,
@@ -214,37 +210,15 @@ const conversationSchema = new Schema(
   },
 );
 
-// ─────────────────────────────────────────────
-//  Indexes  — FIX #14 #15
-//
-//  Removed:
-//    { participants: 1 }          — redundant prefix of compound below
-//    { updatedAt: -1 }            — no solo queries on updatedAt
-//    { isGroup: 1, isActive: 1 } — no static uses this alone
-//
-//  Kept / Added:
-//    { participants: 1, updatedAt: -1 } — primary conversation list query
-//    Unique DM index (below)            — FIX #6
-// ─────────────────────────────────────────────
 conversationSchema.index({ participants: 1, updatedAt: -1 });
-
-// FIX #6 — Unique DM index: only one conversation allowed per pair
-// Partial index: only applies to non-group conversations
-// MongoDB partial indexes use a filter expression
 conversationSchema.index(
-  { participants: 1 },
+  { participantsKey: 1 },
   {
     unique: true,
-    partialFilterExpression: { isGroup: false },
-    name: "unique_dm_participants",
-    // Note: MongoDB's unique index on array fields ensures the sorted
-    // pair [A,B] is unique. We enforce sorted insertion in createDM.
+    partialFilterExpression: { isGroup: false, participantsKey: { $type: "string" } },
+    name: "unique_dm_pair",
   },
 );
-
-// ─────────────────────────────────────────────
-//  Pre-validate Hook
-// ─────────────────────────────────────────────
 
 // FIX #11 — groupAdmin must be one of participants
 conversationSchema.pre("validate", function () {
@@ -257,6 +231,13 @@ conversationSchema.pre("validate", function () {
     if (!participantStrs.includes(this.groupAdmin.toString())) {
       throw new Error("groupAdmin must be one of the participants");
     }
+  }
+});
+
+conversationSchema.pre("validate", function () {
+  if (!this.isGroup && Array.isArray(this.participants) && this.participants.length === 2) {
+    const sorted = this.participants.map((p) => p.toString()).sort();
+    this.participantsKey = sorted.join("_");
   }
 });
 
@@ -281,45 +262,114 @@ conversationSchema.virtual("participantCount").get(function () {
  * @param {ObjectId} userBId
  * @returns {{ conversation, created: boolean }}
  */
+// conversationSchema.statics.createDM = async function (userAId, userBId) {
+//   const a = userAId.toString();
+//   const b = userBId.toString();
+
+//   // FIX: self-conversation guard
+//   if (a === b) throw new Error("Cannot create a conversation with yourself");
+
+//   // Sort IDs so [A,B] and [B,A] always produce the same document
+//   const sorted = [userAId, userBId].sort((x, y) =>
+//     x.toString().localeCompare(y.toString()),
+//   );
+
+//   try {
+//     const conversation = await this.create({
+//       participants: sorted,
+//       isGroup: false,
+//       isActive: true,
+//     });
+
+//     // Create ConversationMember records for both users
+//     await ConversationMember.insertMany([
+//       { conversationId: conversation._id, userId: sorted[0] },
+//       { conversationId: conversation._id, userId: sorted[1] },
+//     ]);
+
+//     return { conversation, created: true };
+//   } catch (err) {
+//     // E11000 = unique index violation → DM already exists
+//     if (err.code === 11000) {
+//       const existing = await this.findOne({
+//         isGroup: false,
+//         participants: { $all: sorted, $size: 2 },
+//       }).lean();
+//       return { conversation: existing, created: false };
+//     }
+//     throw err;
+//   }
+// };
+
+
+
 conversationSchema.statics.createDM = async function (userAId, userBId) {
   const a = userAId.toString();
   const b = userBId.toString();
 
-  // FIX: self-conversation guard
   if (a === b) throw new Error("Cannot create a conversation with yourself");
 
-  // Sort IDs so [A,B] and [B,A] always produce the same document
-  const sorted = [userAId, userBId].sort((x, y) =>
-    x.toString().localeCompare(y.toString()),
-  );
+  const sorted = [a, b].sort();
+  const participantsKey = sorted.join("_");
 
   try {
-    const conversation = await this.create({
+    // const result = await this.findOneAndUpdate(
+    //   { participantsKey, isGroup: false },
+    //   {
+    //     $setOnInsert: {
+    //       participants: sorted,
+    //       participantsKey,
+    //       isGroup: false,
+    //       isActive: true,
+    //     },
+    //   },
+    //   { new: true, upsert: true, setDefaultsOnInsert: true, rawResult: true },
+    // );
+
+    // const conversation = result.value;
+    // const created = !result.lastErrorObject.updatedExisting;
+
+const existingBefore = await this.findOne({ participantsKey, isGroup: false });
+
+const conversation = await this.findOneAndUpdate(
+  { participantsKey, isGroup: false },
+  {
+    $setOnInsert: {
       participants: sorted,
+      participantsKey,
       isGroup: false,
       isActive: true,
-    });
+    },
+  },
+  { new: true, upsert: true, setDefaultsOnInsert: true },
+);
 
-    // Create ConversationMember records for both users
-    await ConversationMember.insertMany([
-      { conversationId: conversation._id, userId: sorted[0] },
-      { conversationId: conversation._id, userId: sorted[1] },
-    ]);
+const created = !existingBefore;
 
-    return { conversation, created: true };
+    if (created) {
+      await ConversationMember.insertMany([
+        { conversationId: conversation._id, userId: sorted[0] },
+        { conversationId: conversation._id, userId: sorted[1] },
+      ]);
+    } else if (!conversation.isActive) {
+      await this.findByIdAndUpdate(conversation._id, {
+        $set: { isActive: true, disbandedAt: null },
+      });
+      await ConversationMember.updateMany(
+        { conversationId: conversation._id },
+        { $set: { isDeleted: false, deletedAt: null } },
+      );
+    }
+
+    return { conversation, created };
   } catch (err) {
-    // E11000 = unique index violation → DM already exists
     if (err.code === 11000) {
-      const existing = await this.findOne({
-        isGroup: false,
-        participants: { $all: sorted, $size: 2 },
-      }).lean();
+      const existing = await this.findOne({ participantsKey, isGroup: false }).lean();
       return { conversation: existing, created: false };
     }
     throw err;
   }
 };
-
 /**
  * FIX #2 — Create a group conversation
  *

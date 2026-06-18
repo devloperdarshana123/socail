@@ -54,32 +54,6 @@ function useIsMobile(bp = 768) {
   return v;
 }
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
-// function Avatar({ name = "", userId = "", size = 38, online = false, src = null }) {
-//   const st = avatarStyle(userId);
-//   return (
-//     <div style={{ position: "relative", flexShrink: 0, display: "inline-flex" }}>
-//       {src ? (
-//         <img src={src} alt={name}
-//           style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover" }} />
-//       ) : (
-//         <div style={{
-//           ...st, width: size, height: size, borderRadius: "50%",
-//           display: "flex", alignItems: "center", justifyContent: "center",
-//           fontSize: size * 0.34, fontWeight: 500,
-//         }}>{initials(name)}</div>
-//       )}
-//       {online && (
-//         <span style={{
-//           position: "absolute", bottom: 1, right: 1, width: 9, height: 9,
-//           borderRadius: "50%", background: "#1D9E75",
-//           border: "2px solid var(--color-background-primary, #fff)",
-//         }} />
-//       )}
-//     </div>
-//   );
-// }
-
 
 
 function Avatar({ name = "", userId = "", size = 38, online = false, src = null }) {
@@ -386,6 +360,7 @@ export default function Messages() {
   const topSentinel  = useRef(null);
   const msgListRef   = useRef(null);
   const fileInputRef = useRef(null);
+  const openUserHandledRef = useRef(false);
 
 const activeConv = useMemo(
   () => conversations.find((c) => c._id === activeConvId),
@@ -427,26 +402,52 @@ useEffect(() => {
   dispatch(fetchConversations()); 
 }, [myId, dispatch]);
 
+// useEffect(() => {
+//   if (!openUserId || loadingConvs) return;
+
+//   const existing = conversations.find((c) =>
+//     c.participants?.some((p) => (p._id || p).toString() === openUserId)
+//   );
+
+//   if (existing) {
+//     dispatch(setActiveConversation(existing._id));
+//     return;
+//   }
+
+//   // Conversations loaded hain but match nahi — create karo
+//   if (conversations.length >= 0 && !loadingConvs) {
+//     dispatch(openOrCreateConversation(openUserId)).then((action) => {
+//       if (action?.payload?._id) dispatch(setActiveConversation(action.payload._id));
+//     });
+//   }
+// }, [openUserId, conversations, loadingConvs , dispatch]);
+
+
 useEffect(() => {
   if (!openUserId || loadingConvs) return;
+  if (openUserHandledRef.current) return;
 
   const existing = conversations.find((c) =>
     c.participants?.some((p) => (p._id || p).toString() === openUserId)
   );
 
   if (existing) {
+    openUserHandledRef.current = true;
     dispatch(setActiveConversation(existing._id));
     return;
   }
 
-  // Conversations loaded hain but match nahi — create karo
-  if (conversations.length >= 0 && !loadingConvs) {
+  if (!loadingConvs) {
+    openUserHandledRef.current = true;
     dispatch(openOrCreateConversation(openUserId)).then((action) => {
       if (action?.payload?._id) dispatch(setActiveConversation(action.payload._id));
     });
   }
-}, [openUserId, conversations, loadingConvs , dispatch]);
+}, [openUserId, conversations, loadingConvs, dispatch]);
 
+useEffect(() => {
+  openUserHandledRef.current = false;
+}, [openUserId]);
  useEffect(() => { if (myId) dispatch(fetchFollowing({ userId: myId })); }, [myId, dispatch]);
 
   useEffect(() => {
@@ -596,9 +597,16 @@ useEffect(() => {
     if (action === "react")  setReactTarget(msg._id);
   };
 
+  // const handleOpenWithUser = (userId) => {
+  //   dispatch(openOrCreateConversation(userId)).then((action) => {
+  //     if (action?.payload?._id) { dispatch(setActiveConversation(action.payload._id)); setTab("chats"); }
+  //   });
+  // };
   const handleOpenWithUser = (userId) => {
     dispatch(openOrCreateConversation(userId)).then((action) => {
+      console.log("RESULT:", action);
       if (action?.payload?._id) { dispatch(setActiveConversation(action.payload._id)); setTab("chats"); }
+      else { console.log("FAILED — payload was:", action?.payload, "error:", action?.error); }
     });
   };
 

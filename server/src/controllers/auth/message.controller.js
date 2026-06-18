@@ -95,6 +95,68 @@ const formatted = conversations.map((conv) => {
  * Do users ke beech DM conversation get ya create karo.
  * Body: { participantId }
  */
+// export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
+//   const userId = req.user._id;
+//   const { participantId } = req.body;
+
+//   if (!participantId)
+//     return next(new AppError("participantId is required.", 400));
+
+//   if (participantId === userId.toString())
+//     return next(new AppError("Cannot start a conversation with yourself.", 400));
+
+//   if (!mongoose.isValidObjectId(participantId))
+//     return next(new AppError("Invalid participantId.", 400));
+
+//   // Existing conversation dhundo
+//   let conv = await Conversation.findOne({
+//     isGroup: false,
+//     participants: { $all: [userId, participantId], $size: 2 },
+//     isActive: true,
+//   }).populate("participants", "username fullName avatar isVerifiedBadge accountStatus");
+
+
+//   if (conv) {
+//   await ConversationMember.bulkWrite([
+//     {
+//       updateOne: {
+//         filter: { conversationId: conv._id, userId },
+//         update: { $setOnInsert: { conversationId: conv._id, userId, unreadCount: 0, isDeleted: false } },
+//         upsert: true,
+//       },
+//     },
+//     {
+//       updateOne: {
+//         filter: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId) },
+//         update: { $setOnInsert: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId), unreadCount: 0, isDeleted: false } },
+//         upsert: true,
+//       },
+//     },
+//   ]);
+// }
+//   // Nahi mila toh create karo
+//  if (!conv) {
+//     const sorted = [userId, new mongoose.Types.ObjectId(participantId)]
+//       .sort((a, b) => a.toString().localeCompare(b.toString()));
+//     conv = await Conversation.create({
+//       participants: sorted,
+//       isGroup: false,
+//     });
+//     await ConversationMember.insertMany([
+//       { conversationId: conv._id, userId: sorted[0] },
+//       { conversationId: conv._id, userId: sorted[1] },
+//     ]).catch(() => {});
+//     conv = await conv.populate(
+//       "participants",
+//       "username fullName avatar isVerifiedBadge accountStatus",
+//     );
+//   }
+
+//   res.status(200).json({ success: true, data: conv });
+// });
+
+
+
 export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
   const userId = req.user._id;
   const { participantId } = req.body;
@@ -108,53 +170,15 @@ export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
   if (!mongoose.isValidObjectId(participantId))
     return next(new AppError("Invalid participantId.", 400));
 
-  // Existing conversation dhundo
-  let conv = await Conversation.findOne({
-    isGroup: false,
-    participants: { $all: [userId, participantId], $size: 2 },
-    isActive: true,
-  }).populate("participants", "username fullName avatar isVerifiedBadge accountStatus");
+  const { conversation } = await Conversation.createDM(userId, participantId);
 
+  const populated = await Conversation.findById(conversation._id).populate(
+    "participants",
+    "username fullName avatar isVerifiedBadge accountStatus",
+  );
 
-  if (conv) {
-  await ConversationMember.bulkWrite([
-    {
-      updateOne: {
-        filter: { conversationId: conv._id, userId },
-        update: { $setOnInsert: { conversationId: conv._id, userId, unreadCount: 0, isDeleted: false } },
-        upsert: true,
-      },
-    },
-    {
-      updateOne: {
-        filter: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId) },
-        update: { $setOnInsert: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId), unreadCount: 0, isDeleted: false } },
-        upsert: true,
-      },
-    },
-  ]);
-}
-  // Nahi mila toh create karo
- if (!conv) {
-    const sorted = [userId, new mongoose.Types.ObjectId(participantId)]
-      .sort((a, b) => a.toString().localeCompare(b.toString()));
-    conv = await Conversation.create({
-      participants: sorted,
-      isGroup: false,
-    });
-    await ConversationMember.insertMany([
-      { conversationId: conv._id, userId: sorted[0] },
-      { conversationId: conv._id, userId: sorted[1] },
-    ]).catch(() => {});
-    conv = await conv.populate(
-      "participants",
-      "username fullName avatar isVerifiedBadge accountStatus",
-    );
-  }
-
-  res.status(200).json({ success: true, data: conv });
+  res.status(200).json({ success: true, data: populated });
 });
-
 /**
  * GET /api/messages/conversations/unread-count
  * Navbar badge ke liye total unread count across all conversations.
