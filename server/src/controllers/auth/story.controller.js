@@ -6,7 +6,6 @@ import StoryView from "../../models/storyview.model.js";
 import Highlight from "../../models/highlight.model.js";
 import {
   deleteFromCloudinary,
-  copyToCloudinary,
 } from "../../helper/cloudinaryUpload.js";
 import { notifyChat } from "../../helper/notifyChat.js";
 import mongoose from "mongoose";
@@ -44,6 +43,48 @@ const buildVideoThumbnail = (url) =>
  * AUDIT FIX #3: snapshot building was duplicated in createHighlight
  * and addToHighlight with subtle differences. Centralized here.
  */
+// const buildSnapshot = async (story) => {
+//   if (story.type === "text") {
+//     return {
+//       storyId:     story._id,
+//       type:        "text",
+//       textContent: story.textContent,
+//     };
+//   }
+
+//   try {
+//     const copied = await copyToCloudinary(story.media.url, {
+//       folder:        "erovians/highlights",
+//       resource_type: story.media.resourceType,
+//     });
+//     return {
+//       storyId:      story._id,
+//       type:         story.media.resourceType,
+//       url:          copied.secure_url,
+//       publicId:     copied.public_id,
+//       resourceType: story.media.resourceType,
+//       thumbnailUrl:
+//         story.media.resourceType === "video"
+//           ? buildVideoThumbnail(copied.secure_url)
+//           : null,
+//     };
+//   } catch {
+//     // Cloudinary copy fail → original URL fallback (highlight still usable)
+//     return {
+//       storyId:      story._id,
+//       type:         story.media.resourceType,
+//       url:          story.media.url,
+//       publicId:     null,
+//       resourceType: story.media.resourceType,
+//       thumbnailUrl: null,
+//     };
+//   }
+// };
+
+// ─────────────────────────────────────────────
+//  POST /api/v2/stories — Create media story
+// ─────────────────────────────────────────────
+
 const buildSnapshot = async (story) => {
   if (story.type === "text") {
     return {
@@ -53,38 +94,18 @@ const buildSnapshot = async (story) => {
     };
   }
 
-  try {
-    const copied = await copyToCloudinary(story.media.url, {
-      folder:        "erovians/highlights",
-      resource_type: story.media.resourceType,
-    });
-    return {
-      storyId:      story._id,
-      type:         story.media.resourceType,
-      url:          copied.secure_url,
-      publicId:     copied.public_id,
-      resourceType: story.media.resourceType,
-      thumbnailUrl:
-        story.media.resourceType === "video"
-          ? buildVideoThumbnail(copied.secure_url)
-          : null,
-    };
-  } catch {
-    // Cloudinary copy fail → original URL fallback (highlight still usable)
-    return {
-      storyId:      story._id,
-      type:         story.media.resourceType,
-      url:          story.media.url,
-      publicId:     null,
-      resourceType: story.media.resourceType,
-      thumbnailUrl: null,
-    };
-  }
+  return {
+    storyId:      story._id,
+    type:         story.media.resourceType,
+    url:          story.media.url,
+    publicId:     story.media.publicId || null,
+    resourceType: story.media.resourceType,
+    thumbnailUrl: story.media.resourceType === "video"
+      ? buildVideoThumbnail(story.media.url)
+      : null,
+  };
 };
 
-// ─────────────────────────────────────────────
-//  POST /api/v2/stories — Create media story
-// ─────────────────────────────────────────────
 export const createStory = asyncHandler(async (req, res, next) => {
   const { caption = "", audience = "public", media } = req.body;
 
