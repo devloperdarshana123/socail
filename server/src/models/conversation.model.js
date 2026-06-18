@@ -311,54 +311,58 @@ conversationSchema.statics.createDM = async function (userAId, userBId) {
 
   const sorted = [a, b].sort();
   const participantsKey = sorted.join("_");
+  const sortedObjectIds = sorted.map((id) => new mongoose.Types.ObjectId(id));
 
   try {
-    // const result = await this.findOneAndUpdate(
-    //   { participantsKey, isGroup: false },
-    //   {
-    //     $setOnInsert: {
-    //       participants: sorted,
-    //       participantsKey,
-    //       isGroup: false,
-    //       isActive: true,
-    //     },
-    //   },
-    //   { new: true, upsert: true, setDefaultsOnInsert: true, rawResult: true },
-    // );
+    const existingBefore = await this.findOne({ participantsKey, isGroup: false });
 
-    // const conversation = result.value;
-    // const created = !result.lastErrorObject.updatedExisting;
+    const conversation = await this.findOneAndUpdate(
+      { participantsKey, isGroup: false },
+      {
+        $setOnInsert: {
+          participants: sortedObjectIds,
+          participantsKey,
+          isGroup: false,
+          isActive: true,
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
 
-const existingBefore = await this.findOne({ participantsKey, isGroup: false });
-
-const conversation = await this.findOneAndUpdate(
-  { participantsKey, isGroup: false },
-  {
-    $setOnInsert: {
-      participants: sorted,
-      participantsKey,
-      isGroup: false,
-      isActive: true,
-    },
-  },
-  { new: true, upsert: true, setDefaultsOnInsert: true },
-);
-
-const created = !existingBefore;
+    const created = !existingBefore;
 
     if (created) {
       await ConversationMember.insertMany([
-        { conversationId: conversation._id, userId: sorted[0] },
-        { conversationId: conversation._id, userId: sorted[1] },
+        { conversationId: conversation._id, userId: sortedObjectIds[0] },
+        { conversationId: conversation._id, userId: sortedObjectIds[1] },
       ]);
-    } else if (!conversation.isActive) {
-      await this.findByIdAndUpdate(conversation._id, {
-        $set: { isActive: true, disbandedAt: null },
-      });
-      await ConversationMember.updateMany(
-        { conversationId: conversation._id },
-        { $set: { isDeleted: false, deletedAt: null } },
-      );
+    } else {
+      await ConversationMember.bulkWrite([
+        {
+          updateOne: {
+            filter: { conversationId: conversation._id, userId: sortedObjectIds[0] },
+            update: { $setOnInsert: { conversationId: conversation._id, userId: sortedObjectIds[0], unreadCount: 0, isDeleted: false } },
+            upsert: true,
+          },
+        },
+        {
+          updateOne: {
+            filter: { conversationId: conversation._id, userId: sortedObjectIds[1] },
+            update: { $setOnInsert: { conversationId: conversation._id, userId: sortedObjectIds[1], unreadCount: 0, isDeleted: false } },
+            upsert: true,
+          },
+        },
+      ]);
+
+      if (!conversation.isActive) {
+        await this.findByIdAndUpdate(conversation._id, {
+          $set: { isActive: true, disbandedAt: null },
+        });
+        await ConversationMember.updateMany(
+          { conversationId: conversation._id },
+          { $set: { isDeleted: false, deletedAt: null } },
+        );
+      }
     }
 
     return { conversation, created };
