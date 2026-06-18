@@ -649,17 +649,39 @@ export const getMapSellers = asyncHandler(async (req, res) => {
 
   if (category && category !== "all") filter.businessCategory = category;
 
-  if (q) {
+  // if (q) {
+  //   if (q.length > 100) return res.status(400).json({ success: false, message: "Search query too long." });
+  //   const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  //   filter.$or = [
+  //     { fullName: { $regex: safeQ, $options: "i" } },
+  //     { designation: { $regex: safeQ, $options: "i" } },
+  //     { "location.city": { $regex: safeQ, $options: "i" } },
+  //     { businessCategory: { $regex: safeQ, $options: "i" } },
+  //   ];
+  // }
+if (q) {
     if (q.length > 100) return res.status(400).json({ success: false, message: "Search query too long." });
     const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    filter.$or = [
-      { fullName: { $regex: safeQ, $options: "i" } },
-      { designation: { $regex: safeQ, $options: "i" } },
-      { "location.city": { $regex: safeQ, $options: "i" } },
-      { businessCategory: { $regex: safeQ, $options: "i" } },
+    filter.$and = [
+      {
+        $or: [
+          { "location.coordinates.coordinates": { $exists: true, $size: 2 } },
+          { "location.city": { $exists: true, $ne: null } },
+        ],
+      },
+      {
+        $or: [
+          { fullName: { $regex: safeQ, $options: "i" } },
+          { designation: { $regex: safeQ, $options: "i" } },
+          { "location.city": { $regex: safeQ, $options: "i" } },
+          { "location.state": { $regex: safeQ, $options: "i" } },
+          { "location.country": { $regex: safeQ, $options: "i" } },
+          { businessCategory: { $regex: safeQ, $options: "i" } },
+        ],
+      },
     ];
+    delete filter.$or;
   }
-
   const [users, followingIds] = await Promise.all([
     User.find(filter)
       .select("fullName username avatar designation businessCategory location followersCount isVerifiedBadge isPrivate")

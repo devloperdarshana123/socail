@@ -184,11 +184,7 @@ const conversationSchema = new Schema(
       default: null,
     },
 
-    // ── Status ────────────────────────────────
-    // FIX #19 — isActive now has defined semantics:
-    // true  = conversation is live
-    // false = all participants have deleted it (DM),
-    //         or group was explicitly disbanded
+    
     isActive: {
       type: Boolean,
       default: true,
@@ -253,53 +249,13 @@ conversationSchema.virtual("participantCount").get(function () {
 // ─────────────────────────────────────────────
 
 /**
- * FIX #2 — Atomic DM creation
- * Creates a DM conversation or returns the existing one.
- * Enforces exactly-2 participants and sorted insertion
- * so the unique index on participants always matches.
+ 
  *
  * @param {ObjectId} userAId
  * @param {ObjectId} userBId
  * @returns {{ conversation, created: boolean }}
  */
-// conversationSchema.statics.createDM = async function (userAId, userBId) {
-//   const a = userAId.toString();
-//   const b = userBId.toString();
 
-//   // FIX: self-conversation guard
-//   if (a === b) throw new Error("Cannot create a conversation with yourself");
-
-//   // Sort IDs so [A,B] and [B,A] always produce the same document
-//   const sorted = [userAId, userBId].sort((x, y) =>
-//     x.toString().localeCompare(y.toString()),
-//   );
-
-//   try {
-//     const conversation = await this.create({
-//       participants: sorted,
-//       isGroup: false,
-//       isActive: true,
-//     });
-
-//     // Create ConversationMember records for both users
-//     await ConversationMember.insertMany([
-//       { conversationId: conversation._id, userId: sorted[0] },
-//       { conversationId: conversation._id, userId: sorted[1] },
-//     ]);
-
-//     return { conversation, created: true };
-//   } catch (err) {
-//     // E11000 = unique index violation → DM already exists
-//     if (err.code === 11000) {
-//       const existing = await this.findOne({
-//         isGroup: false,
-//         participants: { $all: sorted, $size: 2 },
-//       }).lean();
-//       return { conversation: existing, created: false };
-//     }
-//     throw err;
-//   }
-// };
 
 
 
@@ -417,10 +373,7 @@ conversationSchema.statics.createGroup = async function (
 };
 
 /**
- * FIX #1 — Cursor-paginated inbox (replaces skip())
- *
- * Uses ConversationMember collection for per-user state.
- * Returns conversations sorted by Conversation.updatedAt DESC.
+
  *
  * @param {ObjectId} userId
  * @param {object}   opts

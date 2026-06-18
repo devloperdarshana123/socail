@@ -1,5 +1,5 @@
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback , useRef} from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { useSelector } from "react-redux";
 import api from "../lib/services/api";
@@ -24,6 +24,38 @@ const CATEGORIES = [
 
 const categoryColor = (cat) =>
   CATEGORIES.find((c) => c.value === cat?.toLowerCase())?.color || "#1e3a5f";
+
+const jitterCoords = (sellers) => {
+  const seen = {};
+  return sellers.map((seller) => {
+    const coords = seller.location?.coordinates?.coordinates;
+    if (!coords || coords.length < 2) return seller;
+
+    const [lng, lat] = coords;
+    const key = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
+
+    seen[key] = (seen[key] || 0) + 1;
+    const count = seen[key];
+
+    if (count === 1) return seller;
+
+    const angle = (count - 1) * (137.5 * Math.PI / 180);
+    const radius = 0.03 * Math.ceil((count - 1) / 8);
+    const jLat = lat + radius * Math.sin(angle);
+    const jLng = lng + radius * Math.cos(angle);
+
+    return {
+      ...seller,
+      location: {
+        ...seller.location,
+        coordinates: {
+          ...seller.location.coordinates,
+          coordinates: [jLng, jLat],
+        },
+      },
+    };
+  });
+};
 
 const makeIcon = (color) =>
   L.divIcon({
@@ -74,7 +106,7 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
   const navigate   = useNavigate();
  
   const currentUser = useSelector((s) => s.auth.user);
-
+const mapRef = useRef(null);
   const [sellers,  setSellers]  = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
@@ -89,7 +121,8 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
     if (searchQuery.trim())         params.append("q", searchQuery.trim());
 
     const { data } = await api.get(`/user/map-sellers?${params}`);
-    if (data.success) setSellers(data.users || []);
+    // if (data.success) setSellers(data.users || []);
+    if (data.success) setSellers(jitterCoords(data.users || []));
     else throw new Error(data.message || "Failed to load sellers");
   } catch (err) {
     console.error("Map fetch failed:", err);
@@ -99,11 +132,41 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
   }
 }, [searchQuery, selectedCategory]);
 
+  // useEffect(() => {
+  //   // Debounce search queries
+  //   const timer = setTimeout(fetchSellers, searchQuery ? 400 : 0);
+  //   return () => clearTimeout(timer);
+  // }, [fetchSellers, searchQuery]);
+
+  const flyToSearch = useCallback(async (query) => {
+    if (!query?.trim() || !mapRef.current) return;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+        { headers: { "User-Agent": "Erovians/1.0" } }
+      );
+      const data = await res.json();
+      if (data?.[0]) {
+       const zoom = 
+          data[0].type === "country" ? 5 :
+          data[0].type === "state" ? 7 :
+          data[0].type === "city" ? 10 : 8;
+
+        mapRef.current.setView(
+          [parseFloat(data[0].lat), parseFloat(data[0].lon)],
+          zoom
+        );
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
-    // Debounce search queries
-    const timer = setTimeout(fetchSellers, searchQuery ? 400 : 0);
+    const timer = setTimeout(() => {
+      fetchSellers();
+      if (searchQuery) flyToSearch(searchQuery);
+    }, searchQuery ? 400 : 0);
     return () => clearTimeout(timer);
-  }, [fetchSellers, searchQuery]);
+  }, [fetchSellers, flyToSearch, searchQuery]);
 
   // ── Follow / Unfollow ─────────────────────────────────────
  const handleFollow = async (seller, e) => {
@@ -201,6 +264,7 @@ const handleMessage = (seller, e) => {
       )}
 
       <MapContainer
+         ref={mapRef}
         center={[22, 78]}
         zoom={4}
         minZoom={2}
