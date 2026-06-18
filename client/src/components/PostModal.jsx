@@ -99,6 +99,7 @@ function MediaCarousel({ media, type }) {
           ref={videoRef}
           src={current?.url}
           poster={current?.thumbnailUrl}
+          className="pm-media-el"
           style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
           loop playsInline onClick={togglePlay}
         />
@@ -106,6 +107,7 @@ function MediaCarousel({ media, type }) {
         <img
           src={current?.url}
           alt=""
+          className="pm-media-el"
           style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
         />
       )}
@@ -331,6 +333,7 @@ const isText   = post?.type === "text";
 
   const modal = (
     <div
+    className="pm-backdrop"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 9999,
@@ -360,25 +363,52 @@ const isText   = post?.type === "text";
         .pm-left-section::-webkit-scrollbar-thumb { background: #d4b896; border-radius: 99px; }
 
         @media (max-width: 768px) {
-          .pm-modal-container {
-            flex-direction: column !important;
-            height: 96vh !important;
-            max-height: 96vh !important;
-            width: 95vw !important;
-          }
-          .pm-left-section {
-            flex: 0 0 45% !important;
-            width: 100% !important;
-            max-height: 45vh !important;
-            min-height: 220px !important;
-          }
-          .pm-right-section {
-            flex: 1 1 auto !important;
-            width: 100% !important;
-            border-left: none !important;
-             border-top: 1px solid #e8d5be !important;
-          }
-        }
+  // .pm-backdrop {
+  //   padding: 0 !important;
+  //   align-items: stretch !important;
+  // }
+  .pm-backdrop {
+    padding: 0 !important;
+    align-items: flex-start !important;
+  }
+  // .pm-modal-container {
+  //   flex-direction: column !important;
+  //   height: 100vh !important;
+  //   max-height: 100vh !important;
+  //   width: 100vw !important;
+  //   max-width: 100vw !important;
+  //   border-radius: 0 !important;
+  // }
+  .pm-modal-container {
+    flex-direction: column !important;
+    height: calc(100vh - 40px) !important;
+    max-height: calc(100vh - 40px) !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    border-radius: 16px !important;
+    margin-top: 40px !important;
+  }
+    .pm-inner-wrap {
+    flex-direction: column !important;
+  }
+  .pm-left-section {
+    flex: 0 0 38vh !important;
+    width: 100% !important;
+    max-height: 38vh !important;
+    min-height: 38vh !important;
+  }
+  .pm-media-el {
+    object-fit: cover !important;
+  }
+  .pm-right-section.pm-info-col {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    border-left: none !important;
+    border-top: 1px solid #e8d5be !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+  }
+}
       `}</style>
 
       {/* ── Modal container ── */}
@@ -412,7 +442,8 @@ const isText   = post?.type === "text";
   <X size={18} />
 </button>
 
-<div style={{ display:"flex", flexDirection:"row", width:"100%", height:"100%", borderRadius:20, overflow:"hidden" }}>
+{/* <div style={{ display:"flex", flexDirection:"row", width:"100%", height:"100%", borderRadius:20, overflow:"hidden" }}> */}
+<div className="pm-inner-wrap" style={{ display:"flex", flexDirection:"row", width:"100%", height:"100%", borderRadius:20, overflow:"hidden" }}>
 
         {/* ══ LEFT — Media or Text ══ */}
         <div
@@ -455,7 +486,7 @@ const isText   = post?.type === "text";
 
         {/* ══ RIGHT — Info + Comments ══ */}
         <div
-          className="pm-right-section"
+           className="pm-right-section pm-info-col"
           style={{
             flex: "0 0 340px",
             display: "flex",

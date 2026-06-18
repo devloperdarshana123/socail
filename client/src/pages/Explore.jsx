@@ -160,10 +160,41 @@ function SkeletonCard() {
 }
 
 // ── Masonry Grid ───────────────────────────────────────────────
+// function MasonryGrid({ posts, onPostClick, loading }) {
+//   // 3 column masonry — posts ko 3 columns mein distribute karo
+//   const cols = [[], [], []];
+//   posts.forEach((post, i) => cols[i % 3].push(post));
+
+//   return (
+//     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
+//       {loading && posts.length === 0
+//         ? Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)
+//         : cols.map((col, ci) => (
+//             <div key={ci} className="flex flex-col gap-2 md:gap-3">
+//               {col.map((post) => (
+//                 <PostCard key={post._id} post={post} onClick={onPostClick} />
+//               ))}
+//             </div>
+//           ))
+//       }
+//     </div>
+//   );
+// }
+
+// ── Masonry Grid ───────────────────────────────────────────────
 function MasonryGrid({ posts, onPostClick, loading }) {
-  // 3 column masonry — posts ko 3 columns mein distribute karo
-  const cols = [[], [], []];
-  posts.forEach((post, i) => cols[i % 3].push(post));
+  const [numCols, setNumCols] = useState(window.innerWidth < 768 ? 2 : 3);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setNumCols(window.innerWidth < 768 ? 2 : 3);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const cols = Array.from({ length: numCols }, () => []);
+  posts.forEach((post, i) => cols[i % numCols].push(post));
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
@@ -180,7 +211,6 @@ function MasonryGrid({ posts, onPostClick, loading }) {
     </div>
   );
 }
-
 // ── MAIN ──────────────────────────────────────────────────────
 export default function Explore() {
   const dispatch = useDispatch();
