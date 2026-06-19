@@ -1,9 +1,11 @@
-// server/src/controllers/auth/Message.controller.js
+
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import Conversation from "../../models/conversation.model.js";
 import { ConversationMember } from "../../models/conversation.model.js";
 import Message from "../../models/message.model.js";
+
+import { encryptMessage, decryptMessage } from "../../utils/encryption.js";
 import mongoose from "mongoose";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,7 +20,8 @@ const syncLastMessage = async (conversationId, msg) => {
     $set: {
       lastMessage: {
         messageId: msg._id,
-        text: msg.isDeleted ? "" : (msg.text?.slice(0, 100) ?? ""),
+        // text: msg.isDeleted ? "" : (msg.text?.slice(0, 100) ?? ""),
+        text: msg.isDeleted ? "" : encryptMessage(msg.text?.slice(0, 100) ?? ""),
         senderId: msg.sender,
         sentAt: msg.createdAt,
         isDeleted: msg.isDeleted ?? false,
@@ -89,72 +92,6 @@ const formatted = conversations.map((conv) => {
     pagination: { page, limit, hasMore },
   });
 });
-
-/**
- * POST /api/messages/conversations
- * Do users ke beech DM conversation get ya create karo.
- * Body: { participantId }
- */
-// export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
-//   const userId = req.user._id;
-//   const { participantId } = req.body;
-
-//   if (!participantId)
-//     return next(new AppError("participantId is required.", 400));
-
-//   if (participantId === userId.toString())
-//     return next(new AppError("Cannot start a conversation with yourself.", 400));
-
-//   if (!mongoose.isValidObjectId(participantId))
-//     return next(new AppError("Invalid participantId.", 400));
-
-//   // Existing conversation dhundo
-//   let conv = await Conversation.findOne({
-//     isGroup: false,
-//     participants: { $all: [userId, participantId], $size: 2 },
-//     isActive: true,
-//   }).populate("participants", "username fullName avatar isVerifiedBadge accountStatus");
-
-
-//   if (conv) {
-//   await ConversationMember.bulkWrite([
-//     {
-//       updateOne: {
-//         filter: { conversationId: conv._id, userId },
-//         update: { $setOnInsert: { conversationId: conv._id, userId, unreadCount: 0, isDeleted: false } },
-//         upsert: true,
-//       },
-//     },
-//     {
-//       updateOne: {
-//         filter: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId) },
-//         update: { $setOnInsert: { conversationId: conv._id, userId: new mongoose.Types.ObjectId(participantId), unreadCount: 0, isDeleted: false } },
-//         upsert: true,
-//       },
-//     },
-//   ]);
-// }
-//   // Nahi mila toh create karo
-//  if (!conv) {
-//     const sorted = [userId, new mongoose.Types.ObjectId(participantId)]
-//       .sort((a, b) => a.toString().localeCompare(b.toString()));
-//     conv = await Conversation.create({
-//       participants: sorted,
-//       isGroup: false,
-//     });
-//     await ConversationMember.insertMany([
-//       { conversationId: conv._id, userId: sorted[0] },
-//       { conversationId: conv._id, userId: sorted[1] },
-//     ]).catch(() => {});
-//     conv = await conv.populate(
-//       "participants",
-//       "username fullName avatar isVerifiedBadge accountStatus",
-//     );
-//   }
-
-//   res.status(200).json({ success: true, data: conv });
-// });
-
 
 
 export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
@@ -307,6 +244,24 @@ const query = {
   // UI ke liye ascending order
   messages.reverse();
 
+  // messages.reverse(); ke baad yeh add karo:
+
+const decryptedMessages = messages.map((msg) => ({
+  ...msg,
+  text: msg.text ? decryptMessage(msg.text) : "",
+  // lastMessage preview bhi decrypt karo
+  replyTo: msg.replyTo
+    ? {
+        ...msg.replyTo,
+        text: msg.replyTo.text ? decryptMessage(msg.replyTo.text) : "",
+      }
+    : null,
+}));
+
+// Aur response mein data: messages ko badlo:
+// data: messages  ❌
+// data: decryptedMessages  ✅
+
   // Background mein read mark karo
 
 
@@ -317,7 +272,7 @@ const query = {
 
   res.status(200).json({
     success: true,
-    data: messages,
+   data: decryptedMessages, 
     pagination: {
       hasMore,
       nextCursor: hasMore ? messages[0]?._id : null,
@@ -365,7 +320,8 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
   const msg = await Message.create({
     conversation: conversationId,
     sender: userId,
-    text: text?.trim() || "",
+    // text: text?.trim() || "",
+    text: text?.trim() ? encryptMessage(text.trim()) : "",
     image: image || null,
     replyTo: replyPreview,
     type: image && !text?.trim() ? "image" : "text",
@@ -393,7 +349,15 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
     );
   }
 
-  res.status(201).json({ success: true, data: msg });
+  // res.status(201).json({ success: true, data: msg });
+  // ✅ Yeh karo — plain text bhejo frontend ko
+res.status(201).json({ 
+  success: true, 
+  data: {
+    ...msg.toObject(),
+    text: text?.trim() || "",  // original plain text
+  }
+});
 });
 
 /**
@@ -417,7 +381,8 @@ export const editMessage = asyncHandler(async (req, res, next) => {
   if (msg.sender.toString() !== userId.toString())
     return next(new AppError("Unauthorized.", 403));
 
-  msg.text = text.trim();
+  // msg.text = text.trim();
+  msg.text = encryptMessage(text.trim());
   msg.isEdited = true;
   msg.editedAt = new Date(); // ← missing tha pehle
   await msg.save();
@@ -429,7 +394,8 @@ export const editMessage = asyncHandler(async (req, res, next) => {
     success: true,
     data: {
       messageId: msg._id,
-      text: msg.text,
+      // text: msg.text,
+        text: text.trim(),
       isEdited: true,
       editedAt: msg.editedAt,
     },
