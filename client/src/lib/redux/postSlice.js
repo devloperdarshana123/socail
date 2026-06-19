@@ -408,12 +408,38 @@ builder
     state.myPostsLoadingMore = false;
   });
 
-    builder.addCase(togglePostLike.fulfilled, (state, action) => {
-      const { postId, liked, likesCount } = action.payload;
-      if (!state.interactions[postId]) state.interactions[postId] = {};
-      state.interactions[postId].liked = liked;
-      state.interactions[postId].likesCount = likesCount;
-    });
+    // builder.addCase(togglePostLike.fulfilled, (state, action) => {
+    //   const { postId, liked, likesCount } = action.payload;
+    //   if (!state.interactions[postId]) state.interactions[postId] = {};
+    //   state.interactions[postId].liked = liked;
+    //   state.interactions[postId].likesCount = likesCount;
+    // });
+
+
+    builder
+  .addCase(togglePostLike.pending, (state, action) => {
+    const { postId } = action.meta.arg;
+    if (!state.interactions[postId]) state.interactions[postId] = {};
+    const ix = state.interactions[postId];
+    // ✅ Pehle UI update karo
+    ix.liked = !ix.liked;
+    ix.likesCount = (ix.likesCount || 0) + (ix.liked ? 1 : -1);
+  })
+  .addCase(togglePostLike.fulfilled, (state, action) => {
+    const { postId, liked, likesCount } = action.payload;
+    if (!state.interactions[postId]) state.interactions[postId] = {};
+    // ✅ Server se sahi value set karo
+    state.interactions[postId].liked = liked;
+    state.interactions[postId].likesCount = likesCount;
+  })
+  .addCase(togglePostLike.rejected, (state, action) => {
+    const { postId } = action.meta.arg;
+    if (!state.interactions[postId]) return;
+    const ix = state.interactions[postId];
+    // ✅ Fail hone pe revert karo
+    ix.liked = !ix.liked;
+    ix.likesCount = (ix.likesCount || 0) + (ix.liked ? 1 : -1);
+  });
 
 builder
   .addCase(fetchComments.pending, (state, action) => {
@@ -476,17 +502,39 @@ state.interactions[postId].comments.unshift(comment);
         const postId = action.meta.arg.postId;
         if (state.interactions[postId]) state.interactions[postId].commentAdding = false;
       });
-
-   builder.addCase(toggleSavePost.fulfilled, (state, action) => {
-  const { postId, saved, savedCount } = action.payload;
-  if (!state.interactions[postId]) state.interactions[postId] = {};
-  state.interactions[postId].saved = saved;
-  if (savedCount !== undefined) state.interactions[postId].savedCount = savedCount;
-  if (!saved) state.savedPosts = state.savedPosts.filter((p) => {
-    const id = p?.post?._id || p?._id;
-    return id !== postId;
+builder
+  .addCase(toggleSavePost.pending, (state, action) => {
+    const postId = action.meta.arg;
+    if (!state.interactions[postId]) state.interactions[postId] = {};
+    // ✅ Pehle UI update karo
+    state.interactions[postId].saved = !state.interactions[postId].saved;
+  })
+  .addCase(toggleSavePost.fulfilled, (state, action) => {
+    const { postId, saved, savedCount } = action.payload;
+    if (!state.interactions[postId]) state.interactions[postId] = {};
+    state.interactions[postId].saved = saved;
+    if (savedCount !== undefined) state.interactions[postId].savedCount = savedCount;
+    if (!saved) state.savedPosts = state.savedPosts.filter((p) => {
+      const id = p?.post?._id || p?._id;
+      return id !== postId;
+    });
+  })
+  .addCase(toggleSavePost.rejected, (state, action) => {
+    const postId = action.meta.arg;
+    if (!state.interactions[postId]) return;
+    // ✅ Fail hone pe revert karo
+    state.interactions[postId].saved = !state.interactions[postId].saved;
   });
-});
+//    builder.addCase(toggleSavePost.fulfilled, (state, action) => {
+//   const { postId, saved, savedCount } = action.payload;
+//   if (!state.interactions[postId]) state.interactions[postId] = {};
+//   state.interactions[postId].saved = saved;
+//   if (savedCount !== undefined) state.interactions[postId].savedCount = savedCount;
+//   if (!saved) state.savedPosts = state.savedPosts.filter((p) => {
+//     const id = p?.post?._id || p?._id;
+//     return id !== postId;
+//   });
+// });
 
     builder.addCase(fetchPostInteraction.fulfilled, (state, action) => {
       const { postId, liked, saved } = action.payload;

@@ -131,7 +131,7 @@ function EmojiBtn({ onSelect, isDark }) {
                    boxShadow: "0 24px 64px rgba(0,0,0,0.3)" }}
         >
           <EmojiPickerReact
-            onEmojiClick={(d) => { onSelect(d.emoji); setOpen(false); }}
+            onEmojiClick={(d) => { onSelect(d.emoji); }}
             width={PICKER_W} height={PICKER_H}
             theme={isDark ? "dark" : "light"}
             searchDisabled={false} skinTonesDisabled={false} lazyLoadEmojis

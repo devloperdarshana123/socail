@@ -1199,7 +1199,7 @@ const unread = typeof conv.unreadCount === "object"
                       ...(isMobile && { left: "50%", transform: "translateX(-50%)" }),
                     }}>
                       <EmojiPicker
-                        onEmojiClick={(ed) => { setText((p) => p + ed.emoji); inputRef.current?.focus(); setEmojiOpen(false); }}
+                        onEmojiClick={(ed) => { setText((p) => p + ed.emoji); inputRef.current?.focus();}}
                         width={isMobile ? 300 : 300} height={380}
                         previewConfig={{ showPreview: false }} skinTonesDisabled
                       />

@@ -133,6 +133,17 @@ export default function ImageVideoUploader({ onUploadComplete, isDark = false })
           transition:    "border-color .2s",
           padding:       "16px",
         }}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+  onDrop={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (items.length >= MAX_FILES || uploading) return;
+    const files = Array.from(e.dataTransfer.files).slice(0, MAX_FILES - items.length);
+    if (!files.length) return;
+    // Fake event banao
+    handleFileSelect({ target: { files, value: "" } });
+  }}
       >
         <UploadCloud size={28} color={isDark ? "#9ca3af" : "#6b7280"} />
         <span style={{ fontSize: 14, fontWeight: 700, color: isDark ? "#f1f5f9" : "#111827" }}>
