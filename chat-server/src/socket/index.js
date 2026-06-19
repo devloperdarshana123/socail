@@ -8,7 +8,7 @@ import cookie from "cookie";
 import chatHandler from "./handlers/Chathandler.js";
 import notificationHandler from "./handlers/notificationHandler.js";
 import logger from "../utils/logger.js";
-
+import { addSocket, removeSocket } from "../services/onlineStore.js";
 let io;
 
 // ── Admin Namespace ──────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ try {
   });
 
   // ── Connection ─────────────────────────────────────────────────────────────
-  io.on("connection", (socket) => {
+  io.on("connection",async (socket) => {
     const userId = (socket.user.id || socket.user._id)?.toString();
     if (!userId) {
       logger.error("❌ No userId in token — disconnecting");
@@ -142,6 +142,8 @@ try {
     }
 
     logger.info(`✅ User connected: ${userId}${socket.tokenExpired ? " (token expired)" : ""}`);
+//     await addSocket(userId, socket.id);
+// io.emit("user:online", { userId });
 
     if (socket.tokenExpired) {
       socket.emit("token:expired");
@@ -172,9 +174,18 @@ try {
       socket.disconnect(true);
     }
 
-    socket.on("disconnect", (reason) => {
-      logger.info(`❌ User disconnected: ${userId} — reason: ${reason}`);
-    });
+  //   socket.on("disconnect", (reason) => {
+  //     logger.info(`❌ User disconnected: ${userId} — reason: ${reason}`);
+  //   });
+  // });
+
+  socket.on("disconnect", async (reason) => {
+  logger.info(`❌ User disconnected: ${userId} — reason: ${reason}`);
+  const isLastSocket = await removeSocket(userId, socket.id);
+  if (isLastSocket) {
+    io.emit("user:offline", { userId });
+  }
+});
   });
 
   initAdminNamespace(io);
