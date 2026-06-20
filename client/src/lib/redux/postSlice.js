@@ -408,13 +408,7 @@ builder
     state.myPostsLoadingMore = false;
   });
 
-    // builder.addCase(togglePostLike.fulfilled, (state, action) => {
-    //   const { postId, liked, likesCount } = action.payload;
-    //   if (!state.interactions[postId]) state.interactions[postId] = {};
-    //   state.interactions[postId].liked = liked;
-    //   state.interactions[postId].likesCount = likesCount;
-    // });
-
+   
 
     builder
   .addCase(togglePostLike.pending, (state, action) => {
@@ -525,16 +519,7 @@ builder
     // ✅ Fail hone pe revert karo
     state.interactions[postId].saved = !state.interactions[postId].saved;
   });
-//    builder.addCase(toggleSavePost.fulfilled, (state, action) => {
-//   const { postId, saved, savedCount } = action.payload;
-//   if (!state.interactions[postId]) state.interactions[postId] = {};
-//   state.interactions[postId].saved = saved;
-//   if (savedCount !== undefined) state.interactions[postId].savedCount = savedCount;
-//   if (!saved) state.savedPosts = state.savedPosts.filter((p) => {
-//     const id = p?.post?._id || p?._id;
-//     return id !== postId;
-//   });
-// });
+
 
     builder.addCase(fetchPostInteraction.fulfilled, (state, action) => {
       const { postId, liked, saved } = action.payload;

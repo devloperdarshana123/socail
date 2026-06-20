@@ -5,7 +5,9 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import EmojiPicker from "emoji-picker-react";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 import { useVoiceToText } from "../lib/hooks/useVoiceToText";
+import RenameGroupModal from "../components/RenameGroupModal";
 import ReportModal from "../components/ReportModal";
+import CreateGroupModal from "../components/Creategroupmodal";
 import {
   fetchConversations, fetchMessages, setActiveConversation,
   openOrCreateConversation, selectConversations, selectActiveConvId,
@@ -354,6 +356,8 @@ export default function Messages() {
   const [blockStatus,    setBlockStatus]    = useState({ blocked: false, iBlockedThem: false });
   const [showReport,     setShowReport]     = useState(false);
   const [toastMsg,       setToastMsg]       = useState(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
 
   const bottomRef    = useRef(null);
   const inputRef     = useRef(null);
@@ -367,12 +371,23 @@ const activeConv = useMemo(
   [conversations, activeConvId]
 );
 
+
+
 const otherParticipant = useMemo(
   () => activeConv?.participants?.find(
     (p) => (p._id || p).toString() !== myId
   ) ?? null,
   [activeConv, myId]
 );
+
+const isGroup = activeConv?.isGroup ?? false;
+const displayName = isGroup
+  ? (activeConv?.groupName || "Group")
+  : (otherParticipant?.fullName || otherParticipant?.username);
+
+const displayAvatar = isGroup
+  ? (activeConv?.groupAvatar?.url || null)
+  : (otherParticipant?.avatar?.url || null);
 
 const participantIds = useMemo(
   () => (activeConv?.participants ?? []).map((p) => (p._id || p).toString()),
@@ -597,11 +612,7 @@ useEffect(() => {
     if (action === "react")  setReactTarget(msg._id);
   };
 
-  // const handleOpenWithUser = (userId) => {
-  //   dispatch(openOrCreateConversation(userId)).then((action) => {
-  //     if (action?.payload?._id) { dispatch(setActiveConversation(action.payload._id)); setTab("chats"); }
-  //   });
-  // };
+ 
   const handleOpenWithUser = (userId) => {
     dispatch(openOrCreateConversation(userId)).then((action) => {
       console.log("RESULT:", action);
@@ -734,6 +745,15 @@ const handleReportSubmit = async (reason) => {
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…"
                 style={{ border: "none", background: "transparent", fontSize: 13, outline: "none", width: "100%", color: "inherit" }} />
             </label>
+ {tab === "people" && (
+              <button onClick={() => setShowCreateGroup(true)} style={{
+                width: "100%", padding: "8px 0", marginBottom: 8,
+                background: "#534AB7", color: "#fff", border: "none",
+                borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>
+                + New Group
+              </button>
+            )}
             <div style={{ display: "flex" }}>
               {["chats","people"].map((t) => (
                 <button key={t} onClick={() => setTab(t)} style={{
@@ -765,6 +785,9 @@ const cOtherId = (other?._id || other)?.toString();
 const isOnline = onlineUsers.includes(cOtherId);
 const isActive = conv._id === activeConvId;
 const lastMsg  = conv.lastMessage;
+const displayName  = conv.isGroup ? (conv.groupName || "Group") : (other?.fullName || other?.username);
+// const displayAvatar = conv.isGroup ? conv.groupAvatar : (other?.avatar?.url || null);
+const displayAvatar = conv.isGroup ? (conv.groupAvatar?.url || null) : (other?.avatar?.url || null);
 
 // ✅ lastMessage ab object hai — messageId check karo
 const preview  = lastMsg?.messageId || lastMsg?._id
@@ -799,13 +822,17 @@ const unread = typeof conv.unreadCount === "object"
   }}
   style={{ cursor: "pointer" }}
 >
-  <Avatar name={other?.fullName || other?.username || "U"} userId={cOtherId}
-    src={other?.avatar?.url || null} online={isOnline} size={42} />
+  {/* <Avatar name={other?.fullName || other?.username || "U"} userId={cOtherId}
+    src={other?.avatar?.url || null} online={isOnline} size={42} /> */}
+
+    <Avatar name={displayName || "U"} userId={cOtherId}
+  src={displayAvatar} online={isOnline} size={42} />
 </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
                           <p style={{ fontSize: 14, fontWeight: unread > 0 ? 700 : 500, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>
-                            {other?.fullName || other?.username}
+                            {/* {other?.fullName || other?.username} */}
+                              {displayName}
                           </p>
                           <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", flexShrink: 0 }}>
                             {lastMsg ? fmt(lastMsg.sentAt || lastMsg.createdAt) : ""}
@@ -906,35 +933,115 @@ const unread = typeof conv.unreadCount === "object"
               borderBottom: "0.5px solid var(--color-border-tertiary)",
               background: "var(--color-background-primary)",
             }}>
-              {isMobile && (
+              {/* {isMobile && (
                 <button onClick={handleBack} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-primary)", padding: "4px 6px 4px 0", display: "flex", alignItems: "center", flexShrink: 0 }}>
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                     <polyline points="15 18 9 12 15 6"/>
                   </svg>
                 </button>
               )}
-              {/* <Avatar name={otherParticipant?.fullName || otherParticipant?.username || "U"}
-                userId={otherId} src={otherParticipant?.avatar?.url || null}
-                online={otherOnline} size={isMobile ? 34 : 38} /> */}
-                <div
+
+              {headerMenu && (
+  <div style={{
+    position: "fixed", top: 60, right: 16, */}
+  {isMobile && (
+                <button onClick={handleBack} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-primary)", padding: "4px 6px 4px 0", display: "flex", alignItems: "center", flexShrink: 0 }}>
+                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <polyline points="15 18 9 12 15 6"/>
+                  </svg>
+                </button>
+              )}
+              <div style={{ position: "relative", cursor: isGroup ? "pointer" : "pointer" }}
   onClick={() => {
-    if (otherParticipant?.username) navigate(`/profile/${otherParticipant.username}`);
+    if (!isGroup && otherParticipant?.username) navigate(`/profile/${otherParticipant.username}`);
+    if (isGroup) document.getElementById("group-avatar-input")?.click();
   }}
-  style={{ cursor: "pointer" }}
 >
-  <Avatar name={otherParticipant?.fullName || otherParticipant?.username || "U"}
-    userId={otherId} src={otherParticipant?.avatar?.url || null}
-    online={otherOnline} size={isMobile ? 34 : 38} />
+  <Avatar name={displayName || "U"}
+    userId={isGroup ? activeConv?._id : otherId}
+    src={displayAvatar} online={isGroup ? false : otherOnline}
+    size={isMobile ? 34 : 38} />
+  {isGroup && (
+    <div style={{
+      position: "absolute", bottom: 0, right: 0,
+      width: 14, height: 14, borderRadius: "50%",
+      background: "#534AB7", display: "flex",
+      alignItems: "center", justifyContent: "center",
+    }}>
+      <svg width="8" height="8" fill="white" viewBox="0 0 24 24">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+      </svg>
+    </div>
+  )}
+  <input id="group-avatar-input" type="file" accept="image/*" style={{ display: "none" }}
+    onChange={async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > 5 * 1024 * 1024) { showToast("Image must be under 5MB"); return; }
+      showToast("Uploading...");
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("upload_preset", import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/upload`, {
+          method: "POST", body: fd,
+        });
+        const data = await res.json();
+        const avatarUrl = data.secure_url;
+        const backendRes = await fetch(`${BASE_URL}/api/v2/messages/conversations/group/${activeConvId}/rename`, {
+          method: "PATCH", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatarUrl }),
+        });
+        const backendData = await backendRes.json();
+        if (backendData.success) {
+          dispatch(fetchConversations());
+          showToast("Group photo updated!");
+        } else {
+          showToast(backendData.message || "Failed to update.");
+        }
+      } catch { showToast("Something went wrong."); }
+      e.target.value = "";
+    }}
+  />
 </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {otherParticipant?.fullName || otherParticipant?.username}
-                </p>
-                <p style={{ fontSize: 12, margin: 0, color: otherOnline ? "#1D9E75" : "var(--color-text-tertiary)" }}>
-                  {blockStatus.blocked ? "Blocked" : otherOnline ? "● Online" : "Offline"}
+                {/* <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {displayName}
+                </p> */}
+
+     {isGroup ? (
+  <div style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+    onClick={() => setShowRenameModal(true)}
+  >
+    <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {displayName}
+    </p>
+    <svg width="13" height="13" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  </div>
+) : (
+  <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+    {displayName}
+  </p>
+)}
+                <p style={{ fontSize: 12, margin: 0, color: (!isGroup && otherOnline) ? "#1D9E75" : "var(--color-text-tertiary)" }}>
+     {isGroup
+                    ? (() => {
+                        const names = activeConv?.participants
+                          ?.filter((p) => (p._id || p).toString() !== myId)
+                          ?.map((p) => p.fullName || p.username || "")
+                          ?.filter(Boolean)
+                          ?.slice(0, 3)
+                          ?.join(", ");
+                        const extra = (activeConv?.participants?.length || 1) - 1 - 3;
+                        return names + (extra > 0 ? ` +${extra}` : "");
+                      })()
+                    : blockStatus.blocked ? "Blocked" : otherOnline ? "● Online" : "Offline"}
                 </p>
               </div>
-
               {/* 3-dot menu */}
               <div style={{ position: "relative", zIndex: 400 }} onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setHeaderMenu((p) => !p)} style={{
@@ -945,78 +1052,126 @@ const unread = typeof conv.unreadCount === "object"
                   <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
                     <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
                   </svg>
-                </button>
+    </button>
                 {headerMenu && (
-                  <div style={{
-                    position: "fixed", top: 60, right: 16,
-                    background: "var(--color-background-primary)",
-                    border: "0.5px solid var(--color-border-tertiary)",
-                    borderRadius: 10, overflow: "hidden", minWidth: 160,
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.14)", zIndex: 9999,
-                  }}>
-                    {!blockStatus.iBlockedThem ? (
-                      <button onClick={handleBlock} style={{
-                        display: "flex", alignItems: "center", gap: 10, width: "100%",
-                        padding: "11px 14px", background: "none", border: "none",
-                        fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left",
-                        borderBottom: "0.5px solid var(--color-border-tertiary)",
-                      }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                        <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                        </svg>
-                        Block user
-                      </button>
-                    ) : (
-                      <button onClick={() => { setHeaderMenu(false); handleUnblock(); }} style={{
-                        display: "flex", alignItems: "center", gap: 10, width: "100%",
-                        padding: "11px 14px", background: "none", border: "none",
-                        fontSize: 13, cursor: "pointer", color: "#1D9E75", textAlign: "left",
-                        borderBottom: "0.5px solid var(--color-border-tertiary)",
-                      }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                        <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
-                          <line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
-                        </svg>
-                        Unblock user
-                      </button>
-
-                      
-                    )}
-                    <button onClick={() => { setHeaderMenu(false); setShowReport(true); }} style={{
-                      display: "flex", alignItems: "center", gap: 10, width: "100%",
-                      padding: "11px 14px", background: "none", border: "none",
-                      fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
-                    }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                      </svg>
-                      Report user
-                    </button>
-
-
-                    <button onClick={handleClearChat} style={{
-  display: "flex", alignItems: "center", gap: 10, width: "100%",
-  padding: "11px 14px", background: "none", border: "none",
-  fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
-  borderBottom: "0.5px solid var(--color-border-tertiary)",
-}}
-  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
-  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2"
-    strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <polyline points="3 6 5 6 21 6"/>
-    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-  </svg>
-  Clear chat
-</button>
-                  </div>
+                <div style={{
+                  position: "fixed", top: 60, right: 16,
+                  background: "var(--color-background-primary)",
+    border: "0.5px solid var(--color-border-tertiary)",
+    borderRadius: 10, overflow: "hidden", minWidth: 160,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.14)", zIndex: 9999,
+  }}>
+    {/* {isGroup ? (
+      <button onClick={() => { setHeaderMenu(false); setShowRenameModal(true); }} style={{ */}
+      {isGroup ? (
+  <>
+<button onClick={() => { setHeaderMenu(false); setShowRenameModal(true); }} style={{
+      display: "flex", alignItems: "center", gap: 10, width: "100%",
+      padding: "11px 14px", background: "none", border: "none",
+      fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
+      borderBottom: "0.5px solid var(--color-border-tertiary)",
+    }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Rename Group
+    </button>
+      <button onClick={async () => {
+        setHeaderMenu(false);
+        try {
+          const res = await fetch(`${BASE_URL}/api/v2/messages/conversations/group/${activeConvId}/leave`, {
+            method: "PATCH", credentials: "include",
+          });
+          const data = await res.json();
+          if (data.success) {
+            dispatch(fetchConversations());
+            dispatch(setActiveConversation(null));
+            showToast("You left the group.");
+          } else {
+            showToast(data.message || "Failed to leave group.");
+          }
+        } catch { showToast("Something went wrong."); }
+      }} style={{
+        display: "flex", alignItems: "center", gap: 10, width: "100%",
+        padding: "11px 14px", background: "none", border: "none",
+        fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left",
+        borderBottom: "0.5px solid var(--color-border-tertiary)",
+      }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+        <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+    Leave Group
+    </button>
+  </>
+) : (
+      <>
+        {!blockStatus.iBlockedThem ? (
+          <button onClick={handleBlock} style={{
+            display: "flex", alignItems: "center", gap: 10, width: "100%",
+            padding: "11px 14px", background: "none", border: "none",
+            fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left",
+            borderBottom: "0.5px solid var(--color-border-tertiary)",
+          }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+            </svg>
+            Block user
+          </button>
+        ) : (
+          <button onClick={() => { setHeaderMenu(false); handleUnblock(); }} style={{
+            display: "flex", alignItems: "center", gap: 10, width: "100%",
+            padding: "11px 14px", background: "none", border: "none",
+            fontSize: 13, cursor: "pointer", color: "#1D9E75", textAlign: "left",
+            borderBottom: "0.5px solid var(--color-border-tertiary)",
+          }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+              <line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
+            </svg>
+            Unblock user
+          </button>
+        )}
+        <button onClick={() => { setHeaderMenu(false); setShowReport(true); }} style={{
+          display: "flex", alignItems: "center", gap: 10, width: "100%",
+          padding: "11px 14px", background: "none", border: "none",
+          fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
+          borderBottom: "0.5px solid var(--color-border-tertiary)",
+        }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Report user
+        </button>
+      </>
+    )}
+    <button onClick={handleClearChat} style={{
+      display: "flex", alignItems: "center", gap: 10, width: "100%",
+      padding: "11px 14px", background: "none", border: "none",
+      fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
+    }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      </svg>
+      Clear chat
+    </button>
+</div>
                 )}
               </div>
             </div>
@@ -1043,11 +1198,28 @@ const unread = typeof conv.unreadCount === "object"
                     alignItems: "flex-end", gap: 6,
                     opacity: isOptimistic ? 0.7 : 1, transition: "opacity 0.2s",
                   }}>
-                    {!isMine && (
+                    {/* {!isMine && (
                       <Avatar name={otherParticipant?.fullName || "U"} userId={otherId}
                         src={otherParticipant?.avatar?.url || null} size={isMobile ? 24 : 28} />
-                    )}
+                    )} */}
+                    {!isMine && (() => {
+  const senderObj = msg.sender;
+  const senderName = senderObj?.fullName || senderObj?.username || "U";
+  const senderAvatar = senderObj?.avatar?.url || null;
+  const senderId = (senderObj?._id || senderObj)?.toString() || "";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+      <Avatar name={senderName} userId={senderId}
+        src={senderAvatar} size={isMobile ? 24 : 28} />
+    </div>
+  );
+})()}
                     <div style={{ maxWidth: isMobile ? "80%" : "65%" }}>
+                      {!isMine && isGroup && (
+    <p style={{ fontSize: 11, fontWeight: 600, color: "#534AB7", margin: "0 0 2px 0" }}>
+      {msg.sender?.fullName || msg.sender?.username || ""}
+    </p>
+  )}
                       {msg.replyTo && !isDeleted && (
                         <div style={{
                           fontSize: 11, padding: "3px 8px", marginBottom: 3,
@@ -1302,6 +1474,7 @@ const unread = typeof conv.unreadCount === "object"
           zIndex: 9999, minWidth: 170,
           boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
         }}>
+          
           {[
             { label: "Reply",  action: "reply",  show: true,
               icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg> },
@@ -1330,6 +1503,31 @@ const unread = typeof conv.unreadCount === "object"
             </button>
           ))}
         </div>
+      )}
+      {showRenameModal && (
+  <RenameGroupModal
+    currentName={displayName}
+    onClose={() => setShowRenameModal(false)}
+    onSave={async (newName) => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/v2/messages/conversations/group/${activeConvId}/rename`, {
+          method: "PATCH", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ groupName: newName }),
+        });
+        const data = await res.json();
+        if (data.success) { dispatch(fetchConversations()); showToast("Group renamed!"); }
+        else showToast(data.message || "Failed to rename.");
+      } catch { showToast("Something went wrong."); }
+      setShowRenameModal(false);
+    }}
+  />
+)}
+{showCreateGroup && (
+        <CreateGroupModal
+          following={following}
+          onClose={() => setShowCreateGroup(false)}
+        />
       )}
     </div>
   );
