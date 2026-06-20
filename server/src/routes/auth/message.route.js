@@ -67,7 +67,7 @@ import {
   renameGroup,
   transferGroupAdmin,
   disbandGroupConversation,
-} from "../../controllers/auth/Group.controller.js";
+} from "../../controllers/auth/group.controller.js";
 
 const router = express.Router();
 
