@@ -46,12 +46,12 @@ const [likesCount, setLikesCount] = useState(0);
   const [newTitle, setNewTitle]             = useState("");
   const [creatingNew, setCreatingNew]       = useState(false);
   const [savedHighlights, setSavedHighlights] = useState(new Set());
-const [replyText, setReplyText] = useState("");
+
 
   const timerRef   = useRef(null);
   const startRef   = useRef(null);
   const elapsedRef = useRef(0);
-  const videoRef   = useRef(null);        // ← YE ADD KARO
+  const videoRef   = useRef(null);        
 const durationRef = useRef(STORY_DURATION);
 
   const group  = feed[userIdx];
@@ -192,22 +192,8 @@ const handleLike = () => {
   });
 };
 
-// const toggleHighlight = async (highlightId) => {
-//   const result = await dispatch(addToHighlight({ highlightId, storyId: story._id }));
-//   if (addToHighlight.fulfilled.match(result)) {
-//     setSavedHighlights((prev) => {
-//       const next = new Set(prev);
-//       if (result.payload.removed) {
-//         next.delete(highlightId);
-//       } else {
-//         next.add(highlightId);
-//       }
-//       return next;
-//     });
-//   }
-// };
 
-// ✅ NAYA toggleHighlight
+
 const toggleHighlight = async (highlightId) => {
   const result = await dispatch(addToHighlight({ highlightId, storyId: story._id }));
   
@@ -431,31 +417,8 @@ const createNewHighlight = async () => {
                 </button>
               </div>
             )}
-
-            {/* Reply input */}
-            {!isOwn && (
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-white/40">
-                  {currentUser?.avatar?.url
-                    ? <img src={currentUser.avatar.url} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full bg-[#c09a6e] flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">{currentUser?.fullName?.[0]}</span>
-                      </div>
-                  }
-                </div>
-                <div className="flex-1 border border-white/50 rounded-full px-4 py-2">
-                  <input
-                   type="text"
-                    placeholder={`Reply to ${story?.author?.username}...`}
-                    className="w-full bg-transparent text-white text-sm outline-none placeholder:text-white/60"
-                    onFocus={() => setPaused(true)}
-                    onBlur={() => setPaused(false)}
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
+           
+               
           </div>
 
           {/* Full Emoji Picker */}
@@ -594,7 +557,7 @@ const createNewHighlight = async () => {
                   </button>
                 </div>
                 <div className="overflow-y-auto space-y-3" style={{ maxHeight: "calc(60vh - 80px)" }}>
-                  {(viewersMap[story?._id]?.viewers || []).map((v, i) => (
+                  {/* {(viewersMap[story?._id]?.viewers || []).map((v, i) => (
                     <div key={i} className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full overflow-hidden bg-[#e8d5be] shrink-0">
                         {v.user?.avatar?.url
@@ -610,7 +573,25 @@ const createNewHighlight = async () => {
                       </div>
                       {v.reaction && <span className="text-lg">{v.reaction}</span>}
                     </div>
-                  ))}
+                  ))} */}
+
+                  {(viewersMap[story?._id]?.viewers || []).map((v, i) => (
+  <div key={i} className="flex items-center gap-3">
+    <div className="w-9 h-9 rounded-full overflow-hidden bg-[#e8d5be] shrink-0">
+      {v.viewer?.avatar?.url
+        ? <img src={v.viewer.avatar.url} alt="" className="w-full h-full object-cover" />
+        : <div className="w-full h-full flex items-center justify-center bg-[#c09a6e]">
+            <span className="text-white text-xs font-bold">{v.viewer?.fullName?.[0]}</span>
+          </div>
+      }
+    </div>
+    <div className="flex-1">
+      <p className="text-sm font-semibold text-[#2d1f0f]">{v.viewer?.fullName}</p>
+      <p className="text-xs text-[#8b7355]">@{v.viewer?.username}</p>
+    </div>
+    {v.reaction && <span className="text-lg">{v.reaction}</span>}
+  </div>
+))}
                 </div>
               </motion.div>
             )}

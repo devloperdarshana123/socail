@@ -510,9 +510,31 @@ export const forgotPassword = asyncHandler(async (req, res, next) => {
 //  POST /auth/reset-password  (protected)
 // ═════════════════════════════════════════════
 
+// export const resetPassword = asyncHandler(async (req, res, next) => {
+//   const { newPassword } = req.body;
+//   if (!newPassword)          return next(new AppError("New password is required", 400));
+//   if (newPassword.length < 8) return next(new AppError("Password must be at least 8 characters", 400));
+
+//   const user = await User.findById(req.user._id).select("+password +refreshTokens");
+//   if (!user) return next(new AppError("User not found", 404));
+
+//   const isSame = await user.isPasswordCorrect(newPassword);
+//   if (isSame) return next(new AppError("New password cannot be same as old password", 400));
+
+//   user.password      = newPassword;
+//   user.refreshTokens = [];
+//   await user.save({ validateBeforeSave: false });
+
+//   logger.info("Password reset successful, all sessions cleared", { userId: user._id });
+
+//   return clearUserCookies(res)
+//     .status(200)
+//     .json({ success: true, message: "Password reset successfully. Please log in again." });
+// });
+
 export const resetPassword = asyncHandler(async (req, res, next) => {
   const { newPassword } = req.body;
-  if (!newPassword)          return next(new AppError("New password is required", 400));
+  if (!newPassword) return next(new AppError("New password is required", 400));
   if (newPassword.length < 8) return next(new AppError("Password must be at least 8 characters", 400));
 
   const user = await User.findById(req.user._id).select("+password +refreshTokens");
@@ -521,17 +543,21 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
   const isSame = await user.isPasswordCorrect(newPassword);
   if (isSame) return next(new AppError("New password cannot be same as old password", 400));
 
-  user.password      = newPassword;
+  user.password = newPassword;
   user.refreshTokens = [];
   await user.save({ validateBeforeSave: false });
+  await redis.del(`user:auth:${user._id}`).catch(() => {});
 
-  logger.info("Password reset successful, all sessions cleared", { userId: user._id });
+  logger.info("Password reset successful", { userId: user._id });
 
-  return clearUserCookies(res)
-    .status(200)
-    .json({ success: true, message: "Password reset successfully. Please log in again." });
+  // Naya token issue karo — logout mat karo
+  await sendUserToken(user, 200, res, {
+    message: "Password changed successfully.",
+    nextRoute: "/feed",
+    deviceInfo: req.headers["user-agent"] || "unknown",
+    ipAddress: req.ip,
+  }, next);
 });
-
 
 export const googleAuth = asyncHandler(async (req, res, next) => {
   const { idToken } = req.body;
