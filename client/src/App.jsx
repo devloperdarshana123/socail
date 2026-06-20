@@ -64,7 +64,8 @@ const ProtectedRoute = ({ children }) => {
 
   return children;
 };
-const HIDE_NAVBAR_ON = ["/", "/register", "/verify-otp", "/onboarding/username", "/forgot-password", "/reset-password"];
+
+const HIDE_NAVBAR_ON = ["/", "/register", "/verify-otp", "/onboarding/username", "/forgot-password", "/reset-password", "/terms", "/privacy", "/legal", "/about", "/help", "/locations", "/contact"];
 const HIDE_BANNER_ON = ["/privacy", "/terms", "/legal", "/help", "/about", "/locations", "/contact"];
 
 const App = () => {

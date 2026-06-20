@@ -166,10 +166,13 @@ export default function AboutPage() {
       {/* ── HERO ── */}
       <header style={{
         background: "#0f1923",
-        padding: "4rem 2rem 3.5rem",
-        textAlign: "center",
-        position: "relative",
-        overflow: "hidden",
+        padding: isMobile ? "1.5rem 1rem 2.5rem" : "4rem 2rem 3.5rem",
+textAlign: "center",
+position: "relative",
+overflow: "hidden",
+display: isMobile ? "flex" : "block",
+flexDirection: isMobile ? "column" : "unset",
+alignItems: isMobile ? "center" : "unset",
       }}>
         {/* subtle grid pattern */}
         <div style={{
@@ -180,9 +183,10 @@ export default function AboutPage() {
         }} />
 
         <Link to="/login" style={{
-          position: "absolute",
-          top: "1.5rem",
-          right: "2rem",
+  position: isMobile ? "relative" : "absolute",
+  alignSelf: isMobile ? "flex-end" : "unset",
+  top: isMobile ? "unset" : "1.5rem",
+  right: isMobile ? "unset" : "2rem",
           background: "transparent",
           border: "1px solid rgba(200,169,110,0.5)",
           color: "#c8a96e",
@@ -266,7 +270,7 @@ export default function AboutPage() {
       <div style={{
         maxWidth: 1280,
         margin: "0 auto",
-        padding: "2.5rem 1.5rem 5rem",
+       padding: isMobile ? "1.5rem 1rem 4rem" : "2.5rem 1.5rem 5rem",
         display: "grid",
         gridTemplateColumns: isMobile ? "1fr" : "280px 1fr",
         gap: "1.75rem",
@@ -349,7 +353,7 @@ export default function AboutPage() {
             background: "#fff",
             border: "1px solid #e2ddd4",
             borderRadius: 16,
-            padding: "2.5rem 3rem",
+            padding: isMobile ? "1.5rem 1.25rem" : "2.5rem 3rem",
             minHeight: 460,
             boxShadow: "0 2px 16px rgba(15,25,35,0.06)",
           }}>

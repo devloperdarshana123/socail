@@ -192,6 +192,7 @@ function renderContent(text) {
 }
 
 export default function PrivacyPage() {
+  const isMobile = window.innerWidth < 768;
   const [activeSection, setActiveSection] = useState("overview");
   const [expandedItems, setExpandedItems] = useState({});
 
@@ -217,11 +218,14 @@ export default function PrivacyPage() {
 
       {/* ── HERO ── */}
       <header style={{
-        background: "#0f1923",
-        padding: "4rem 2rem 3.5rem",
-        textAlign: "center",
-        position: "relative",
-        overflow: "hidden",
+       background: "#0f1923",
+padding: isMobile ? "1.5rem 1rem 2.5rem" : "4rem 2rem 3.5rem",
+textAlign: "center",
+position: "relative",
+overflow: "hidden",
+display: isMobile ? "flex" : "block",
+flexDirection: isMobile ? "column" : "unset",
+alignItems: isMobile ? "center" : "unset",
       }}>
         <div style={{
           position: "absolute", inset: 0,
@@ -231,9 +235,11 @@ export default function PrivacyPage() {
         }} />
 
         <Link to="/login" style={{
-          position: "absolute",
-          top: "1.5rem",
-          right: "2rem",
+          position: isMobile ? "relative" : "absolute",
+alignSelf: isMobile ? "flex-end" : "unset",
+top: isMobile ? "unset" : "1.5rem",
+right: isMobile ? "unset" : "2rem",
+marginBottom: isMobile ? "1rem" : "0",
           background: "transparent",
           border: "1px solid rgba(200,169,110,0.5)",
           color: "#c8a96e",
@@ -264,7 +270,7 @@ export default function PrivacyPage() {
           borderRadius: 100, padding: "5px 16px",
           fontSize: 10, color: "#c8a96e",
           letterSpacing: "0.14em", textTransform: "uppercase",
-          marginBottom: "1.5rem",
+          marginBottom: isMobile ? "0.75rem" : "1.5rem",
           fontFamily: "system-ui, sans-serif",
         }}>
           <ShieldCheck size={11} />
@@ -312,9 +318,9 @@ export default function PrivacyPage() {
       <div style={{
         maxWidth: 1280,
         margin: "0 auto",
-        padding: "2.5rem 1.5rem 5rem",
+   padding: isMobile ? "1.5rem 1rem 4rem" : "2.5rem 1.5rem 5rem",
         display: "grid",
-        gridTemplateColumns: "280px 1fr",
+       gridTemplateColumns: isMobile ? "1fr" : "280px 1fr",
         gap: "1.75rem",
         alignItems: "start",
         width: "100%",
@@ -323,8 +329,8 @@ export default function PrivacyPage() {
 
         {/* ── SIDEBAR ── */}
         <aside style={{
-          position: "sticky",
-          top: 80,
+         position: isMobile ? "relative" : "sticky",
+top: isMobile ? "auto" : 80,
           background: "#fff",
           border: "1px solid #e2ddd4",
           borderRadius: 14,
@@ -376,7 +382,7 @@ export default function PrivacyPage() {
         <main>
           <div style={{
             background: "#fff", border: "1px solid #e2ddd4",
-            borderRadius: 16, padding: "2.5rem 3rem",
+            borderRadius: 16, padding: isMobile ? "1.5rem 1.25rem" : "2.5rem 3rem",
             minHeight: 460, boxShadow: "0 2px 16px rgba(15,25,35,0.06)",
           }}>
             {active && (

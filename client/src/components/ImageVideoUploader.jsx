@@ -76,8 +76,14 @@ export default function ImageVideoUploader({ onUploadComplete, isDark = false })
       xhr.send(fd);
     });
 
+  // const handleFileSelect = async (e) => {
+  //   const files = Array.from(e.target.files || []).slice(0, MAX_FILES - items.length);
   const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files || []).slice(0, MAX_FILES - items.length);
+  const files = Array.from(e.target.files || []).slice(0, MAX_FILES - items.length);
+  if (!files.length) {
+    setErrors(["No file selected. Please try again."]);
+    return;
+  }
     if (!files.length) return;
 
     setErrors([]);
@@ -155,7 +161,8 @@ export default function ImageVideoUploader({ onUploadComplete, isDark = false })
         <input
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+          // accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+          accept="image/*,video/*"
           disabled={items.length >= MAX_FILES || uploading}
           onChange={handleFileSelect}
           style={{ display: "none" }}
