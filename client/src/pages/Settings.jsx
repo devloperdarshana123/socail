@@ -615,7 +615,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen pt-14 md:pt-0" style={{ background: T.bg }}>
+    <div className="min-h-screen pt-14 pb-20 md:pt-0 md:pb-0" style={{ background: T.bg }}>
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-8">
 
         {/* Page Title */}
@@ -681,7 +681,7 @@ export default function Settings() {
           </div>
 
           {/* Right Content */}
-          <div className="flex-1 min-w-0 rounded-2xl border p-5 md:p-6"
+          <div className="flex-1 min-w-0 rounded-2xl border p-5 md:p-6 mb-20 md:mb-0"
             style={{ background: T.card, borderColor: T.border }}>
             {tabContent[activeTab]}
           </div>
