@@ -371,18 +371,11 @@ const isText   = post?.type === "text";
     padding: 0 !important;
     align-items: flex-start !important;
   }
-  // .pm-modal-container {
-  //   flex-direction: column !important;
-  //   height: 100vh !important;
-  //   max-height: 100vh !important;
-  //   width: 100vw !important;
-  //   max-width: 100vw !important;
-  //   border-radius: 0 !important;
-  // }
+  
   .pm-modal-container {
     flex-direction: column !important;
-    height: calc(100vh - 40px) !important;
-    max-height: calc(100vh - 40px) !important;
+  height: calc(100dvh - 40px) !important;
+  max-height: calc(100dvh - 40px) !important;
     width: 100vw !important;
     max-width: 100vw !important;
     border-radius: 16px !important;
@@ -769,7 +762,15 @@ Report post
 
           {/* Comment input */}
           {!post.commentsDisabled && (
-            <div style={{ borderTop: `1px solid ${T.border}`, padding: "10px 12px", flexShrink: 0 }}>
+            // <div style={{ borderTop: `1px solid ${T.border}`, padding: "10px 12px", flexShrink: 0 }}>
+            <div 
+  style={{ borderTop: `1px solid ${T.border}`, padding: "10px 12px", flexShrink: 0 }}
+  onFocus={() => {
+    setTimeout(() => {
+      inputRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 300);
+  }}
+>
               {replyingTo && (
                 <div style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -789,15 +790,20 @@ Report post
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Avatar user={me} size={30} />
-                <input
-                  ref={inputRef}
-                  className="pm-comment-input"
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCommentSubmit(); }
-                  }}
-                  placeholder="Add a comment..."
+              <input
+  ref={inputRef}
+  className="pm-comment-input"
+  value={commentText}
+  onChange={(e) => setCommentText(e.target.value)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCommentSubmit(); }
+  }}
+  onFocus={() => {
+    setTimeout(() => {
+      inputRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 300);
+  }}
+  placeholder="Add a comment..."
                   style={{
                     flex: 1, border: "none", outline: "none",
                     background: T.brownLt, borderRadius: 20,
