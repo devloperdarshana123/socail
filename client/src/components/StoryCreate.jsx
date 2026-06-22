@@ -876,7 +876,7 @@ export default function StoryCreate({ onClose, onCreated }) {
                 ) : (
                   <div className="flex flex-col items-center gap-3 text-[#b0926a]">
                     <Upload size={32} />
-                    <p className="text-sm font-medium">Tap to select photo or video</p>
+                    <p className="text-sm font-medium">TEST123 - TAP HERE NEW VERSION</p>
                     <p className="text-xs text-[#c09a6e]">Max 50MB video · 10MB image</p>
                   </div>
                 )}
