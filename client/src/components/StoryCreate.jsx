@@ -337,6 +337,7 @@
 
 
 import { useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, Loader2, Type, Image } from "lucide-react";
 import { useDispatch } from "react-redux";
 import { createStory, createTextStory, fetchStoriesFeed } from "../lib/redux/storySlice";
@@ -374,7 +375,6 @@ export default function StoryCreate({ onClose, onCreated }) {
 
   const handleFile = (e) => {
     const f = e.target.files?.[0];
-    toast(`DEBUG: handleFile fired. file=${f ? f.name + " (" + f.type + ", " + Math.round(f.size/1024) + "KB)" : "NONE"}`);
     if (!f) return;
     setFile(f);
     setPreview((prev) => {
@@ -461,15 +461,22 @@ export default function StoryCreate({ onClose, onCreated }) {
   const isTextReady = text.trim().length > 0 && !uploading;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-      style={{ zIndex: 99999 }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl overflow-hidden shadow-2xl w-full max-w-sm"
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+        style={{ zIndex: 99999 }}
+        onClick={onClose}
       >
+        <motion.div
+          initial={{ scale: 0.92, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.92, opacity: 0 }}
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white rounded-2xl overflow-hidden shadow-2xl w-full max-w-sm"
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0e4d4]">
             <p className="font-bold text-[#2d1f0f] text-base">Create Story</p>
@@ -525,7 +532,7 @@ export default function StoryCreate({ onClose, onCreated }) {
                 ) : (
                   <div className="flex flex-col items-center gap-3 text-[#b0926a]">
                     <Upload size={32} />
-                    <p className="text-sm font-medium">TEST123 - TAP HERE NEW VERSION</p>
+                    <p className="text-sm font-medium">Tap to select photo or video</p>
                     <p className="text-xs text-[#c09a6e]">Max 50MB video · 10MB image</p>
                   </div>
                 )}
@@ -657,7 +664,8 @@ export default function StoryCreate({ onClose, onCreated }) {
               )}
             </button>
           </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
