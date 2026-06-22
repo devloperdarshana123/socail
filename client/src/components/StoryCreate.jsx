@@ -853,9 +853,9 @@ export default function StoryCreate({ onClose, onCreated }) {
           {/* Media Pane */}
           {tab === "media" && (
             <>
-              <div
-                onClick={() => !uploading && fileRef.current?.click()}
-                className="relative mx-5 mt-4 rounded-xl overflow-hidden cursor-pointer bg-[#f5ece0] flex items-center justify-center"
+              <label
+                htmlFor="story-file-input"
+                className="relative mx-5 mt-4 rounded-xl overflow-hidden cursor-pointer bg-[#f5ece0] flex items-center justify-center block"
                 style={{ height: 300 }}
               >
                 {preview ? (
@@ -894,10 +894,8 @@ export default function StoryCreate({ onClose, onCreated }) {
                   </div>
                 )}
 
-                {/* MOBILE FIX: do not use display:none (iOS Safari can fail to
-                    fire onChange on hidden file inputs). Use visually-hidden
-                    technique instead so the input stays "real" to the browser. */}
                 <input
+                  id="story-file-input"
                   ref={fileRef}
                   type="file"
                   accept="image/*,video/*"
@@ -906,15 +904,10 @@ export default function StoryCreate({ onClose, onCreated }) {
                     width: 1,
                     height: 1,
                     opacity: 0,
-                    pointerEvents: "none",
                   }}
                   onChange={handleFile}
-                  onClick={(e) => {
-                    // allow re-selecting the same file & ensures onChange fires fresh on mobile
-                    e.target.value = "";
-                  }}
                 />
-              </div>
+              </label>
 
               <div className="px-5 mt-3">
                 <input
