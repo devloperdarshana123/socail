@@ -4,11 +4,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Image as ImageIcon, Clapperboard, Type,
-  Smile, MapPin, Music, Tag, ChevronLeft, ChevronRight,
+  Smile,  ChevronRight,
   Globe, Users, Lock, Settings2,
 } from "lucide-react";
 import EmojiPickerReact from "emoji-picker-react";
 import ImageVideoUploader from "./ImageVideoUploader";
+import LocationSelect from "./LocationSelect";
 
 const MAX_CAPTION = 2200;
 
@@ -153,7 +154,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
   const [mediaItems, setMediaItems] = useState([]);
   const [visibility, setVis]        = useState("public");
   const [showVis,    setShowVis]    = useState(false);
-  const [location,   setLocation]   = useState("");
+  const [location,   setLocation]   = useState(null);
   const [commentsOff,setCommentsOff]= useState(false);
   const [likesHide,  setLikesHide]  = useState(false);
   const [showAdv,    setShowAdv]    = useState(false);
@@ -184,7 +185,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
   setCaption("");
   setMediaItems([]);
   setVis("public");
-  setLocation("");
+  setLocation(null);
   setCommentsOff(false);
   setLikesHide(false);
   setShowAdv(false);
@@ -242,7 +243,8 @@ useEffect(() => {
         commentsDisabled: commentsOff,
         likesHidden:      likesHide,
         isDraft,
-        location:         location.trim() ? JSON.stringify({ name: location.trim() }) : null,
+        // location:         location.trim() ? JSON.stringify({ name: location.trim() }) : null,
+        location: location ? JSON.stringify({ name: location.value }) : null,
         hashtags,
         mentions,
         media:            mediaItems,  // ← Cloudinary objects, already uploaded
@@ -534,7 +536,7 @@ useEffect(() => {
                 className="pcm-textarea w-full resize-none rounded-2xl px-4 pt-3.5 border transition-colors font-[inherit]"
                 value={caption}
                 onChange={(e) => setCaption(e.target.value.slice(0, MAX_CAPTION))}
-                placeholder="What's on your mind? Use #hashtags and @mentions…"
+                placeholder="What's on your mind? "
                 style={{
                   minHeight:   140,
                   paddingBottom: 44,
@@ -548,22 +550,8 @@ useEffect(() => {
               {/* Toolbar */}
               <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center gap-1">
                 <EmojiBtn onSelect={(e) => setCaption((c) => c + e)} isDark={isDark} />
-                <button
-                  type="button"
-                  title="Tag people"
-                  className="w-9 h-9 rounded-lg flex items-center justify-center border-none cursor-pointer bg-transparent hover:bg-black/5"
-                  style={{ color: "#94a3b8" }}
-                >
-                  <Tag size={18} />
-                </button>
-                <button
-                  type="button"
-                  title="Add music"
-                  className="w-9 h-9 rounded-lg flex items-center justify-center border-none cursor-pointer bg-transparent hover:bg-black/5"
-                  style={{ color: "#94a3b8" }}
-                >
-                  <Music size={18} />
-                </button>
+               
+               
                 <span
                   className="ml-auto text-xs font-semibold"
                   style={{ color: charLeft < 100 ? "#ef4444" : (isDark ? "#9ca3af" : "#6b7280") }}
@@ -574,24 +562,13 @@ useEffect(() => {
             </div>
 
             {/* Location */}
-            <div
-              className="pcm-row flex items-center gap-2.5 px-4 py-2.5 rounded-[14px] border mb-2.5 transition-colors"
-              style={{ borderColor: isDark ? "#374151" : "#f1f5f9" }}
-            >
-              <MapPin size={17} color={location ? brand : (isDark ? "#9ca3af" : "#6b7280")} />
-              <input
-                className="border-none outline-none bg-transparent text-sm flex-1 font-[inherit]"
-                placeholder="Add location…"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                style={{ color: isDark ? "#f1f5f9" : "#111827" }}
-              />
-              {location && (
-                <button onClick={() => setLocation("")} className="bg-transparent border-none cursor-pointer">
-                  <X size={14} color={isDark ? "#9ca3af" : "#6b7280"} />
-                </button>
-              )}
-            </div>
+           <div className="mb-2.5">
+  <LocationSelect
+    value={location}
+    onChange={setLocation}
+    isDark={isDark}
+  />
+</div>
 
             {/* Advanced settings */}
             <button
