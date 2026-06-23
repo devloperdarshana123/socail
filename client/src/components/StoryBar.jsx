@@ -14,8 +14,14 @@ export default function StoryBar() {
   const [viewerStart, setViewerStart] = useState(0);
   const [createOpen,  setCreateOpen]  = useState(false);
 
-  useEffect(() => {
+//   useEffect(() => {
+//   dispatch(fetchStoriesFeed());
+// }, [dispatch]);
+
+useEffect(() => {
   dispatch(fetchStoriesFeed());
+  const interval = setInterval(() => dispatch(fetchStoriesFeed()), 30000);
+  return () => clearInterval(interval);
 }, [dispatch]);
 
   const myGroup = feed.find(
