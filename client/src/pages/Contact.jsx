@@ -15,7 +15,7 @@ const sections = [
     id: "support",
     title: "General Support",
     icon: MessageSquare,
-    content: `Need help with your account, a transaction, or a platform feature? Our support team is here to assist you.\n\n**Email Support**\nFor all general inquiries, please email us at: **support@erovians.com**\n\nWe aim to respond to all standard support tickets within 24–48 hours. For faster resolution, please include your registered email address and a clear description of your issue.\n\n**What We Can Help With**\nAccount access and settings, transaction questions, verification (KYC/KYB) guidance, platform features, and technical issues.\n\n**User Responsibility**\nBefore contacting support, please review the relevant policy in our Legal Framework. Users are solely responsible for the accuracy of information they provide and for conducting their own due diligence before entering into any agreement on the Platform.`,
+    content: `Need help with your account, a transaction, or a platform feature? Our support team is here to assist you.\n\n**Email Support**\nFor all general inquiries, please email us at: **darshana@dhsmail.net**\n\nWe aim to respond to all standard support tickets within 24–48 hours. For faster resolution, please include your registered email address and a clear description of your issue.\n\n**What We Can Help With**\nAccount access and settings, transaction questions, verification (KYC/KYB) guidance, platform features, and technical issues.\n\n**User Responsibility**\nBefore contacting support, please review the relevant policy in our Legal Framework. Users are solely responsible for the accuracy of information they provide and for conducting their own due diligence before entering into any agreement on the Platform.`,
   },
   {
     id: "dsa",
@@ -39,7 +39,7 @@ const sections = [
     id: "disputes",
     title: "Dispute Resolution",
     icon: FileText,
-    content: `Erovians provides structured tools for resolving disputes between Users. The platform acts strictly as a neutral intermediary and is not a party to agreements between Users.\n\n**Internal Resolution First**\nUsers are encouraged to first attempt resolution through the platform's communication tools and structured negotiation environment. Erovians may intervene in a neutral capacity where appropriate.\n\n**Evidence Available**\nIn the event of a dispute, the following platform records may be used as evidence: chat logs and timestamps, interaction metadata, transaction-related data. These are maintained in accordance with GDPR and Luxembourg evidentiary law.\n\n**Escalation Path**\nIf internal resolution fails, Users may engage mediation, use competent alternative dispute resolution (ADR) bodies, or refer the matter to DSA-certified out-of-court dispute settlement bodies for content moderation disputes. Final recourse is before the competent courts in Luxembourg, subject to mandatory consumer protection rules.\n\n**Contact for Dispute Support**\n**support@erovians.com**`,
+    content: `Erovians provides structured tools for resolving disputes between Users. The platform acts strictly as a neutral intermediary and is not a party to agreements between Users.\n\n**Internal Resolution First**\nUsers are encouraged to first attempt resolution through the platform's communication tools and structured negotiation environment. Erovians may intervene in a neutral capacity where appropriate.\n\n**Evidence Available**\nIn the event of a dispute, the following platform records may be used as evidence: chat logs and timestamps, interaction metadata, transaction-related data. These are maintained in accordance with GDPR and Luxembourg evidentiary law.\n\n**Escalation Path**\nIf internal resolution fails, Users may engage mediation, use competent alternative dispute resolution (ADR) bodies, or refer the matter to DSA-certified out-of-court dispute settlement bodies for content moderation disputes. Final recourse is before the competent courts in Luxembourg, subject to mandatory consumer protection rules.\n\n**Contact for Dispute Support**\n**darshana@dhsmail.net**`,
   },
   {
     id: "business",
@@ -180,9 +180,9 @@ export default function ContactPage() {
           flexWrap: "wrap", maxWidth: 720, margin: "0 auto",
         }}>
           {[
-            { label: "General Support", val: "support@erovians.com", icon: MessageSquare },
-            { label: "DSA & Legal", val: "DS@erovians.com", icon: Scale },
-            { label: "Business", val: "business@erovians.com", icon: Building2 },
+           { label: "General Support", val: "darshana@dhsmail.net", icon: MessageSquare },
+{ label: "DSA & Legal", val: "darshana@dhsmail.net", icon: Scale },
+{ label: "Business", val: "darshana@dhsmail.net", icon: Building2 },
           ].map(({ label, val, icon: Icon }) => (
             <div key={label} style={{
               background: "rgba(255,255,255,0.05)",

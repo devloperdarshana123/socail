@@ -8,6 +8,7 @@ import { useVoiceToText } from "../lib/hooks/useVoiceToText";
 import RenameGroupModal from "../components/RenameGroupModal";
 import ReportModal from "../components/ReportModal";
 import CreateGroupModal from "../components/Creategroupmodal";
+import ChatHeaderMenu from "../components/ChatHeaderMenu";
 import {
   fetchConversations, fetchMessages, setActiveConversation,
   openOrCreateConversation, selectConversations, selectActiveConvId,
@@ -142,7 +143,8 @@ function AudioPlayer({ url, isMine, duration: initDuration }) {
   const track = isMine ? "rgba(255,255,255,0.3)" : "#e0deff";
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 180, maxWidth: 240 }}>
+    <div style={{ 
+      display: "flex", alignItems: "center", gap: 10, minWidth: 180, maxWidth: 240 }}>
       <audio ref={audioRef} src={url} preload="metadata"
         onLoadedMetadata={(e) => setDuration(e.target.duration)}
         onTimeUpdate={(e) => setCurrent(e.target.currentTime)}
@@ -365,6 +367,7 @@ export default function Messages() {
   const msgListRef   = useRef(null);
   const fileInputRef = useRef(null);
   const openUserHandledRef = useRef(false);
+  const headerMenuBtnRef = useRef(null);
 
 const activeConv = useMemo(
   () => conversations.find((c) => c._id === activeConvId),
@@ -417,25 +420,7 @@ useEffect(() => {
   dispatch(fetchConversations()); 
 }, [myId, dispatch]);
 
-// useEffect(() => {
-//   if (!openUserId || loadingConvs) return;
 
-//   const existing = conversations.find((c) =>
-//     c.participants?.some((p) => (p._id || p).toString() === openUserId)
-//   );
-
-//   if (existing) {
-//     dispatch(setActiveConversation(existing._id));
-//     return;
-//   }
-
-//   // Conversations loaded hain but match nahi — create karo
-//   if (conversations.length >= 0 && !loadingConvs) {
-//     dispatch(openOrCreateConversation(openUserId)).then((action) => {
-//       if (action?.payload?._id) dispatch(setActiveConversation(action.payload._id));
-//     });
-//   }
-// }, [openUserId, conversations, loadingConvs , dispatch]);
 
 
 useEffect(() => {
@@ -702,7 +687,7 @@ const handleReportSubmit = async (reason) => {
     <div
       style={{
         display: "flex", height: "calc(100vh - 60px)",
-        fontFamily: "inherit", position: "relative", overflow: "hidden",
+        fontFamily: "inherit", position: "relative",
       }}
       onClick={() => { setCtxMenu(null); setEmojiOpen(false); setReactTarget(null); setHeaderMenu(false); }}
     >
@@ -797,7 +782,7 @@ const preview  = lastMsg?.messageId || lastMsg?._id
   : lastMsg.text?.slice(0, 40) || "…"
   : "Start a conversation";
 
-// ✅ unreadCount normalize — object ya number dono handle karo
+
 const unread = typeof conv.unreadCount === "object"
   ? (conv.unreadCount?.[myId] ?? 0)
   : (conv.unreadCount ?? 0);
@@ -812,8 +797,7 @@ const unread = typeof conv.unreadCount === "object"
                       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--color-background-primary)"; }}
                       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
                     >
-                      {/* <Avatar name={other?.fullName || other?.username || "U"} userId={cOtherId}
-                        src={other?.avatar?.url || null} online={isOnline} size={42} /> */}
+                      
 
                         <div
   onClick={(e) => {
@@ -822,8 +806,7 @@ const unread = typeof conv.unreadCount === "object"
   }}
   style={{ cursor: "pointer" }}
 >
-  {/* <Avatar name={other?.fullName || other?.username || "U"} userId={cOtherId}
-    src={other?.avatar?.url || null} online={isOnline} size={42} /> */}
+  
 
     <Avatar name={displayName || "U"} userId={cOtherId}
   src={displayAvatar} online={isOnline} size={42} />
@@ -927,23 +910,14 @@ const unread = typeof conv.unreadCount === "object"
             background: "var(--color-background-primary)",
           }}>
             {/* ── Chat header ── */}
-            <div style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: isMobile ? "10px 12px" : "12px 16px",
-              borderBottom: "0.5px solid var(--color-border-tertiary)",
-              background: "var(--color-background-primary)",
-            }}>
-              {/* {isMobile && (
-                <button onClick={handleBack} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-primary)", padding: "4px 6px 4px 0", display: "flex", alignItems: "center", flexShrink: 0 }}>
-                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                    <polyline points="15 18 9 12 15 6"/>
-                  </svg>
-                </button>
-              )}
-
-              {headerMenu && (
-  <div style={{
-    position: "fixed", top: 60, right: 16, */}
+          <div style={{
+  display: "flex", alignItems: "center", gap: 10,
+  padding: isMobile ? "10px 12px" : "12px 16px",
+  borderBottom: "0.5px solid var(--color-border-tertiary)",
+  background: "var(--color-background-primary)",
+  position: "relative", zIndex: 100,
+}}>
+           
   {isMobile && (
                 <button onClick={handleBack} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-primary)", padding: "4px 6px 4px 0", display: "flex", alignItems: "center", flexShrink: 0 }}>
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1043,8 +1017,8 @@ const unread = typeof conv.unreadCount === "object"
                 </p>
               </div>
               {/* 3-dot menu */}
-              <div style={{ position: "relative", zIndex: 400 }} onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => setHeaderMenu((p) => !p)} style={{
+              <div style={{ position: "relative", zIndex: 1000 }} onClick={(e) => e.stopPropagation()}>
+               <button ref={headerMenuBtnRef} onClick={() => setHeaderMenu((p) => !p)} style={{
                   background: "none", border: "none", cursor: "pointer",
                   color: "var(--color-text-secondary)", padding: 6, borderRadius: 8,
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -1053,135 +1027,71 @@ const unread = typeof conv.unreadCount === "object"
                     <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
                   </svg>
     </button>
-                {headerMenu && (
-                <div style={{
-                  position: "fixed", top: 60, right: 16,
-                  background: "var(--color-background-primary)",
-    border: "0.5px solid var(--color-border-tertiary)",
-    borderRadius: 10, overflow: "hidden", minWidth: 160,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.14)", zIndex: 9999,
-  }}>
-    {/* {isGroup ? (
-      <button onClick={() => { setHeaderMenu(false); setShowRenameModal(true); }} style={{ */}
-      {isGroup ? (
-  <>
-<button onClick={() => { setHeaderMenu(false); setShowRenameModal(true); }} style={{
-      display: "flex", alignItems: "center", gap: 10, width: "100%",
-      padding: "11px 14px", background: "none", border: "none",
-      fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
-      borderBottom: "0.5px solid var(--color-border-tertiary)",
-    }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-      </svg>
-      Rename Group
-    </button>
-      <button onClick={async () => {
-        setHeaderMenu(false);
-        try {
-          const res = await fetch(`${BASE_URL}/api/v2/messages/conversations/group/${activeConvId}/leave`, {
-            method: "PATCH", credentials: "include",
-          });
-          const data = await res.json();
-          if (data.success) {
-            dispatch(fetchConversations());
-            dispatch(setActiveConversation(null));
-            showToast("You left the group.");
-          } else {
-            showToast(data.message || "Failed to leave group.");
-          }
-        } catch { showToast("Something went wrong."); }
-      }} style={{
-        display: "flex", alignItems: "center", gap: 10, width: "100%",
-        padding: "11px 14px", background: "none", border: "none",
-        fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left",
-        borderBottom: "0.5px solid var(--color-border-tertiary)",
-      }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-        <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-          <polyline points="16 17 21 12 16 7"/>
-          <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-    Leave Group
-    </button>
-  </>
-) : (
+        
+
+{headerMenu && (
+  <ChatHeaderMenu btnRef={headerMenuBtnRef} onClose={() => setHeaderMenu(false)}>
+    {isGroup ? (
+      <>
+        <button onClick={() => { setHeaderMenu(false); setShowRenameModal(true); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left", borderBottom: "0.5px solid var(--color-border-tertiary)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Rename Group
+        </button>
+        <button onClick={async () => { setHeaderMenu(false); try { const res = await fetch(`${BASE_URL}/api/v2/messages/conversations/group/${activeConvId}/leave`, { method: "PATCH", credentials: "include" }); const data = await res.json(); if (data.success) { dispatch(fetchConversations()); dispatch(setActiveConversation(null)); showToast("You left the group."); } else showToast(data.message || "Failed to leave group."); } catch { showToast("Something went wrong."); } }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left", borderBottom: "0.5px solid var(--color-border-tertiary)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Leave Group
+        </button>
+      </>
+    ) : (
       <>
         {!blockStatus.iBlockedThem ? (
-          <button onClick={handleBlock} style={{
-            display: "flex", alignItems: "center", gap: 10, width: "100%",
-            padding: "11px 14px", background: "none", border: "none",
-            fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left",
-            borderBottom: "0.5px solid var(--color-border-tertiary)",
-          }}
+          <button onClick={handleBlock} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left", borderBottom: "0.5px solid var(--color-border-tertiary)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-            </svg>
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
             Block user
           </button>
         ) : (
-          <button onClick={() => { setHeaderMenu(false); handleUnblock(); }} style={{
-            display: "flex", alignItems: "center", gap: 10, width: "100%",
-            padding: "11px 14px", background: "none", border: "none",
-            fontSize: 13, cursor: "pointer", color: "#1D9E75", textAlign: "left",
-            borderBottom: "0.5px solid var(--color-border-tertiary)",
-          }}
+          <button onClick={() => { setHeaderMenu(false); handleUnblock(); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "#1D9E75", textAlign: "left", borderBottom: "0.5px solid var(--color-border-tertiary)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
-              <line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>
-            </svg>
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
             Unblock user
           </button>
         )}
-        <button onClick={() => { setHeaderMenu(false); setShowReport(true); }} style={{
-          display: "flex", alignItems: "center", gap: 10, width: "100%",
-          padding: "11px 14px", background: "none", border: "none",
-          fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
-          borderBottom: "0.5px solid var(--color-border-tertiary)",
-        }}
+        <button onClick={() => { setHeaderMenu(false); setShowReport(true); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left", borderBottom: "0.5px solid var(--color-border-tertiary)" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           Report user
         </button>
       </>
     )}
-    <button onClick={handleClearChat} style={{
-      display: "flex", alignItems: "center", gap: 10, width: "100%",
-      padding: "11px 14px", background: "none", border: "none",
-      fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left",
-    }}
+    <button onClick={handleClearChat} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left" }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-        <polyline points="3 6 5 6 21 6"/>
-        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-      </svg>
+      <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
       Clear chat
     </button>
-</div>
-                )}
-              </div>
+  </ChatHeaderMenu>
+)}
+  
+   </div>
             </div>
 
             {/* ── Messages list ── */}
-            <div ref={msgListRef} style={{
-              flex: 1, overflowY: "auto",
-              padding: isMobile ? "12px 10px" : 16,
-              display: "flex", flexDirection: "column", gap: 6,
-            }}>
+<div ref={msgListRef} style={{
+  flex: 1, overflowY: "auto",
+  padding: isMobile ? "12px 10px" : 16,
+  display: "flex", flexDirection: "column", gap: 6,
+  pointerEvents: headerMenu ? "none" : "auto",
+  opacity: headerMenu ? 0.1 : 1,
+  transition: "opacity 0.15s",
+}}>
               <div ref={topSentinel} style={{ height: 1 }} />
               {loadingMsgs && messages.length === 0 && (
                 <p style={{ textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)" }}>Loading messages…</p>
@@ -1192,12 +1102,13 @@ const unread = typeof conv.unreadCount === "object"
                 const isOptimistic = msg.isOptimistic;
                 const isAudio      = msg.type === "audio" || !!msg.audio;
                 return (
-                  <div key={msg._id} style={{
-                    display: "flex",
-                    flexDirection: isMine ? "row-reverse" : "row",
-                    alignItems: "flex-end", gap: 6,
-                    opacity: isOptimistic ? 0.7 : 1, transition: "opacity 0.2s",
-                  }}>
+  <div key={msg._id} style={{
+  display: "flex",
+  flexDirection: isMine ? "row-reverse" : "row",
+  alignItems: "flex-end", gap: 6,
+  opacity: isOptimistic ? 0.7 : 1, transition: "opacity 0.2s",
+  isolation: "isolate",
+}}>
                     {/* {!isMine && (
                       <Avatar name={otherParticipant?.fullName || "U"} userId={otherId}
                         src={otherParticipant?.avatar?.url || null} size={isMobile ? 24 : 28} />
@@ -1214,7 +1125,7 @@ const unread = typeof conv.unreadCount === "object"
     </div>
   );
 })()}
-                    <div style={{ maxWidth: isMobile ? "80%" : "65%" }}>
+                   <div style={{ maxWidth: isMobile ? "80%" : "65%", position: "relative", zIndex: 0 }}>
                       {!isMine && isGroup && (
     <p style={{ fontSize: 11, fontWeight: 600, color: "#534AB7", margin: "0 0 2px 0" }}>
       {msg.sender?.fullName || msg.sender?.username || ""}

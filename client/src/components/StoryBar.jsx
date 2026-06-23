@@ -40,7 +40,7 @@ export default function StoryBar() {
   return (
     <>
       <div className="flex gap-4 px-1 py-3 overflow-x-auto"
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+  style={{ scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
 
         {/* Add story */}
         <div className="shrink-0 flex flex-col items-center gap-1.5 cursor-pointer"
