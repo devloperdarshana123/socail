@@ -455,6 +455,8 @@ function DetailPanel({
   const [showEscalate,  setShowEscalate]  = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(null);
 
+  console.log("reportedBy:", report?.reportedBy);
+  console.log("targetId:", report?.targetId);
   const reportId = report?._id;
 
   // Reset form when report changes

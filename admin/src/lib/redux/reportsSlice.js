@@ -3,9 +3,7 @@
 import { createSlice, createAsyncThunk, createSelector } from "@reduxjs/toolkit";
 import adminApi from "../../services/api";
 
-// ── Pagination helper ─────────────────────────────────────────────────────────
-// FIX: fetchReports.fulfilled was doing s.pagination = payload.pagination with no
-// fallbacks. If backend omits any field, downstream selectors get undefined.
+
 const normalizePagination = (raw = {}) => ({
   total:      raw.total      ?? 0,
   page:       raw.page       ?? 1,
@@ -13,10 +11,7 @@ const normalizePagination = (raw = {}) => ({
   totalPages: raw.totalPages ?? 1,
 });
 
-// ── Counts helper ─────────────────────────────────────────────────────────────
-// FIX: updateReportStatus and bulkUpdateReports never updated s.counts — status
-// tab badges showed stale numbers after any status change.
-// These helpers centralize count mutation so both reducers use the same logic.
+
 
 const VALID_STATUSES = new Set([
   "pending", "under_review", "resolved_action_taken",
@@ -87,8 +82,7 @@ export const fetchReportHistory = createAsyncThunk(
   }
 );
 
-// FIX: getState() used to capture prevStatus before API call — needed so the
-// reducer can move counts correctly without a second lookup.
+
 export const updateReportStatus = createAsyncThunk(
   "reports/updateStatus",
   async ({ id, status, actionTaken, moderatorNote }, { rejectWithValue, getState }) => {
@@ -105,8 +99,7 @@ export const updateReportStatus = createAsyncThunk(
   }
 );
 
-// FIX: getState() captures prevStatuses map before API call — reducer uses this
-// to move counts from old buckets to new ones.
+
 export const bulkUpdateReports = createAsyncThunk(
   "reports/bulkUpdate",
   async ({ ids, status, actionTaken = "none" }, { rejectWithValue, getState }) => {
@@ -230,7 +223,7 @@ const reportsSlice = createSlice({
     openReport: (state, { payload }) => {
       state.selectedReport = payload;
       state.reportHistory  = null;
-      state.detailError    = null;   // clear stale error when opening new report
+      state.detailError    = null;   
     },
     closeReport: (state) => {
       state.selectedReport = null;
@@ -306,8 +299,7 @@ const reportsSlice = createSlice({
         if (s.selectedReport?._id === payload._id) {
           s.selectedReport = { ...s.selectedReport, ...payload };
         }
-        // FIX: counts were never updated on status change — tab badges stayed stale.
-        // prevStatus captured in thunk (getState before API call).
+      
         if (payload.prevStatus && payload.status) {
           moveCount(s.counts, payload.prevStatus, payload.status);
         }
@@ -326,8 +318,7 @@ const reportsSlice = createSlice({
         payload.ids.forEach((id) => {
           const idx = s.reports.findIndex((r) => r._id === id);
           if (idx !== -1) {
-            // FIX: counts were never updated on bulk action — badges showed wrong
-            // numbers after approve/dismiss/etc. Move each report's count bucket.
+            
             const prevStatus = prevStatuses[id];
             if (prevStatus && prevStatus !== payload.status) {
               moveCount(s.counts, prevStatus, payload.status);
@@ -355,9 +346,15 @@ const reportsSlice = createSlice({
           s.reports[idx].claimedAt      = payload.claimData.claimedAt      ?? null;
           s.reports[idx].claimExpiresAt = payload.claimData.claimExpiresAt ?? null;
         }
+       
         if (s.selectedReport?._id === payload.id) {
-          s.selectedReport = { ...s.selectedReport, ...payload.claimData };
-        }
+  s.selectedReport = {
+    ...s.selectedReport,
+    claimedBy:      payload.claimData.claimedBy      ?? null,
+    claimedAt:      payload.claimData.claimedAt      ?? null,
+    claimExpiresAt: payload.claimData.claimExpiresAt ?? null,
+  };
+}
       })
       .addCase(claimReport.rejected,  (s, { payload }) => {
         s.claimLoading = null;
