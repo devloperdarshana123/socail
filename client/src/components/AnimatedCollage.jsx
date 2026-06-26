@@ -5,6 +5,17 @@ import img3 from "../assets/3.svg";
 import img4 from "../assets/4.svg";
 import img5 from "../assets/5.svg";
 
+
+const preloadImages = () => {
+  [img1, img2, img3, img4, img5].forEach((src) => {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = src;
+    document.head.appendChild(link);
+  });
+};
+preloadImages();
 // We define the final properties for Framer Motion to animate to
 const collageItems = [
   { src: img1, className: "w-40 md:w-48 lg:w-56 aspect-[3/4] z-10", rotate: -12, x: -100, y: -60 },
@@ -20,14 +31,14 @@ export default function AnimatedCollage() {
       {collageItems.map((item, i) => (
         <motion.div
           key={i}
-          initial={{ opacity: 0, scale: 0.2, y: 150, rotate: item.rotate > 0 ? 30 : -30, x: 0 }}
+          initial={{ opacity: 0, scale: 0.8, y: 30, rotate: item.rotate > 0 ? 30 : -30, x: item.x }}
           animate={{ opacity: 1, scale: 1, y: item.y, x: item.x, rotate: item.rotate }}
           transition={{ 
-            delay: i * 0.35, 
-            type: "spring", 
-            stiffness: 100, 
-            damping: 14 
-          }}
+  delay: i * 0.12, 
+  type: "spring", 
+  stiffness: 120, 
+  damping: 16 
+}}
           className={`absolute rounded-3xl overflow-hidden shadow-xl border-[6px] border-white bg-gray-50 ${item.className}`}
         >
           <img src={item.src} alt="" className="w-full h-full object-cover" />
