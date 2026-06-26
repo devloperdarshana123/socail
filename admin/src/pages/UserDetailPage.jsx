@@ -158,9 +158,9 @@ const PostTile = memo(function PostTile({ post, onDelete, onClick }) {
   const handleConfirmDelete = useCallback((e) => {
     e.stopPropagation();
     const reason = reasonRef.current?.trim() || "Violation of community guidelines";
-    onDelete(post._id, reason);
+    onDelete(post.id, reason);
     setConfirmDel(false);
-  }, [onDelete, post._id]);
+  }, [onDelete, post.id]);
 
   return (
     <div
@@ -275,79 +275,6 @@ const PostTile = memo(function PostTile({ post, onDelete, onClick }) {
 });
 
 // ─── Status change modal ───────────────────────────────────────────────────────
-
-// const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loading }) {
-//   const [status, setStatus] = useState("");
-//   const [reason, setReason] = useState("");
-
-//   // FIX: useMemo — opts was rebuilt every render
-//   const opts = useMemo(
-//     () => ["active", "suspended", "banned", "deactivated"].filter((s) => s !== user?.status),
-//     [user?.status],
-//   );
-
-//   return (
-//     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-//       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-//       <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-//         <h3 className="text-sm font-bold text-slate-800 mb-1">Change Account Status</h3>
-//         <p className="text-xs text-slate-400 mb-4">@{user?.username}</p>
-//         <div className="space-y-2 mb-4">
-//           {opts.map((opt) => (
-//             <label
-//               key={opt}
-//               className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors
-//                 ${status === opt ? "border-violet-400 bg-violet-50" : "border-slate-200 hover:border-slate-300"}`}
-//             >
-//               <input
-//                 type="radio"
-//                 name="status"
-//                 value={opt}
-//                 checked={status === opt}
-//                 onChange={() => setStatus(opt)}
-//                 className="accent-violet-600"
-//               />
-//               <span className="text-sm font-semibold capitalize text-slate-700">{opt}</span>
-//             </label>
-//           ))}
-//         </div>
-//         <textarea
-//           value={reason}
-//           onChange={(e) => setReason(e.target.value)}
-//           placeholder="Reason (optional)"
-//           rows={2}
-//           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm
-//             text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:border-violet-400 mb-4"
-//         />
-//         <div className="flex gap-3">
-//           {/* FIX: type="button" on all buttons */}
-//           <button
-//             type="button"
-//             onClick={onClose}
-//             className="flex-1 py-2 rounded-xl bg-slate-100 text-sm font-semibold text-slate-600 hover:bg-slate-200"
-//           >
-//             Cancel
-//           </button>
-//           <button
-//             type="button"
-//             onClick={() => onConfirm({ status, reason })}
-//             disabled={!status || loading}
-//             className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm
-//               font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
-//           >
-//             {loading && (
-//               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-//                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-//                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-//               </svg>
-//             )}
-//             Update
-//           </button>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// });
 
 const StatusModal = memo(function StatusModal({ user, onClose, onConfirm, loading }) {
   const [status,   setStatus]   = useState("");
@@ -526,23 +453,14 @@ export default function UserDetailPage() {
 
   // ── Action handlers ──────────────────────────────────────────
 
-  // const handleStatusConfirm = useCallback(async ({ status, reason }) => {
-  //   const res = await dispatch(updateUserStatus({ userId: id, status, reason }));
-  //   if (res.meta?.requestStatus !== "rejected") {
-  //     showToast(`Status updated to ${status}`);
-  //     setStatusModal(false);
-  //     dispatch(fetchUserById(id));
-  //   } else {
-  //     showToast("Failed to update status", "error");
-  //   }
-  // }, [dispatch, id, showToast]);
-
-  const handleStatusConfirm = useCallback(async ({ status, reason, duration }) => {
+ 
+const handleStatusConfirm = useCallback(async ({ status, reason, duration }) => {
   const res = await dispatch(updateUserStatus({ userId: id, status, reason, duration }));
+
   if (res.meta?.requestStatus !== "rejected") {
-    showToast(`Status updated to ${status}`);
     setStatusModal(false);
-    dispatch(fetchUserById(id));
+    showToast(`Status updated to ${status}`);
+    // ✅ setTimeout/refetch hata diya — slice already detail.user update kar deta hai
   } else {
     showToast("Failed to update status", "error");
   }
@@ -690,14 +608,22 @@ export default function UserDetailPage() {
 
               {/* Actions */}
               <div className="flex flex-row sm:flex-col gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setStatusModal(true)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-50
-                    hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors"
-                >
-                  Change Status
-                </button>
+              <button
+  type="button"
+  onClick={() => setStatusModal(true)}
+  disabled={isActioning}
+  className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-50
+    hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors
+    disabled:opacity-40 flex items-center justify-center gap-1.5"
+>
+  {isActioning && (
+    <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+  )}
+  Change Status
+</button>
                 <button
                   type="button"
                   onClick={handleToggleVerify}
@@ -766,7 +692,7 @@ export default function UserDetailPage() {
                         ))
                       : posts.map((post) => (
                           <PostTile
-                            key={post._id}
+                            key={post.id}
                             post={post}
                             onDelete={handleDeletePost}
                             onClick={() => setSelectedPost({ ...post, author: post.author ?? user })}

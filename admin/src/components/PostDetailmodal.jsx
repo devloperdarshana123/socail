@@ -105,7 +105,7 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
   }, [onClose]);
 
  const handleDelete = useCallback(async () => {
-  if (onDelete) await onDelete(post._id, reason.trim() || "Violation of community guidelines");
+  if (onDelete) await onDelete(post.id, reason.trim() || "Violation of community guidelines");
   onClose();
 }, [onDelete, post, onClose, reason]);
 
@@ -237,9 +237,9 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
             {/* Author header */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
               <div className="relative shrink-0">
-                {author?.profilePicture ? (
+                {author?.avatar?.url? (
                   <img
-                    src={author.profilePicture}
+                    src={author?.avatar?.url}
                     alt=""
                     className="w-10 h-10 rounded-full object-cover ring-2 ring-slate-100"
                   />
@@ -266,7 +266,7 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
   </span>
 ) : (
   <button
-    onClick={() => { onClose(); navigate(`/users/${author?._id}`); }}
+    onClick={() => { onClose(); navigate(`/users/${author?.id}`); }}
     className="text-sm font-bold text-slate-800 hover:text-violet-600
       truncate transition-colors leading-none"
   >
@@ -326,7 +326,7 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
               <MetaRow label="Post ID">
                 <span className="font-mono text-[10px] text-slate-500 bg-slate-50
                   border border-slate-200 rounded px-1.5 py-0.5 select-all">
-                  {post._id}
+                  {post.id}
                 </span>
               </MetaRow>
               <MetaRow label="Posted on">
@@ -347,7 +347,7 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
               {/* Go to user */}
              {!hideAuthorNav && (
   <button
-    onClick={() => { onClose(); navigate(`/users/${author?._id}`); }}
+    onClick={() => { onClose(); navigate(`/users/${author?.id}`); }}
     className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl
       border border-slate-200 bg-white hover:bg-slate-50 text-slate-700
       text-sm font-semibold transition-colors"
@@ -393,7 +393,7 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
                       <div className="flex gap-2">
                         <button
                           onClick={() => { setShowDel(false); setReason(""); }}
-                          disabled={deleteLoading === post._id}
+                          disabled={deleteLoading === post.id}
                           className="flex-1 py-2 rounded-xl bg-white border border-slate-200
                             text-slate-600 text-xs font-semibold hover:bg-slate-50
                             transition-colors disabled:opacity-40"
@@ -402,12 +402,12 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
                         </button>
                         <button
                           onClick={handleDelete}
-                          disabled={deleteLoading === post._id}
+                          disabled={deleteLoading === post.id}
                           className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600
                             text-white text-xs font-bold transition-colors
                             disabled:opacity-40 flex items-center justify-center gap-1.5"
                         >
-                          {deleteLoading === post._id ? (
+                          {deleteLoading === post.id ? (
                             <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10"
                                 stroke="currentColor" strokeWidth="4" />

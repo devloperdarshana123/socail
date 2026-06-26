@@ -8,6 +8,7 @@ import { useVoiceToText } from "../lib/hooks/useVoiceToText";
 import RenameGroupModal from "../components/RenameGroupModal";
 import ReportModal from "../components/ReportModal";
 import CreateGroupModal from "../components/Creategroupmodal";
+import AddMemberModal from "../components/AddMemberModal";
 import ChatHeaderMenu from "../components/ChatHeaderMenu";
 import {
   fetchConversations, fetchMessages, setActiveConversation,
@@ -301,7 +302,7 @@ function ImagePreview({ file, onRemove }) {
 export default function Messages() {
   const dispatch = useDispatch();
   const { user } = useSelector((s) => s.auth);
-  const myId     = user?._id?.toString();
+  const myId     = user?.id?.toString();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
 
@@ -359,6 +360,7 @@ export default function Messages() {
   const [showReport,     setShowReport]     = useState(false);
   const [toastMsg,       setToastMsg]       = useState(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+const [showAddMember, setShowAddMember] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
 
   const bottomRef    = useRef(null);
@@ -370,7 +372,7 @@ export default function Messages() {
   const headerMenuBtnRef = useRef(null);
 
 const activeConv = useMemo(
-  () => conversations.find((c) => c._id === activeConvId),
+  () => conversations.find((c) => (c.id || c._id) === activeConvId),
   [conversations, activeConvId]
 );
 
@@ -378,7 +380,7 @@ const activeConv = useMemo(
 
 const otherParticipant = useMemo(
   () => activeConv?.participants?.find(
-    (p) => (p._id || p).toString() !== myId
+    (p) => (p.id || p).toString() !== myId
   ) ?? null,
   [activeConv, myId]
 );
@@ -393,12 +395,12 @@ const displayAvatar = isGroup
   : (otherParticipant?.avatar?.url || null);
 
 const participantIds = useMemo(
-  () => (activeConv?.participants ?? []).map((p) => (p._id || p).toString()),
+  () => (activeConv?.participants ?? []).map((p) => (p.id || p).toString()),
   [activeConv]
 );
 
 const otherId = useMemo(
-  () => (otherParticipant?._id || otherParticipant)?.toString() ?? "",
+  () => (otherParticipant?.id || otherParticipant?._id || otherParticipant)?.toString() ?? "",
   [otherParticipant]
 );
 
@@ -422,28 +424,29 @@ useEffect(() => {
 
 
 
-
+// NAYA
 useEffect(() => {
-  if (!openUserId || loadingConvs) return;
+  if (!openUserId || !myId || loadingConvs) return;
   if (openUserHandledRef.current) return;
+  if (openUserId === myId) return;
 
   const existing = conversations.find((c) =>
-    c.participants?.some((p) => (p._id || p).toString() === openUserId)
+    c.participants?.some((p) => (p.id || p.id || p).toString() === openUserId)
   );
 
   if (existing) {
     openUserHandledRef.current = true;
-    dispatch(setActiveConversation(existing._id));
+    dispatch(setActiveConversation(existing.id || existing.id));
     return;
   }
 
-  if (!loadingConvs) {
-    openUserHandledRef.current = true;
-    dispatch(openOrCreateConversation(openUserId)).then((action) => {
-      if (action?.payload?._id) dispatch(setActiveConversation(action.payload._id));
-    });
-  }
-}, [openUserId, conversations, loadingConvs, dispatch]);
+  openUserHandledRef.current = true;
+  dispatch(openOrCreateConversation(openUserId)).then((action) => {
+    const convId = action?.payload?.id || action?.payload?.id;
+    if (convId) dispatch(setActiveConversation(convId));
+  });
+}, [openUserId, myId, conversations, loadingConvs, dispatch]);
+
 
 useEffect(() => {
   openUserHandledRef.current = false;
@@ -499,9 +502,9 @@ useEffect(() => {
     if (!activeConvId || messages.length === 0) return;
     const last = messages[messages.length - 1];
     if (!last || last.isOptimistic) return;
-    const senderId = (last.sender?._id || last.sender)?.toString();
+    const senderId = (last.sender?.id || last.sender)?.toString();
     if (senderId !== myId && !last.seenBy?.map(String).includes(myId))
-      markSeen({ conversationId: activeConvId, messageId: last._id });
+      markSeen({ conversationId: activeConvId, messageId: last.id });
   }, [activeConvId, messages, myId, markSeen]);
 
   useEffect(() => {
@@ -529,7 +532,7 @@ useEffect(() => {
       setImgUploading(true);
       const result = await sendImageMessage({
         conversationId: activeConvId, file: imageFile,
-        text: trimmed, replyTo: replyTo?._id || null,
+        text: trimmed, replyTo: replyTo?.id || null,
         onProgress: (state) => setImgUploading(!!state),
       });
       if (!result.success) setImgError(result.error);
@@ -540,10 +543,10 @@ useEffect(() => {
     if (!trimmed || !activeConvId) return;
     if (editingMsg) {
       if (!canEdit(editingMsg)) { setEditError("Cannot edit — 15 minute window has passed."); setEditingMsg(null); setText(""); return; }
-      editMessage({ conversationId: activeConvId, messageId: editingMsg._id, newText: trimmed });
+      editMessage({ conversationId: activeConvId, messageId: editingMsg.id, newText: trimmed });
       setEditingMsg(null);
     } else {
-      sendMessage({ conversationId: activeConvId, text: trimmed, replyTo: replyTo?._id || null });
+      sendMessage({ conversationId: activeConvId, text: trimmed, replyTo: replyTo?.id || null });
       setReplyTo(null);
     }
     setText(""); stopTyping(activeConvId); setEmojiOpen(false);
@@ -556,7 +559,7 @@ useEffect(() => {
     setAudioUploading(true);
     const result = await sendVoiceMessage({
       conversationId: activeConvId, audioBlob: blob,
-      replyTo: replyTo?._id || null,
+      replyTo: replyTo?.id || null,
       onProgress: (s) => setAudioUploading(!!s),
     });
     setAudioUploading(false);
@@ -592,16 +595,17 @@ useEffect(() => {
       if (!canEdit(msg)) { setEditError("Cannot edit — 15 minute window has passed."); return; }
       setEditingMsg(msg); setReplyTo(null); setText(msg.text); inputRef.current?.focus();
     }
-    if (action === "delete") deleteMessage({ conversationId: activeConvId, messageId: msg._id });
+    if (action === "delete") deleteMessage({ conversationId: activeConvId, messageId: msg.id });
     if (action === "copy")   navigator.clipboard?.writeText(msg.text).catch(() => {});
-    if (action === "react")  setReactTarget(msg._id);
+    if (action === "react")  setReactTarget(msg.id);
   };
 
  
   const handleOpenWithUser = (userId) => {
+    if (!userId || userId === myId) return;
     dispatch(openOrCreateConversation(userId)).then((action) => {
       console.log("RESULT:", action);
-      if (action?.payload?._id) { dispatch(setActiveConversation(action.payload._id)); setTab("chats"); }
+      if (action?.payload?.id) { dispatch(setActiveConversation(action.payload.id)); setTab("chats"); }
       else { console.log("FAILED — payload was:", action?.payload, "error:", action?.error); }
     });
   };
@@ -615,11 +619,26 @@ useEffect(() => {
     else showToast("Failed to block. Try again.");
   };
 
-  const handleUnblock = async () => {
-    const result = await unblockUser({ targetUserId: otherId });
-    if (result?.success) { setBlockStatus({ blocked: false, iBlockedThem: false }); showToast(`${otherParticipant?.fullName || "User"} unblocked.`); }
-    else showToast("Failed to unblock. Try again.");
-  };
+ const handleUnblock = async () => {
+  const result = await unblockUser({ targetUserId: otherId });
+  if (result?.success) {
+    // Unblock ke baad fresh block status fetch karo
+    try {
+      const res = await fetch(`${BASE_URL}/api/v2/user/block-status/${otherId}`, { credentials: "include" });
+      const data = await res.json();
+      if (data.success) {
+        setBlockStatus({ blocked: data.data.blocked, iBlockedThem: data.data.iBlockedThem });
+      } else {
+        setBlockStatus((prev) => ({ ...prev, iBlockedThem: false }));
+      }
+    } catch {
+      setBlockStatus((prev) => ({ ...prev, iBlockedThem: false }));
+    }
+    showToast(`${otherParticipant?.fullName || "User"} unblocked.`);
+  } else {
+    showToast("Failed to unblock. Try again.");
+  }
+};
 
 
   const handleClearChat = async () => {
@@ -674,7 +693,7 @@ const handleReportSubmit = async (reason) => {
   }
 };
   const filteredConvs = conversations.filter((c) => {
-    const other = c.participants?.find((p) => (p._id || p).toString() !== myId);
+    const other = c.participants?.find((p) => (p.id || p).toString() !== myId);
     return (other?.fullName || other?.username || "").toLowerCase().includes(search.toLowerCase());
   });
 
@@ -765,17 +784,17 @@ const handleReportSubmit = async (reason) => {
                   </div>
                 )}
                 {filteredConvs.map((conv) => {
-              const other    = conv.participants?.find((p) => (p._id || p).toString() !== myId);
-const cOtherId = (other?._id || other)?.toString();
+              const other    = conv.participants?.find((p) => (p.id || p).toString() !== myId);
+const cOtherId = (other?.id || other)?.toString();
 const isOnline = onlineUsers.includes(cOtherId);
-const isActive = conv._id === activeConvId;
+const isActive = conv.id === activeConvId;
 const lastMsg  = conv.lastMessage;
 const displayName  = conv.isGroup ? (conv.groupName || "Group") : (other?.fullName || other?.username);
 // const displayAvatar = conv.isGroup ? conv.groupAvatar : (other?.avatar?.url || null);
 const displayAvatar = conv.isGroup ? (conv.groupAvatar?.url || null) : (other?.avatar?.url || null);
 
 // ✅ lastMessage ab object hai — messageId check karo
-const preview  = lastMsg?.messageId || lastMsg?._id
+const preview  = lastMsg?.messageId || lastMsg?.id
   ? lastMsg.isDeleted ? "🚫 Deleted"
   : lastMsg.audio     ? "🎙️ Voice message"
   : lastMsg.image     ? "📷 Image"
@@ -787,7 +806,7 @@ const unread = typeof conv.unreadCount === "object"
   ? (conv.unreadCount?.[myId] ?? 0)
   : (conv.unreadCount ?? 0);
                   return (
-                    <button key={conv._id} onClick={() => dispatch(setActiveConversation(conv._id))} style={{
+                    <button key={conv.id} onClick={() => dispatch(setActiveConversation(conv.id))} style={{
                       display: "flex", alignItems: "center", gap: 12,
                       padding: "12px 16px", width: "100%", textAlign: "left",
                       border: "none", borderBottom: "0.5px solid var(--color-border-tertiary)",
@@ -849,7 +868,7 @@ const unread = typeof conv.unreadCount === "object"
                   </div>
                 )}
                 {filteredFollowing.map((u) => {
-                  const uid = u._id?.toString();
+                  const uid = u.id?.toString();
                   const isOnline = onlineUsers.includes(uid);
                   return (
                     <button key={uid} onClick={() => handleOpenWithUser(uid)} style={{
@@ -932,7 +951,7 @@ const unread = typeof conv.unreadCount === "object"
   }}
 >
   <Avatar name={displayName || "U"}
-    userId={isGroup ? activeConv?._id : otherId}
+    userId={isGroup ? activeConv?.id : otherId}
     src={displayAvatar} online={isGroup ? false : otherOnline}
     size={isMobile ? 34 : 38} />
   {isGroup && (
@@ -1005,7 +1024,7 @@ const unread = typeof conv.unreadCount === "object"
      {isGroup
                     ? (() => {
                         const names = activeConv?.participants
-                          ?.filter((p) => (p._id || p).toString() !== myId)
+                          ?.filter((p) => (p.id || p).toString() !== myId)
                           ?.map((p) => p.fullName || p.username || "")
                           ?.filter(Boolean)
                           ?.slice(0, 3)
@@ -1038,6 +1057,12 @@ const unread = typeof conv.unreadCount === "object"
           onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
           <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Rename Group
+        </button>
+        <button onClick={() => { setHeaderMenu(false); setShowAddMember(true); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "var(--color-text-primary)", textAlign: "left", borderBottom: "0.5px solid var(--color-border-tertiary)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+          Add Member
         </button>
         <button onClick={async () => { setHeaderMenu(false); try { const res = await fetch(`${BASE_URL}/api/v2/messages/conversations/group/${activeConvId}/leave`, { method: "PATCH", credentials: "include" }); const data = await res.json(); if (data.success) { dispatch(fetchConversations()); dispatch(setActiveConversation(null)); showToast("You left the group."); } else showToast(data.message || "Failed to leave group."); } catch { showToast("Something went wrong."); } }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 14px", background: "none", border: "none", fontSize: 13, cursor: "pointer", color: "#D85A30", textAlign: "left", borderBottom: "0.5px solid var(--color-border-tertiary)" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-background-secondary)")}
@@ -1097,12 +1122,12 @@ const unread = typeof conv.unreadCount === "object"
                 <p style={{ textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)" }}>Loading messages…</p>
               )}
               {messages.map((msg) => {
-                const isMine       = (msg.sender?._id || msg.sender)?.toString() === myId;
+                const isMine = (msg.sender?.id || msg.sender?.id || msg.sender)?.toString() === myId;
                 const isDeleted    = msg.isDeleted;
                 const isOptimistic = msg.isOptimistic;
                 const isAudio      = msg.type === "audio" || !!msg.audio;
                 return (
-  <div key={msg._id} style={{
+  <div key={msg.id} style={{
   display: "flex",
   flexDirection: isMine ? "row-reverse" : "row",
   alignItems: "flex-end", gap: 6,
@@ -1117,7 +1142,7 @@ const unread = typeof conv.unreadCount === "object"
   const senderObj = msg.sender;
   const senderName = senderObj?.fullName || senderObj?.username || "U";
   const senderAvatar = senderObj?.avatar?.url || null;
-  const senderId = (senderObj?._id || senderObj)?.toString() || "";
+  const senderId = (senderObj?.id || senderObj)?.toString() || "";
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
       <Avatar name={senderName} userId={senderId}
@@ -1203,17 +1228,17 @@ const unread = typeof conv.unreadCount === "object"
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>
                           {msg.reactions.map((r) => (
                             <button key={r.emoji}
-                              onClick={() => reactToMessage({ conversationId: activeConvId, messageId: msg._id, emoji: r.emoji })}
+                              onClick={() => reactToMessage({ conversationId: activeConvId, messageId: msg.id, emoji: r.emoji })}
                               style={{ fontSize: 12, padding: "2px 6px", borderRadius: 12, background: "var(--color-background-secondary)", border: "0.5px solid var(--color-border-tertiary)", cursor: "pointer" }}>
                               {r.emoji} {r.count > 1 && <span style={{ fontSize: 11 }}>{r.count}</span>}
                             </button>
                           ))}
                         </div>
                       )}
-                      {reactTarget === msg._id && (
+                      {reactTarget === msg.id && (
                         <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", zIndex: 10 }}>
                           <EmojiPicker
-                            onEmojiClick={(ed) => { reactToMessage({ conversationId: activeConvId, messageId: msg._id, emoji: ed.emoji }); setReactTarget(null); }}
+                            onEmojiClick={(ed) => { reactToMessage({ conversationId: activeConvId, messageId: msg.id, emoji: ed.emoji }); setReactTarget(null); }}
                             width={isMobile ? 280 : 280} height={320}
                             previewConfig={{ showPreview: false }} skinTonesDisabled
                           />
@@ -1260,7 +1285,7 @@ const unread = typeof conv.unreadCount === "object"
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", marginBottom: 8, background: "var(--color-background-secondary)", borderLeft: "3px solid #534AB7", borderRadius: "0 8px 8px 0" }}>
                     <div style={{ flex: 1, fontSize: 12 }}>
                       <strong style={{ color: "#534AB7", display: "block", fontSize: 11 }}>
-                        Replying to {(replyTo.sender?._id || replyTo.sender)?.toString() === myId ? "yourself" : (otherParticipant?.fullName || otherParticipant?.username)}
+                        Replying to {(replyTo.sender?.id || replyTo.sender)?.toString() === myId ? "yourself" : (otherParticipant?.fullName || otherParticipant?.username)}
                       </strong>
                       <span style={{ color: "var(--color-text-secondary)" }}>
                         {replyTo.audio ? "🎙️ Voice message" : replyTo.text?.slice(0, 60) || "📷 Image"}
@@ -1389,13 +1414,13 @@ const unread = typeof conv.unreadCount === "object"
           {[
             { label: "Reply",  action: "reply",  show: true,
               icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg> },
-            { label: "Edit",   action: "edit",   show: (ctxMenu.msg.sender?._id || ctxMenu.msg.sender)?.toString() === myId && !ctxMenu.msg.isDeleted && !ctxMenu.msg.audio && canEdit(ctxMenu.msg),
+            { label: "Edit",   action: "edit",   show: (ctxMenu.msg.sender?.id || ctxMenu.msg.sender)?.toString() === myId && !ctxMenu.msg.isDeleted && !ctxMenu.msg.audio && canEdit(ctxMenu.msg),
               icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
             { label: "React",  action: "react",  show: !ctxMenu.msg.isDeleted,
               icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg> },
             { label: "Copy",   action: "copy",   show: !!ctxMenu.msg.text && !ctxMenu.msg.isDeleted,
               icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> },
-            { label: "Delete", action: "delete", show: (ctxMenu.msg.sender?._id || ctxMenu.msg.sender)?.toString() === myId && !ctxMenu.msg.isDeleted, danger: true,
+            { label: "Delete", action: "delete", show: (ctxMenu.msg.sender?.id || ctxMenu.msg.sender)?.toString() === myId && !ctxMenu.msg.isDeleted, danger: true,
               icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg> },
           ].filter((i) => i.show).map((item, idx, arr) => (
             <button key={item.action} onClick={() => handleCtxAction(item.action)} style={{
@@ -1438,6 +1463,15 @@ const unread = typeof conv.unreadCount === "object"
         <CreateGroupModal
           following={following}
           onClose={() => setShowCreateGroup(false)}
+        />
+      )}
+      {showAddMember && (
+        <AddMemberModal
+          following={following}
+          existingMemberIds={participantIds}
+          conversationId={activeConvId}
+          onClose={() => setShowAddMember(false)}
+          onAdded={() => { dispatch(fetchConversations()); showToast("Member(s) added!"); }}
         />
       )}
     </div>

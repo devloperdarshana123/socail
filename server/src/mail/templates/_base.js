@@ -4,8 +4,9 @@
 //  Logo URL: replace LOGO_URL with your Cloudinary URL
 // ─────────────────────────────────────────────
 
-const LOGO_URL =
-  "https://res.cloudinary.com/YOUR_CLOUD/image/upload/erovians-logo.png";
+
+  const LOGO_URL =
+  "https://res.cloudinary.com/dl1zz15t1/image/upload/v1782465336/Screenshot_2026-06-26_144425_qytxfm.png";
 const BRAND_COLOR = "#6C47FF"; // primary purple
 const BRAND_DARK = "#0D0D0D"; // near-black bg
 const BRAND_CARD = "#161616"; // card bg

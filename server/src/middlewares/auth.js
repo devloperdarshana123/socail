@@ -1,18 +1,21 @@
 
+
 import jwt from "jsonwebtoken";
 import asyncHandler from "./asyncHandler.js";
 import AppError from "../utils/AppError.js";
-import User from "../models/user.model.js";
+import * as UserHelper from "../utils/userHelpers.js";
 import logger from "../config/logger.js";
 import { ENV } from "../config/env.js";
-import { isTokenBlacklisted } from "../utils/tokenBlacklist.js";  // ← NEW
+import { isTokenBlacklisted } from "../utils/tokenBlacklist.js";
 import { USER_COOKIE_ACCESS } from "../utils/authCookies.js";
 import redis from "../config/redis.js";
+import prisma from "../config/prisma.js";
+
 export const isAuthenticated = asyncHandler(async (req, res, next) => {
-  const authHeader  = req.headers?.authorization;
-const accessToken =
-  req.cookies?.[USER_COOKIE_ACCESS] ||
-  (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+  const authHeader = req.headers?.authorization;
+  const accessToken =
+    req.cookies?.[USER_COOKIE_ACCESS] ||
+    (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
 
   if (!accessToken) {
     logger.warn("Auth attempt without token", { path: req.originalUrl, ip: req.ip });
@@ -29,89 +32,56 @@ const accessToken =
     return next(new AppError("Invalid token. Please log in again.", 401));
   }
 
-  // ── NEW: Blacklist check ───────────────────────────────────────────────────
-  // If user logged out, their token's jti is stored in Redis until expiry.
-  // This prevents stolen post-logout tokens from being used.
+  // ── Blacklist check ──────────────────────────────────────────────────────
   if (decoded.jti) {
     const blacklisted = await isTokenBlacklisted(decoded.jti);
     if (blacklisted) {
       logger.warn("Blacklisted token used", {
-        userId : decoded._id,
-        jti    : decoded.jti,
-        path   : req.originalUrl,
-        ip     : req.ip,
+        userId: decoded._id,
+        jti: decoded.jti,
+        path: req.originalUrl,
+        ip: req.ip,
       });
       return next(new AppError("Session has been invalidated. Please log in again.", 401));
     }
   }
-  // ─────────────────────────────────────────────────────────────────────────
 
- 
+  // ── User fetch with Redis cache ──────────────────────────────────────────
+  let user;
+  const cacheKey = `user:auth:${decoded._id}`;
 
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const missingCriticalFields =
+        !cached.accountStatus ||
+        !cached.role ||
+        cached.isOnboardingComplete === undefined;
 
-//   let user;
-// const cacheKey = `user:${decoded._id}`;
-
-// try {
-//   const cached = await redis.get(cacheKey);
-//   if (cached) {
-//     user = cached; // Upstash auto-parses JSON
-//   } else {
-//     user = await User.findById(decoded._id).select(
-//       "-password -refreshTokens -firebaseUid"
-//     );
-//     if (user) {
-//       await redis.set(cacheKey, user, { ex: 300 }); // 5 min TTL
-//     }
-//   }
-// } catch {
-//   // Redis fail → fallback to DB (graceful degradation)
-//   user = await User.findById(decoded._id).select(
-//     "-password -refreshTokens -firebaseUid"
-//   );
-// }
-
-
-// ✅ REPLACE KARO
-let user;
-const cacheKey = `user:auth:${decoded._id}`; // ← key change — stale cache invalidate
-
-try {
-  const cached = await redis.get(cacheKey);
-  if (cached) {
-    // Production safety — critical fields missing hain toh DB se lo
-    const missingCriticalFields =
-      !cached.accountStatus ||
-      !cached.role ||
-      cached.isOnboardingComplete === undefined;
-
-    if (missingCriticalFields) {
-      user = await User.findById(decoded._id).select(
-        "-password -refreshTokens -firebaseUid"
-      );
-      if (user) {
-        await redis.set(cacheKey, user.toObject(), { ex: 300 });
+      if (missingCriticalFields) {
+        user = await UserHelper.findById(decoded._id);
+        if (user) {
+          const { password, ...safeForCache } = user;
+          await redis.set(cacheKey, safeForCache, { ex: 300 });
+        }
+      } else {
+        user = cached;
       }
     } else {
-      user = cached;
+      user = await UserHelper.findById(decoded._id);
+      if (user) {
+        const { password, ...safeForCache } = user;
+        await redis.set(cacheKey, safeForCache, { ex: 300 });
+      }
     }
-  } else {
-    user = await User.findById(decoded._id).select(
-      "-password -refreshTokens -firebaseUid"
-    );
-    if (user) {
-      await redis.set(cacheKey, user.toObject(), { ex: 300 }); // ← toObject() ensure karo
-    }
+  } catch {
+    user = await UserHelper.findById(decoded._id);
   }
-} catch {
-  // Redis down — DB se serve karo
-  user = await User.findById(decoded._id).select(
-    "-password -refreshTokens -firebaseUid"
-  );
-}
-if (!user) {
-  return next(new AppError("User no longer exists.", 401));
-}
+
+  if (!user) {
+    return next(new AppError("User no longer exists.", 401));
+  }
+
   if (user.accountStatus === "banned") {
     return next(new AppError("Your account has been permanently banned.", 403));
   }
@@ -122,17 +92,19 @@ if (!user) {
     return next(new AppError("Your account has been deactivated.", 403));
   }
 
-req.user = user;
-const FIVE_MIN = 5 * 60 * 1000;
-const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt) : null;
-if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
-  const now = new Date();
-  User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).catch(() => {});
-  // redis.set(cacheKey, { ...user.toObject?.() ?? user, lastActiveAt: now }, { ex: 300 }).catch(() => {});
-  redis.set(cacheKey, { ...(user.toObject?.() ?? user), lastActiveAt: now }, { ex: 300 }).catch(() => {})
-}
+  req.user = user;
 
-  logger.debug("User authenticated", { userId: user._id, path: req.originalUrl });
+  // ── lastActiveAt update (throttled, 5 min) ───────────────────────────────
+  const FIVE_MIN = 5 * 60 * 1000;
+  const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt) : null;
+  if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
+    const now = new Date();
+    prisma.user.update({ where: { id: user.id }, data: { lastActiveAt: now } }).catch(() => {});
+    const { password, ...safeForCache } = user;
+    redis.set(cacheKey, { ...safeForCache, lastActiveAt: now }, { ex: 300 }).catch(() => {});
+  }
+
+  logger.debug("User authenticated", { userId: user.id, path: req.originalUrl });
 
   next();
 });
@@ -169,10 +141,10 @@ export const authorizeRoles = (...roles) => {
     if (!req.user) return next(new AppError("Authentication required.", 401));
     if (!roles.includes(req.user.role)) {
       logger.warn("Unauthorized role access", {
-        userId       : req.user._id,
-        userRole     : req.user.role,
+        userId: req.user.id,
+        userRole: req.user.role,
         requiredRoles: roles,
-        path         : req.originalUrl,
+        path: req.originalUrl,
       });
       return next(new AppError("You do not have permission to perform this action.", 403));
     }
@@ -184,9 +156,9 @@ export const isVerified = asyncHandler(async (req, res, next) => {
   if (!req.user) return next(new AppError("Authentication required.", 401));
   const { authProvider, isEmailVerified, isMobileVerified } = req.user;
   const verified =
-    (authProvider === "email"  && isEmailVerified)  ||
-    (authProvider === "phone"  && isMobileVerified) ||
-     authProvider === "google";
+    (authProvider === "email" && isEmailVerified) ||
+    (authProvider === "phone" && isMobileVerified) ||
+    authProvider === "google";
   if (!verified) {
     return next(new AppError("Please verify your email or phone number.", 403));
   }

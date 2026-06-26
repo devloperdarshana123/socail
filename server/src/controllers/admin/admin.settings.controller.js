@@ -1,16 +1,19 @@
+
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError      from "../../utils/AppError.js";
-import User          from "../../models/user.model.js";
+import prisma        from "../../config/prisma.js";
 import logger        from "../../config/logger.js";
 import {
   uploadToCloudinary,
   deleteFromCloudinary,
 } from "../../helper/cloudinaryUpload.js";
-import crypto        from "crypto";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Internal helper — identify current session token hash from cookie
 // ─────────────────────────────────────────────────────────────────────────────
+
 const getCurrentTokenHash = (req) => {
   const raw = req.cookies?.refreshToken;
   if (!raw) return null;
@@ -20,65 +23,95 @@ const getCurrentTokenHash = (req) => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET /api/v2/admin/settings/profile
 // ─────────────────────────────────────────────────────────────────────────────
-export const getAdminProfile = asyncHandler(async (req, res) => {
-  const admin = await User.findById(req.user._id).select(
-    "fullName username email avatar designation bio notificationsEnabled role createdAt lastActiveAt"
-  );
-  if (!admin) throw new AppError("Admin not found.", 404);
 
-  res.status(200).json({ success: true, data: admin });
+export const getAdminProfile = asyncHandler(async (req, res, next) => {
+  const admin = await prisma.user.findUnique({
+    where:  { id: req.user.id },
+    select: {
+      id:                   true,
+      fullName:             true,
+      username:             true,
+      email:                true,
+      avatar:               true,
+      designation:          true,
+      bio:                  true,
+      notificationsEnabled: true,
+      role:                 true,
+      createdAt:            true,
+      lastActiveAt:         true,
+    },
+  });
+
+  if (!admin) return next(new AppError("Admin not found.", 404));
+
+  return res.status(200).json({ success: true, data: admin });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PATCH /api/v2/admin/settings/profile
-//  Update fullName, username, email, designation, bio
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const updateAdminProfile = asyncHandler(async (req, res, next) => {
   const { fullName, username, email, designation, bio } = req.body;
 
-  if (!fullName?.trim()) return next(new AppError("Full name is required.", 400));
+  if (!fullName?.trim())
+    return next(new AppError("Full name is required.", 400));
   if (fullName.trim().length < 2 || fullName.trim().length > 60)
     return next(new AppError("Full name must be 2–60 characters.", 400));
   if (bio && bio.length > 150)
     return next(new AppError("Bio cannot exceed 150 characters.", 400));
 
-  // Build update object explicitly — never pass undefined to $set
-  const updateFields = { fullName: fullName.trim() };
+  const data = { fullName: fullName.trim() };
 
   if (username !== undefined) {
     if (username && !/^[a-z0-9._]+$/.test(username))
       return next(new AppError("Username: only lowercase letters, numbers, dots, underscores.", 400));
-    const taken = await User.findOne({
-      username: username.toLowerCase().trim(),
-      _id:      { $ne: req.user._id },
-    }).lean();
+
+    const taken = await prisma.user.findFirst({
+      where: {
+        username: username.toLowerCase().trim(),
+        id:       { not: req.user.id },
+      },
+    });
     if (taken) return next(new AppError("Username is already taken.", 409));
-    updateFields.username = username.toLowerCase().trim();
+    data.username = username.toLowerCase().trim();
   }
 
   if (email !== undefined) {
     if (email && !/^\S+@\S+\.\S+$/.test(email))
       return next(new AppError("Enter a valid email address.", 400));
-    const taken = await User.findOne({
-      email: email.toLowerCase().trim(),
-      _id:   { $ne: req.user._id },
-    }).lean();
+
+    const taken = await prisma.user.findFirst({
+      where: {
+        email: email.toLowerCase().trim(),
+        id:    { not: req.user.id },
+      },
+    });
     if (taken) return next(new AppError("Email is already in use.", 409));
-    updateFields.email = email.toLowerCase().trim();
+    data.email = email.toLowerCase().trim();
   }
 
-  if (designation !== undefined) updateFields.designation = designation.trim();
-  if (bio         !== undefined) updateFields.bio         = bio.trim();
+  if (designation !== undefined) data.designation = designation.trim();
+  if (bio         !== undefined) data.bio         = bio.trim();
 
-  const updated = await User.findByIdAndUpdate(
-    req.user._id,
-    { $set: updateFields },
-    { new: true, runValidators: true }
-  ).select("fullName username email designation bio avatar role");
+  const updated = await prisma.user.update({
+    where:  { id: req.user.id },
+    data,
+    select: {
+      id:          true,
+      fullName:    true,
+      username:    true,
+      email:       true,
+      designation: true,
+      bio:         true,
+      avatar:      true,
+      role:        true,
+    },
+  });
 
-  logger.info("Admin profile updated", { adminId: req.user._id });
+  logger.info("Admin profile updated", { adminId: req.user.id });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     message: "Profile updated successfully.",
     data:    updated,
@@ -87,19 +120,24 @@ export const updateAdminProfile = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PATCH /api/v2/admin/settings/profile/avatar
-//  Upload / replace admin avatar (multipart/form-data, field: "avatar")
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const updateAdminAvatar = asyncHandler(async (req, res, next) => {
-  if (!req.file) return next(new AppError("Please upload an image file.", 400));
+  if (!req.file)
+    return next(new AppError("Please upload an image file.", 400));
   if (req.file.size > 5 * 1024 * 1024)
     return next(new AppError("Avatar cannot exceed 5MB.", 400));
 
-  const admin = await User.findById(req.user._id);
+  const admin = await prisma.user.findUnique({
+    where:  { id: req.user.id },
+    select: { id: true, avatar: true },
+  });
   if (!admin) return next(new AppError("Admin not found.", 404));
 
   // Delete old avatar from Cloudinary
-  if (admin.avatar?.publicId) {
-    await deleteFromCloudinary(admin.avatar.publicId, "image").catch(() => {});
+  const oldAvatar = admin.avatar;
+  if (oldAvatar?.publicId) {
+    await deleteFromCloudinary(oldAvatar.publicId, "image").catch(() => {});
   }
 
   const result = await uploadToCloudinary(req.file.buffer, {
@@ -112,21 +150,26 @@ export const updateAdminAvatar = asyncHandler(async (req, res, next) => {
     ],
   });
 
-  admin.avatar = { url: result.secure_url, publicId: result.public_id };
-  await admin.save({ validateBeforeSave: false });
+  const newAvatar = { url: result.secure_url, publicId: result.public_id };
 
-  logger.info("Admin avatar updated", { adminId: req.user._id });
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data:  { avatar: newAvatar },
+  });
 
-  res.status(200).json({
+  logger.info("Admin avatar updated", { adminId: req.user.id });
+
+  return res.status(200).json({
     success: true,
     message: "Avatar updated successfully.",
-    data:    { avatar: admin.avatar },
+    data:    { avatar: newAvatar },
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PATCH /api/v2/admin/settings/password
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const changeAdminPassword = asyncHandler(async (req, res, next) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
 
@@ -139,45 +182,63 @@ export const changeAdminPassword = asyncHandler(async (req, res, next) => {
   if (currentPassword === newPassword)
     return next(new AppError("New password must differ from current password.", 400));
 
-  const admin = await User.findById(req.user._id).select("+password +refreshTokens");
-if (!admin) return next(new AppError("Admin not found.", 404));
+  const admin = await prisma.user.findUnique({
+    where:  { id: req.user.id },
+    select: { id: true, password: true },
+  });
+  if (!admin) return next(new AppError("Admin not found.", 404));
 
-const isMatch = await admin.isPasswordCorrect(currentPassword);
-if (!isMatch) return next(new AppError("Current password is incorrect.", 401));
+  const isMatch = await bcrypt.compare(currentPassword, admin.password);
+  if (!isMatch) return next(new AppError("Current password is incorrect.", 401));
 
-// Hash and save new password — skip field validators (postsCount etc.)
-admin.password = newPassword;
-await admin.save({ validateBeforeSave: false });
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-// Revoke all OTHER sessions — current session stays alive
-const currentRawToken = req.cookies?.refreshToken;
-await admin.removeOtherRefreshTokens(currentRawToken);
+  // Hash of current refresh token — keep this session alive
+  const currentHash = getCurrentTokenHash(req);
 
-logger.info("Admin password changed", { adminId: req.user._id });
+  // Update password + delete all OTHER refresh tokens in a transaction
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: req.user.id },
+      data:  { password: hashedPassword },
+    }),
+    prisma.refreshToken.deleteMany({
+      where: {
+        userId: req.user.id,
+        ...(currentHash ? { tokenHash: { not: currentHash } } : {}),
+      },
+    }),
+  ]);
 
-res.status(200).json({
-  success: true,
-  message: "Password changed. All other devices have been logged out.",
-});
+  logger.info("Admin password changed", { adminId: req.user.id });
+
+  return res.status(200).json({
+    success: true,
+    message: "Password changed. All other devices have been logged out.",
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PATCH /api/v2/admin/settings/notifications
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const updateNotificationSettings = asyncHandler(async (req, res, next) => {
   const { notificationsEnabled } = req.body;
 
   if (typeof notificationsEnabled !== "boolean")
     return next(new AppError("notificationsEnabled must be a boolean.", 400));
 
-  await User.findByIdAndUpdate(req.user._id, { $set: { notificationsEnabled } });
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data:  { notificationsEnabled },
+  });
 
   logger.info("Admin notification setting updated", {
-    adminId: req.user._id,
+    adminId: req.user.id,
     notificationsEnabled,
   });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     message: `Notifications ${notificationsEnabled ? "enabled" : "disabled"}.`,
     data:    { notificationsEnabled },
@@ -188,34 +249,38 @@ export const updateNotificationSettings = asyncHandler(async (req, res, next) =>
 //  GET /api/v2/admin/settings/sessions
 //  Returns all active sessions — current session flagged with isCurrent: true
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const getAdminSessions = asyncHandler(async (req, res, next) => {
-  const admin = await User.findById(req.user._id).select("+refreshTokens");
-  if (!admin) return next(new AppError("Admin not found.", 404));
-
-  const currentHash = getCurrentTokenHash(req);
   const now         = new Date();
+  const currentHash = getCurrentTokenHash(req);
 
-  const sessions = admin.refreshTokens
-    .filter((t) => t.expiresAt > now)
+  // Fetch only non-expired tokens for this admin
+  const tokens = await prisma.refreshToken.findMany({
+    where: {
+      userId:    req.user.id,
+      expiresAt: { gt: now },
+    },
+    orderBy: { lastUsedAt: "desc" },
+  });
+
+  const sessions = tokens
     .map((t) => ({
-      id:         t._id,
+      id:         t.id,
       deviceInfo: t.deviceInfo || "Unknown device",
       ipAddress:  t.ipAddress  || "Unknown IP",
       lastUsedAt: t.lastUsedAt,
       createdAt:  t.createdAt,
       expiresAt:  t.expiresAt,
-      isTrusted:  t.isTrusted  ?? false,
-      // ✅ Fix: compare tokenHash, not array position
+      isTrusted:  t.isTrusted ?? false,
       isCurrent:  currentHash ? t.tokenHash === currentHash : false,
     }))
-    // Current session always first, then sort by lastUsedAt desc
     .sort((a, b) => {
       if (a.isCurrent) return -1;
-      if (b.isCurrent) return 1;
+      if (b.isCurrent) return  1;
       return new Date(b.lastUsedAt) - new Date(a.lastUsedAt);
     });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     data:    { sessions, total: sessions.length },
   });
@@ -224,41 +289,41 @@ export const getAdminSessions = asyncHandler(async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  DELETE /api/v2/admin/settings/sessions/:sessionId
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const revokeAdminSession = asyncHandler(async (req, res, next) => {
   const { sessionId } = req.params;
 
-  const result = await User.findByIdAndUpdate(
-    req.user._id,
-    { $pull: { refreshTokens: { _id: sessionId } } },
-    { new: true }
-  ).select("+refreshTokens");
+  const token = await prisma.refreshToken.findFirst({
+    where: { id: sessionId, userId: req.user.id },
+  });
 
-  if (!result) return next(new AppError("Session not found.", 404));
+  if (!token) return next(new AppError("Session not found.", 404));
 
-  logger.info("Admin session revoked", { adminId: req.user._id, sessionId });
+  await prisma.refreshToken.delete({ where: { id: sessionId } });
 
-  res.status(200).json({ success: true, message: "Session revoked." });
+  logger.info("Admin session revoked", { adminId: req.user.id, sessionId });
+
+  return res.status(200).json({ success: true, message: "Session revoked." });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  DELETE /api/v2/admin/settings/sessions
 //  Revoke ALL sessions except the current one
 // ─────────────────────────────────────────────────────────────────────────────
+
 export const revokeAllOtherSessions = asyncHandler(async (req, res, next) => {
   const currentHash = getCurrentTokenHash(req);
 
-  if (!currentHash) {
-    const admin = await User.findById(req.user._id).select("+refreshTokens");
-    if (admin) await admin.removeAllRefreshTokens();
-  } else {
-    await User.findByIdAndUpdate(req.user._id, {
-      $pull: { refreshTokens: { tokenHash: { $ne: currentHash } } },
-    });
-  }
+  await prisma.refreshToken.deleteMany({
+    where: {
+      userId: req.user.id,
+      ...(currentHash ? { tokenHash: { not: currentHash } } : {}),
+    },
+  });
 
-  logger.info("Admin all other sessions revoked", { adminId: req.user._id });
+  logger.info("Admin all other sessions revoked", { adminId: req.user.id });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     message: "All other sessions logged out.",
   });

@@ -43,6 +43,11 @@ function PostCard({ post, onClick }) {
   const [isHovered, setIsHovered] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [mobile, setMobile] = useState(isMobile());
+  const interactions = useSelector((s) => s.posts.interactions);
+  const inter = interactions[post.id ?? post.id] || {};
+  const likesCount    = inter.likesCount    ?? post.likesCount    ?? 0;
+  const commentsCount = inter.commentsCount ?? post.commentsCount ?? 0;
+  const viewsCount    = inter.viewsCount    ?? post.viewsCount    ?? 0;
 
   useEffect(() => {
     const handleResize = () => setMobile(isMobile());
@@ -56,7 +61,7 @@ function PostCard({ post, onClick }) {
   const thumb   = resolvePostThumb(post);
 
   const getEngagementColor = () => {
-    const likes = post.likesCount || 0;
+const likes = likesCount;
     if (likes > 10000) return "#ff6b6b";
     if (likes > 5000)  return "#ffa500";
     if (likes > 1000)  return "#4ecdc4";
@@ -156,18 +161,18 @@ function PostCard({ post, onClick }) {
               {!post.likesHidden && (
                 <div className="flex items-center gap-1 text-white">
                   <Heart size={11} fill="white" />
-                  <span className="text-xs font-semibold">{fmtCount(post.likesCount)}</span>
+                  <span className="text-xs font-semibold">{fmtCount(likesCount)}</span>
                 </div>
               )}
               {!post.commentsDisabled && (
                 <div className="flex items-center gap-1 text-white">
                   <MessageCircle size={11} fill="white" />
-                  <span className="text-xs font-semibold">{fmtCount(post.commentsCount)}</span>
+                  <span className="text-xs font-semibold">{fmtCount(commentsCount)}</span>
                 </div>
               )}
               <div className="flex items-center gap-1 text-white ml-auto">
                 <Eye size={11} />
-                <span className="text-xs font-semibold">{fmtCount(post.viewsCount)}</span>
+                <span className="text-xs font-semibold">{fmtCount(viewsCount)}</span>
               </div>
             </div>
           ) : (
@@ -176,18 +181,18 @@ function PostCard({ post, onClick }) {
                 {!post.likesHidden && (
                   <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white">
                     <Heart size={20} fill="white" />
-                    <span className="font-bold">{fmtCount(post.likesCount)}</span>
+                    <span className="font-bold">{fmtCount(likesCount)}</span>
                   </div>
                 )}
                 {!post.commentsDisabled && (
                   <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white">
                     <MessageCircle size={20} fill="white" />
-                    <span className="font-bold">{fmtCount(post.commentsCount)}</span>
+                   <span className="font-bold">{fmtCount(commentsCount)}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white">
                   <Eye size={20} />
-                  <span className="font-bold">{fmtCount(post.viewsCount)}</span>
+                  <span className="font-bold">{fmtCount(viewsCount)}</span>
                 </div>
               </div>
             )
@@ -224,7 +229,7 @@ function PostCard({ post, onClick }) {
       )}
 
       {/* Trending badge — desktop only */}
-      {!mobile && post.likesCount > 1000 && !isText && (
+      {!mobile && likesCount > 1000 && !isText && (
         <div className="absolute top-3 right-3 z-10">
           <div className="flex items-center gap-1 px-3 py-1.5 rounded-full text-white text-xs font-bold backdrop-blur-sm ring-1 ring-white/30"
             style={{ background: `${getEngagementColor()}dd` }}>
@@ -273,7 +278,7 @@ function MasonryGrid({ posts, onPostClick, loading }) {
         : cols.map((col, ci) => (
             <div key={ci} className="flex flex-col gap-3 md:gap-4">
               {col.map((post) => (
-                <PostCard key={post._id} post={post} onClick={onPostClick} />
+                <PostCard key={post.id} post={post} onClick={onPostClick} />
               ))}
             </div>
           ))
@@ -295,7 +300,7 @@ export default function Explore() {
     const params = new URLSearchParams(window.location.search);
     const postId = params.get("post");
     if (!postId) return;
-    const found = posts.find((p) => p._id === postId);
+    const found = posts.find((p) => p.id === postId);
     if (found) setSelectedPost(found);
   }, [posts]);
 
@@ -305,13 +310,9 @@ export default function Explore() {
     if (tab && tab !== activeType) dispatch(setActiveType(tab));
   }, []);
 
-  useEffect(() => {
-    if (postsByType[activeType]?.length > 0) {
-      dispatch(setPostsFromCache(activeType));
-      return;
-    }
-    dispatch(fetchExplorePosts({ type: activeType }));
-  }, [activeType, dispatch]);
+ useEffect(() => {
+  dispatch(fetchExplorePosts({ type: activeType }));
+}, [activeType, dispatch]);
 
   useEffect(() => {
     return () => dispatch(clearExplore());
@@ -387,7 +388,7 @@ export default function Explore() {
             posts={posts}
             onPostClick={(post) => {
               setSelectedPost(post);
-              window.history.pushState({}, "", `?tab=${activeType}&post=${post._id}`);
+              window.history.pushState({}, "", `?tab=${activeType}&post=${post.id}`);
             }}
             loading={loading}
           />
@@ -410,14 +411,14 @@ export default function Explore() {
       </div>
 
       {selectedPost && (
-        <PostModal
-          post={selectedPost}
-          onClose={() => {
-            setSelectedPost(null);
-            window.history.pushState({}, "", `?tab=${activeType}`);
-          }}
-        />
-      )}
+  <PostModal
+    post={posts.find((p) => (p.id ?? p._id) === (selectedPost.id ?? selectedPost._id)) ?? selectedPost}
+    onClose={() => {
+      setSelectedPost(null);
+      window.history.pushState({}, "", `?tab=${activeType}`);
+    }}
+  />
+)}
 
       <style>{`
         @keyframes shimmer {

@@ -1,5 +1,6 @@
 
 
+
 import AppError from "../utils/AppError.js";
 import logger from "../config/logger.js";
 
@@ -10,50 +11,56 @@ const globalErrorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = message;
 
-  // 1. CastError
-  if (err.name === "CastError") {
-    error = new AppError(`Invalid ${err.path}: ${err.value}.`, 400);
+  // 1. Prisma — Record not found (findUniqueOrThrow / findFirstOrThrow)
+  if (err.name === "NotFoundError" || err.code === "P2025") {
+    error = new AppError("The requested record was not found.", 404);
   }
 
-  // 2. Duplicate Key
-  if (err.code === 11000) {
-    const keyValue = err.keyValue ?? {};
-    const field = Object.keys(keyValue)[0] ?? "";
-    const value = keyValue[field];
-    const msg = value
-      ? `Duplicate value '${value}' for field '${field}'. Please use a different value.`
-      : `Duplicate value for field '${field}'.`;
-    error = new AppError(msg, 400);
+  // 2. Prisma — Unique constraint violation (duplicate value)
+  if (err.code === "P2002") {
+    const fields = err.meta?.target?.join(", ") ?? "field";
+    error = new AppError(
+      `Duplicate value for '${fields}'. Please use a different value.`,
+      400
+    );
   }
 
-  // 3. Mongoose ValidationError
-  if (err.name === "ValidationError") {
-    const messages = Object.values(err.errors).map((e) => e.message);
-    error = new AppError(messages.join(". "), 400);
+  // 3. Prisma — Foreign key constraint failed
+  if (err.code === "P2003") {
+    const field = err.meta?.field_name ?? "field";
+    error = new AppError(
+      `Related record not found for '${field}'.`,
+      400
+    );
   }
 
-  // 4. Invalid JWT
+  // 4. Prisma — Required field missing / invalid data
+  if (err.code === "P2011" || err.code === "P2012") {
+    error = new AppError("Required field is missing or null.", 400);
+  }
+
+  // 5. Invalid JWT
   if (err.name === "JsonWebTokenError") {
     error = new AppError("Invalid token. Please log in again.", 401);
   }
 
-  // 5. Expired JWT
+  // 6. Expired JWT
   if (err.name === "TokenExpiredError") {
     error = new AppError("Your token has expired. Please log in again.", 401);
   }
 
-  // 6. UserNotAuthorized
+  // 7. UserNotAuthorized
   if (err.name === "UserNotAuthorized") {
     error = new AppError("You are not authorized to perform this action.", 403);
   }
 
-  // Log AFTER transform — sahi message log hoga
+  // Log AFTER transform
   logger.error(`Error: ${error.message}`, {
     statusCode: error.statusCode || statusCode,
-    stack: err.stack,
-    path: req.originalUrl,
-    method: req.method,
-    ip: req.ip,
+    stack:      err.stack,
+    path:       req.originalUrl,
+    method:     req.method,
+    ip:         req.ip,
   });
 
   const isProd = process.env.NODE_ENV === "production";

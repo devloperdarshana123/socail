@@ -1,543 +1,462 @@
 
-import mongoose from "mongoose";
-import Post from "../../models/post.model.js";
-import { uploadToCloudinary, deleteFromCloudinary } from "../../helper/cloudinaryUpload.js";
-import cloudinary from "../../config/cloudinaryConfig.js";
+
+
 import asyncHandler from "../../middlewares/asyncHandler.js";
-import logger from "../../config/logger.js";
-import Like from "../../models/like.model.js";
 import AppError from "../../utils/AppError.js";
-import PostView from "../../models/postView.model.js";
-import Follow from "../../models/follow.model.js";
-import Saved from "../../models/saved.model.js";
-import User from "../../models/user.model.js";
+import { deleteFromCloudinary } from "../../helper/cloudinaryUpload.js";
+import logger from "../../config/logger.js";
+import * as PostHelper from "../../utils/postHelpers.js";
+import prisma from "../../config/prisma.js";
+import redis from "../../config/redis.js";
 
-
-import {
-  getPostFeedCache,
-  setPostFeedCache,
-  invalidatePostFeedCache,
-  isPostAlreadyViewed,
-} from "../../utils/postCache.js";
-const sanitizeMediaItem = (item, index) => ({
-  url:          String(item.url          || ""),
-  publicId:     String(item.publicId     || ""),
-  resourceType: ["image", "video"].includes(item.resourceType) ? item.resourceType : "image",
-  width:        Number(item.width)        || null,
-  height:       Number(item.height)       || null,
-  duration:     Number(item.duration)     || null,
-  thumbnailUrl: item.thumbnailUrl ? String(item.thumbnailUrl) : null,
-  format:       item.format       ? String(item.format)       : null,
-  bytes:        Number(item.bytes)        || null,
-  order:        index,
-});
+const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 // ─────────────────────────────────────────────
 //  CREATE POST
 //  POST /api/v2/posts
 // ─────────────────────────────────────────────
+
 export const createPost = asyncHandler(async (req, res, next) => {
-  const {
-    caption          = "",
-    visibility       = "public",
-    type,
-    commentsDisabled = false,
-    likesHidden      = false,
-    location,
-    isDraft          = false,
-    media            = [],
-  } = req.body;
+  const { caption = "", visibility = "public", type, commentsDisabled = false, likesHidden = false, location, isDraft = false, media = [] } = req.body;
 
- const authorId    = req.user._id;
-const isDraftBool = Boolean(isDraft);
-
-  // ── Validation ──
+  // Validation
   if (!["text", "image", "reel"].includes(type)) {
     return next(new AppError("Invalid post type.", 400));
   }
- if (!isDraftBool) {
-  if (type === "image" && (!media || media.length < 1)) {
-    return next(new AppError("Image post requires at least one image.", 400));
-  }
-  if (type === "reel" && media.length !== 1) {
-    return next(new AppError("Reel must have exactly one video.", 400));
-  }
-  if (type === "text" && media.length > 0) {
-    return next(new AppError("Text post cannot have media.", 400));
-  }
-  if (media.length > 10) {
-    return next(new AppError("Maximum 10 media items allowed.", 400));
-  }
-} else {
-  if (media.length > 10) {
-    return next(new AppError("Maximum 10 media items allowed.", 400));
-  }
-  if (!caption?.trim() && (!media || media.length === 0)) {
-    return next(new AppError("Draft must have at least a caption or media.", 400));
-  }
-}
 
-  // ── Sanitize ──
-// ── Sanitize ──
-  const sanitized = media.map(sanitizeMediaItem);
-
-  // ── Thumbnail generation for reels ──
-  if (type === "reel" && sanitized[0]?.resourceType === "video" && !sanitized[0]?.thumbnailUrl) {
-    try {
-      const result = await cloudinary.uploader.explicit(sanitized[0].publicId, {
-        type:          "upload",
-        resource_type: "video",
-        eager: [
-          {
-            format: "jpg",
-            transformation: [
-              { start_offset: "0" },
-              { width: 600, crop: "scale" },
-              { quality: "auto:good" },
-            ],
-          },
-        ],
-        eager_async: false,
-      });
-      sanitized[0].thumbnailUrl = result.eager?.[0]?.secure_url ?? null;
-    } catch (err) {
-      logger.warn("Thumbnail generation failed", { error: err.message });
+  if (!isDraft) {
+    if (type === "image" && (!media || media.length < 1)) {
+      return next(new AppError("Image post requires at least one image.", 400));
+    }
+    if (type === "reel" && media.length !== 1) {
+      return next(new AppError("Reel must have exactly one video.", 400));
+    }
+    if (type === "text" && media.length > 0) {
+      return next(new AppError("Text post cannot have media.", 400));
+    }
+    if (media.length > 10) {
+      return next(new AppError("Maximum 10 media items allowed.", 400));
+    }
+  } else {
+    if (media.length > 10) {
+      return next(new AppError("Maximum 10 media items allowed.", 400));
+    }
+    if (!caption?.trim() && (!media || media.length === 0)) {
+      return next(new AppError("Draft must have at least a caption or media.", 400));
     }
   }
 
+ const post = await PostHelper.createPost(req.user.id, req.body);
 
-
-
-  // ── Parse location ──
-  let locationData = null;
-  if (location) {
-    try {
-      const parsed = typeof location === "string" ? JSON.parse(location) : location;
-      if (parsed?.name?.trim()) {
-        locationData = { name: parsed.name.trim() };
-        if (parsed.lat && parsed.lng) {
-          locationData.coordinates = {
-            type:        "Point",
-            coordinates: [parseFloat(parsed.lng), parseFloat(parsed.lat)],
-          };
-        }
-      }
-    } catch { /* invalid JSON — ignore */ }
+  if (!isDraft) {
+    await redis.del(`posts:feed:${req.user.id}`).catch(() => {});
+    await redis.del(`explore:posts:first:v2`).catch(() => {});
   }
 
-  // ── Create post ──
-  const newPost = await Post.create({
-    author:           authorId,
-    type,
-    caption:          caption.trim().slice(0, 2200),
-    media:            sanitized,
-    visibility,
-    commentsDisabled: Boolean(commentsDisabled),
-    likesHidden:      Boolean(likesHidden),
-   isDraft: isDraftBool,
-    ...(locationData && { location: locationData }),
-  });
-
- const populated = await Post.getPostById(
-  newPost._id,
-  authorId,
-  false,
- { allowDraft: isDraftBool },
-);
-if (!isDraftBool) {
-  await Promise.all([
-    User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } }),
-    invalidatePostFeedCache(authorId.toString()),
-  ]);
-}
-  logger.info("Post created", { postId: newPost._id, author: authorId, type });
+  logger.info("Post created", { postId: post.id, author: req.user.id, type });
 
   return res.status(201).json({
     success: true,
     message: "Post created successfully",
-    post:    populated,
+    post,
   });
 });
 
+// ─────────────────────────────────────────────
+//  GET POST
+//  GET /api/v2/posts/:postId
+// ─────────────────────────────────────────────
 
-export const getPost = asyncHandler(async (req, res) => {
-  const post = await Post.getPostById(req.params.postId);
-  if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+export const getPost = asyncHandler(async (req, res, next) => {
+  if (!isValidUUID(req.params.postId)) {
+    return next(new AppError("Invalid post ID.", 400));
+  }
 
-  // View tracking frontend recordView se hogi — getPost sirf data dega
+  const post = await PostHelper.getPostById(req.params.postId, req.user?.id);
+  if (!post) {
+    return next(new AppError("Post not found.", 404));
+  }
+
   return res.status(200).json({ success: true, post });
 });
-export const getPostInteraction = asyncHandler(async (req, res) => {
-  const { postId } = req.params;
-  const userId     = req.user._id;
 
-  // Run both checks in parallel — no sequential DB calls
-  const [liked, saved] = await Promise.all([
-    Like.hasLiked(userId, postId, "Post"),
-    Saved.hasSaved(userId, postId),
+// ─────────────────────────────────────────────
+//  GET POST INTERACTION
+//  GET /api/v2/posts/:postId/interaction
+// ─────────────────────────────────────────────
+
+// export const getPostInteraction = asyncHandler(async (req, res, next) => {
+//   const { postId } = req.params;
+//   const userId = req.user.id;
+
+//   if (!isValidUUID(postId)) {
+//     return next(new AppError("Invalid post ID.", 400));
+//   }
+
+//   const [liked, saved] = await Promise.all([
+//     prisma.like.findFirst({
+//   where: { likedById: userId, postId, commentId: null, storyId: null },
+//   select: { id: true },
+// }),
+//     prisma.saved.findUnique({
+//      where: { savedById_postId: { savedById: userId, postId } },
+//       select: { id: true },
+//     }),
+//   ]);
+
+//   return res.status(200).json({
+//     success: true,
+//     liked: !!liked,
+//     saved: !!saved,
+//   });
+// });
+
+export const getPostInteraction = asyncHandler(async (req, res, next) => {
+  const { postId } = req.params;
+  const userId = req.user.id;
+
+  if (!isValidUUID(postId)) {
+    return next(new AppError("Invalid post ID.", 400));
+  }
+
+  const [liked, saved, post] = await Promise.all([
+    prisma.like.findFirst({
+      where: { likedById: userId, postId, commentId: null, storyId: null },
+      select: { id: true },
+    }),
+    prisma.saved.findUnique({
+      where: { savedById_postId: { savedById: userId, postId } },
+      select: { id: true },
+    }),
+    prisma.post.findUnique({
+      where: { id: postId },
+      select: { likesCount: true, commentsCount: true, viewsCount: true },
+    }),
   ]);
 
-  return res.status(200).json({ success: true, liked, saved });
+  return res.status(200).json({
+    success: true,
+    liked: !!liked,
+    saved: !!saved,
+    likesCount: post?.likesCount ?? 0,
+    commentsCount: post?.commentsCount ?? 0,
+    viewsCount: post?.viewsCount ?? 0,
+  });
 });
-
 // ─────────────────────────────────────────────
 //  GET FEED POSTS
 //  GET /api/v2/posts/feed
 // ─────────────────────────────────────────────
-export const getFeedPosts = asyncHandler(async (req, res) => {
+
+export const getFeedPosts = asyncHandler(async (req, res, next) => {
+  const cacheKey = `posts:feed:${req.user.id}`;
+
+  // Cache first page only
   if (!req.query.beforeId) {
-    const cached = await getPostFeedCache(req.user._id.toString());
-    if (cached) {
-      return res.status(200).json({ ...cached, fromCache: true });
-    }
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return res.status(200).json({ ...JSON.parse(cached), fromCache: true });
+      }
+    } catch {}
   }
+
   const { beforeId } = req.query;
-  const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
-  const userId       = req.user._id;
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+  const userId = req.user.id;
 
-  // const follows   = await Follow.find({ follower: userId }).select("following").lean();
-  // const authorIds = [userId, ...follows.map((f) => f.following)];
+  // Get following list
+  const follows = await prisma.follow.findMany({
+    where: { followerId: userId, status: "accepted" },
+    select: { followingId: true },
+  });
 
+  const rawIds = [userId, ...follows.map((f) => f.followingId)];
 
+  // Filter out super_admin
+  const hiddenUsers = await prisma.user.findMany({
+    where: { role: "super_admin" },
+    select: { id: true },
+  });
+  const hiddenIds = new Set(hiddenUsers.map((u) => u.id));
+  const authorIds = rawIds.filter((id) => !hiddenIds.has(id));
 
-  // NAYA
-const follows   = await Follow.find({ follower: userId }).select("following").lean();
-const rawIds    = [userId, ...follows.map((f) => f.following)];
-
-const hiddenUsers = await User.find({ role: "super_admin" }).select("_id").lean();
-const hiddenIds   = new Set(hiddenUsers.map((u) => u._id.toString()));
-const authorIds   = rawIds.filter((id) => !hiddenIds.has(id.toString()));
-  const { items, hasMore, nextCursor } = await Post.getFeedPosts(authorIds, { beforeId: beforeId || null, limit });
+  const { items, hasMore, nextCursor } = await PostHelper.getFeedPosts(authorIds, {
+    beforeId: beforeId || null,
+    limit,
+  });
 
   const responseData = { success: true, posts: items, hasMore, nextCursor };
-  if (!beforeId) await setPostFeedCache(userId.toString(), responseData);
+
+  if (!beforeId) {
+    try {
+      await redis.set(cacheKey, JSON.stringify(responseData), { ex: 300 });
+    } catch {}
+  }
+
   return res.status(200).json(responseData);
 });
-// ─────────────────────────────────────────────
-//  GET USER POSTS (Profile Grid)
-//  GET /api/v2/posts/user/:userId
-// ─────────────────────────────────────────────
-// export const getUserPosts = asyncHandler(async (req, res) => {
-//   const { userId }   = req.params;
-//   const targetUser = await User.findById(userId).select("role").lean();
-// if (targetUser?.role === "super_admin") {
-//   return res.status(200).json({ 
-//     success: true, data: [], hasMore: false, nextCursor: null, postsCount: 0 
-//   });
-// }
-//   const { beforeId } = req.query;
-//  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 500));
-
-// const postsCount = await Post.countDocuments({
-//   author:    new mongoose.Types.ObjectId(userId),
-//   isDeleted: false,
-//   isDraft:   false,
-// });
-//   const viewerId     = req.user._id.toString();
-
-//   const isOwner    = viewerId === userId;
-//   const isFollower = isOwner
-//     ? false
-//     : !!(await Follow.findOne({ follower: viewerId, following: userId }).lean());
-
-//   const { items, hasMore, nextCursor } = await Post.getUserPosts(
-//     userId, isFollower, isOwner, { beforeId: beforeId || null, limit }
-//   );
-
-//   return res.status(200).json({ success: true, data: items, hasMore, nextCursor, postsCount });
-// });
 
 // ─────────────────────────────────────────────
 //  GET USER POSTS (Profile Grid)
 //  GET /api/v2/posts/user/:userId
 // ─────────────────────────────────────────────
-export const getUserPosts = asyncHandler(async (req, res) => {
+
+export const getUserPosts = asyncHandler(async (req, res, next) => {
   const { userId } = req.params;
 
+  if (!isValidUUID(userId)) {
+    return next(new AppError("Invalid user ID.", 400));
+  }
+
   // super_admin block
-  const targetUser = await User.findById(userId).select("role").lean();
+  const targetUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, isPrivate: true },
+  });
+
   if (targetUser?.role === "super_admin") {
     return res.status(200).json({
-      success: true, data: [], hasMore: false, nextCursor: null, postsCount: 0,
+      success: true,
+      data: [],
+      hasMore: false,
+      nextCursor: null,
+      postsCount: 0,
     });
   }
 
-  const limit    = Math.min(18, Math.max(1, parseInt(req.query.limit) || 18));
+  const limit = Math.min(18, Math.max(1, parseInt(req.query.limit) || 18));
   const beforeId = req.query.beforeId?.trim() || null;
-  const viewerId = req.user._id.toString();
-  const isOwner  = viewerId === userId;
+  const viewerId = req.user.id;
+  const isOwner = viewerId === userId;
 
-  // postsCount aur follow check parallel mein
+  // Get postsCount and follow status in parallel
   const [postsCount, followRecord] = await Promise.all([
-    Post.countDocuments({
-      author:    new mongoose.Types.ObjectId(userId),
-      isDeleted: false,
-      isDraft:   false,
+    prisma.post.count({
+      where: {
+        authorId: userId,
+        isDeleted: false,
+        isDraft: false,
+      },
     }),
     isOwner
       ? Promise.resolve(null)
-      : Follow.findOne({ follower: viewerId, following: userId }).select("status").lean(),
+      : prisma.follow.findUnique({
+          where: { followerId_followingId: { followerId: viewerId, followingId: userId } },
+          select: { status: true },
+        }),
   ]);
 
   const isFollower = followRecord?.status === "accepted";
 
-  const { items, hasMore, nextCursor } = await Post.getUserPosts(
-    userId, isFollower, isOwner, { beforeId, limit }
+  const { items, hasMore, nextCursor } = await PostHelper.getUserPosts(
+    userId,
+    isFollower,
+    isOwner,
+    { beforeId, limit }
   );
 
   return res.status(200).json({
     success: true,
-    data:    items,
+    data: items,
     hasMore,
     nextCursor,
     postsCount,
   });
 });
+
 // ─────────────────────────────────────────────
 //  DELETE POST
 //  DELETE /api/v2/posts/:postId
 // ─────────────────────────────────────────────
-export const deletePost = asyncHandler(async (req, res) => {
-  const { postId } = req.params;
-  const authorId   = req.user._id;
 
-  const post = await Post.findOne({ _id: postId, author: authorId, isDeleted: false });
-  if (!post) {
-    return res.status(404).json({ success: false, message: "Post not found" });
+export const deletePost = asyncHandler(async (req, res, next) => {
+  const { postId } = req.params;
+  const userId = req.user.id;
+
+  if (!isValidUUID(postId)) {
+    return next(new AppError("Invalid post ID.", 400));
   }
 
-  // Cloudinary se media delete karo
-  // for (const item of post.media) {
-  //   await deleteFromCloudinary(item.publicId, item.resourceType).catch((err) => {
-  //     logger.warn("Cloudinary delete failed", { publicId: item.publicId, error: err.message });
-  //   });
-  // }
+  const post = await PostHelper.deletePost(postId, userId);
+  if (!post) {
+    return next(new AppError("Post not found.", 404));
+  }
 
+  // Delete media from Cloudinary in parallel
   await Promise.all(
-  post.media.map((item) =>
-    deleteFromCloudinary(item.publicId, item.resourceType).catch((err) =>
-      logger.warn("Cloudinary delete failed", { publicId: item.publicId, error: err.message })
+    post.media.map((item) =>
+      deleteFromCloudinary(item.publicId, item.resourceType).catch((err) => {
+        logger.warn("Cloudinary delete failed", { publicId: item.publicId, error: err.message });
+      })
     )
-  )
-);
+  );
 
-  await Post.softDelete(postId, authorId);
+  await redis.del(`posts:feed:${userId}`).catch(() => {});
+  await redis.del(`explore:posts:first:v2`).catch(() => {});
 
-
-if (!post.isDraft) {
-  await Promise.all([
-    User.findOneAndUpdate(
-      { _id: authorId, postsCount: { $gt: 0 } },
-      { $inc: { postsCount: -1 } },
-    ),
-    invalidatePostFeedCache(authorId.toString()),
-  ]);
-}
-  logger.info("Post deleted", { postId, author: authorId });
+  logger.info("Post deleted", { postId, author: userId });
 
   return res.status(200).json({ success: true, message: "Post deleted successfully" });
 });
-
-
 
 // ─────────────────────────────────────────────
 //  GET DRAFT POSTS
 //  GET /api/v2/posts/drafts
 // ─────────────────────────────────────────────
-export const recordView = asyncHandler(async (req, res) => {
-  const { postId }               = req.params;
-  const { source = "modal", duration = 0 } = req.body || {};
-  const userId                   = req.user._id;
-
-  // ── 1. Post fetch — author check ──
-  const post = await Post.findById(postId).select("author viewsCount").lean();
-  if (!post) return res.status(404).json({ success: false, message: "Post not found" });
-
-  // ── 2. Owner ka view count nahi ──
-  if (post.author.toString() === userId.toString()) {
-    return res.status(200).json({ success: true, skipped: true, reason: "owner" });
-  }
-  // Redis dedup — 24h mein ek baar hi DB write
-  const alreadySeen = await isPostAlreadyViewed(postId, userId.toString());
-  if (alreadySeen) {
-    return res.status(200).json({ success: true, recorded: false });
-  }
-
-  // ── 3. Valid source check ──
-  const validSources = ["feed", "explore", "profile", "direct", "modal"];
-  const safeSource   = validSources.includes(source) ? source : "modal";
-
-  // ── 4. Device detect ──
-  const ua     = req.headers["user-agent"] || "";
-  const device = /mobile/i.test(ua) ? "mobile" : /tablet|ipad/i.test(ua) ? "tablet" : "desktop";
-
-  // ── 5. Try insert — duplicate silently ignore ──
-  // ── 5. Delegate to model static — single source of truth ──
-  const { isNewView } = await PostView.recordView({
-    user:     userId,
-    post:     postId,
-    source:   safeSource,
-    duration: Number(duration) || 0,
-    device,
-  });
-
-  if (isNewView) {
-    logger.info("View recorded", { postId, userId, source: safeSource, device });
-  }
-
-  return res.status(200).json({ success: true, recorded: isNewView });
-   
- 
-});
 
 export const getDraftPosts = asyncHandler(async (req, res) => {
-  const authorId = req.user._id;
+  const userId = req.user.id;
+  const limit = Math.min(20, Math.max(1, parseInt(req.query.limit) || 20));
+  const beforeId = req.query.beforeId?.trim() || null;
 
-  // const drafts = await Post.find({
-  //   author:    authorId,
-  //   isDraft:   true,
-  //   isDeleted: false,
-  // })
-  //   .sort({ createdAt: -1 })
-  //   .select("media type caption likesCount commentsCount viewsCount createdAt isDraft");
+  if (beforeId && !isValidUUID(beforeId)) {
+    return res.status(400).json({ success: false, message: "Invalid cursor." });
+  }
 
+  const { items, hasMore, nextCursor } = await PostHelper.getDraftPosts(userId, { beforeId, limit });
 
-  const limit  = Math.min(20, Math.max(1, parseInt(req.query.limit) || 20));
-const beforeId = req.query.beforeId?.trim() || null;
-
-const query = { author: authorId, isDraft: true, isDeleted: false };
-if (beforeId) query._id = { $lt: new mongoose.Types.ObjectId(beforeId) };
-
-const drafts = await Post.find(query)
-  .sort({ createdAt: -1 })
-  .limit(limit + 1)
-  .select("media type caption likesCount commentsCount viewsCount createdAt isDraft");
-
-const hasMore = drafts.length > limit;
-const items   = hasMore ? drafts.slice(0, limit) : drafts;
-
-return res.status(200).json({
-  success: true,
-  posts:   items,
-  hasMore,
-  nextCursor: hasMore ? items[items.length - 1]._id : null,
+  return res.status(200).json({
+    success: true,
+    posts: items,
+    hasMore,
+    nextCursor,
+  });
 });
-});
-
 
 // ─────────────────────────────────────────────
 //  PUBLISH DRAFT
 //  PATCH /api/v2/posts/:postId/publish
 // ─────────────────────────────────────────────
-export const publishDraft = asyncHandler(async (req, res , next) => {
+
+export const publishDraft = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
-  const authorId   = req.user._id;
+  const userId = req.user.id;
 
-  const post = await Post.findOne({
-    _id:       postId,
-    author:    authorId,
-    isDraft:   true,
-    isDeleted: false,
-  });
-
-  if (!post) {
-    return res.status(404).json({ success: false, message: "Draft not found" });
+  if (!isValidUUID(postId)) {
+    return next(new AppError("Invalid post ID.", 400));
   }
-// post.isDraft = false; se pehle add karo:
-if (post.type === "image" && post.media.length < 1) {
-  return next(new AppError("Image post requires at least one image.", 400));
-}
-if (post.type === "reel" && post.media.length !== 1) {
-  return next(new AppError("Reel must have exactly one video.", 400));
-}
-  post.isDraft = false;
-  await post.save();
 
- const [populated] = await Promise.all([
-  Post.getPostById(post._id, authorId, false),
-  User.findByIdAndUpdate(authorId, { $inc: { postsCount: 1 } }),
-  invalidatePostFeedCache(authorId.toString()),
-]);
-  logger.info("Draft published", { postId, author: authorId });
+  try {
+    const post = await PostHelper.publishDraft(postId, userId);
+    if (!post) {
+      return next(new AppError("Draft not found.", 404));
+    }
 
-  return res.status(200).json({
-    success: true,
-    message: "Post published successfully",
-    post:    populated,
-  });
+    await redis.del(`posts:feed:${userId}`).catch(() => {});
+
+    logger.info("Draft published", { postId, author: userId });
+
+    return res.status(200).json({
+      success: true,
+      message: "Post published successfully",
+      post,
+    });
+  } catch (err) {
+    return next(new AppError(err.message, 400));
+  }
 });
 
-
-
+// ─────────────────────────────────────────────
+//  UPDATE POST
+//  PATCH /api/v2/posts/:postId
+// ─────────────────────────────────────────────
 
 export const updatePost = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
   const { caption, isDraft, media } = req.body;
 
-  const post = await Post.findOne({
-    _id: postId,
-    author: req.user._id,
-    isDeleted: false,
-  });
-  if (!post) return next(new AppError("Post not found.", 404));
-
-  // ── Caption update ──
-  if (caption !== undefined) {
-    if (caption.length > 2200)
-      return next(new AppError("Caption cannot exceed 2200 characters.", 400));
-    post.caption = caption.trim();
+  if (!isValidUUID(postId)) {
+    return next(new AppError("Invalid post ID.", 400));
   }
 
-  // ── isDraft update ──
-  if (isDraft !== undefined) {
-    post.isDraft = isDraft === true || isDraft === "true";
-  }
+  try {
+    // Get current media for deletion tracking
+    const current = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { media: true },
+    });
 
-  // ── Media update ──
-  if (media !== undefined) {
-    // Purani media jo ab nahi chahiye — Cloudinary se delete karo
-    const newPublicIds = media.map((m) => m.publicId);
-    const toDelete = post.media.filter(
-      (m) => !newPublicIds.includes(m.publicId)
-    );
+    if (!current) {
+      return next(new AppError("Post not found.", 404));
+    }
 
-    await Promise.all(
-      toDelete.map((m) =>
-        deleteFromCloudinary(m.publicId, m.resourceType).catch((err) =>
-          logger.warn("Cloudinary delete failed", {
-            publicId: m.publicId,
-            error: err.message,
+    // Delete removed media from Cloudinary
+    if (media) {
+      const newPublicIds = media.map((m) => m.publicId);
+      const toDelete = current.media.filter((m) => !newPublicIds.includes(m.publicId));
+
+      await Promise.all(
+        toDelete.map((m) =>
+          deleteFromCloudinary(m.publicId, m.resourceType).catch((err) => {
+            logger.warn("Cloudinary delete failed", { publicId: m.publicId, error: err.message });
           })
         )
-      )
-    );
-
-    // ── Type-wise validation ──
-    if (post.type === "reel" && media.length !== 1) {
-      return next(new AppError("Reel must have exactly one video.", 400));
-    }
-    if (post.type === "image" && (media.length < 1 || media.length > 10)) {
-      return next(new AppError("Image post requires 1–10 images.", 400));
-    }
-    if (post.type === "text" && media.length > 0) {
-      return next(new AppError("Text post cannot have media.", 400));
+      );
     }
 
-    post.media = media.map(sanitizeMediaItem);
+    const updated = await PostHelper.updatePost(postId, req.user.id, req.body);
+    if (!updated) {
+      return next(new AppError("Post not found.", 404));
+    }
+
+    await redis.del(`posts:feed:${req.user.id}`).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: "Post updated.",
+      post: updated,
+    });
+  } catch (err) {
+    return next(new AppError(err.message, 400));
+  }
+});
+
+// ─────────────────────────────────────────────
+//  RECORD VIEW
+//  POST /api/v2/posts/:postId/view
+// ─────────────────────────────────────────────
+
+export const recordView = asyncHandler(async (req, res, next) => {
+  const { postId } = req.params;
+  const { source = "modal", duration = 0 } = req.body || {};
+  const userId = req.user.id;
+
+  if (!isValidUUID(postId)) {
+    return next(new AppError("Invalid post ID.", 400));
   }
 
-  await post.save();
+  // Validate source
+  const validSources = ["feed", "explore", "profile", "direct", "modal"];
+  const safeSource = validSources.includes(source) ? source : "modal";
 
-  const populated = await Post.getPostById(
-    post._id,
-    req.user._id,
-    false,
-    { allowDraft: post.isDraft }
-  );
+  // Detect device
+  const ua = req.headers["user-agent"] || "";
+  const device = /mobile/i.test(ua) ? "mobile" : /tablet|ipad/i.test(ua) ? "tablet" : "desktop";
 
-  return res.status(200).json({
-    success: true,
-    message: "Post updated.",
-    post: populated,
+  const result = await PostHelper.recordPostView(postId, userId, {
+    source: safeSource,
+    duration: Number(duration) || 0,
+    device,
   });
+
+  if (!result) {
+    return next(new AppError("Post not found.", 404));
+  }
+
+  if (result.isNewView) {
+    logger.info("View recorded", { postId, userId, source: safeSource, device });
+  }
+
+  const updatedPost = await prisma.post.findUnique({
+  where: { id: postId },
+  select: { viewsCount: true },
+});
+
+return res.status(200).json({
+  success: true,
+  recorded: result.isNewView,
+  selfView: result.selfView,
+  viewsCount: updatedPost?.viewsCount ?? 0,
+});
 });

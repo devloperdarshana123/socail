@@ -1,22 +1,29 @@
 
+
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import User from "../../models/user.model.js";
-import { sendAdminToken }             from "../../utils/sendAdminToken.js";
-import { clearAdminCookies }          from "../../utils/authCookies.js";
+import prisma from "../../config/prisma.js";
+import { sendAdminToken }    from "../../utils/sendAdminToken.js";
+import { clearAdminCookies } from "../../utils/authCookies.js";
 import { ADMIN_COOKIE_ACCESS, ADMIN_COOKIE_REFRESH } from "../../utils/authCookies.js";
-import logger from "../../config/logger.js";
-import jwt from "jsonwebtoken";
-import crypto from "crypto";
+import logger  from "../../config/logger.js";
+import jwt     from "jsonwebtoken";
+import crypto  from "crypto";
+import bcrypt  from "bcryptjs";
 import { ENV } from "../../config/env.js";
-import { blacklistToken ,  generateJti }  from "../../utils/tokenBlacklist.js";
+import { blacklistToken, generateJti } from "../../utils/tokenBlacklist.js";
 import redis from "../../config/redis.js";
-// ─────────────────────────────────────────────
-//  Internal helper — must match User model's hashToken
-// ─────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 function hashToken(raw) {
   return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+async function verifyPassword(plain, hashed) {
+  return bcrypt.compare(plain, hashed);
 }
 
 // ═════════════════════════════════════════════
@@ -30,17 +37,33 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
     return next(new AppError("Email and password are required", 400));
   }
 
-  const user = await User.findByEmail(email).select("+password");
-  if (!user) return next(new AppError("Invalid email or password", 401));
+  // Prisma: findUnique by email
+  const user = await prisma.user.findUnique({
+    where: { email: email.trim().toLowerCase() },
+    select: {
+      id:            true,
+      fullName:      true,
+      email:         true,
+      username:      true,
+      password:      true,
+      role:          true,
+      accountStatus: true,
+      avatar:        true,
+    },
+  });
 
-  const isMatch = await user.isPasswordCorrect(password);
+  if (!user || !user.password) {
+    return next(new AppError("Invalid email or password", 401));
+  }
+
+  const isMatch = await verifyPassword(password, user.password);
   if (!isMatch) {
     logger.warn("Admin failed login attempt", { email, ip: req.ip });
     return next(new AppError("Invalid email or password", 401));
   }
 
   if (user.role !== "super_admin") {
-    logger.warn("Unauthorized admin login attempt", { userId: user._id, role: user.role, ip: req.ip });
+    logger.warn("Unauthorized admin login attempt", { userId: user.id, role: user.role, ip: req.ip });
     return next(new AppError("Access denied. Admin privileges required.", 403));
   }
 
@@ -48,13 +71,14 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
   if (user.accountStatus === "suspended")   return next(new AppError("This account is temporarily suspended.", 403));
   if (user.accountStatus === "deactivated") return next(new AppError("This account has been deactivated.", 403));
 
-  logger.info("Admin logged in", { userId: user._id, email: user.email, role: user.role });
+  logger.info("Admin logged in", { userId: user.id, email: user.email, role: user.role });
 
+  // sendAdminToken expects a user object — pass prisma user directly
   await sendAdminToken(user, 200, res, {
-    message   : "Admin login successful",
-    nextRoute : "/dashboard",
+    message:    "Admin login successful",
+    nextRoute:  "/dashboard",
     deviceInfo: req.headers["user-agent"] || "unknown",
-    ipAddress : req.ip,
+    ipAddress:  req.ip,
   }, next);
 });
 
@@ -64,7 +88,9 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
 
 export const adminLogout = asyncHandler(async (req, res, next) => {
   const incomingRefreshToken = req.cookies?.[ADMIN_COOKIE_REFRESH];
-const accessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];
+  const accessToken          = req.cookies?.[ADMIN_COOKIE_ACCESS];
+
+  // Blacklist current access token
   if (accessToken) {
     try {
       const decoded = jwt.decode(accessToken);
@@ -74,25 +100,28 @@ const accessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];
     } catch { /* ignore */ }
   }
 
+  // Remove refresh token from DB
   if (incomingRefreshToken) {
-    const userWithTokens = await User.findById(req.user._id).select("+refreshTokens");
-    if (userWithTokens) {
-      // removeRefreshToken hashes the raw token internally — correct
-      await userWithTokens.removeRefreshToken(incomingRefreshToken);
-    }
+    const tokenHash = hashToken(incomingRefreshToken);
+    await prisma.refreshToken.deleteMany({
+      where: {
+        userId:    req.user.id,
+        tokenHash,
+      },
+    });
   }
 
-  logger.info("Admin logged out", { userId: req.user._id });
+  logger.info("Admin logged out", { userId: req.user.id });
   return clearAdminCookies(res).status(200).json({ success: true, message: "Logged out successfully" });
 });
 
+// ═════════════════════════════════════════════
+//  POST /admin/auth/refresh-token
+// ═════════════════════════════════════════════
 
-
-
-
-  // Access token blacklist karo
 export const adminRefreshToken = asyncHandler(async (req, res, next) => {
   const incomingRefreshToken = req.cookies?.[ADMIN_COOKIE_REFRESH];
+
   // ── Step 1: Cookie present? ──────────────────────────────────────────────
   if (!incomingRefreshToken) {
     logger.warn("Admin refresh: no refresh token cookie", { ip: req.ip });
@@ -102,59 +131,68 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
   // ── Step 2: JWT signature + expiry valid? ────────────────────────────────
   let decoded;
   try {
-   decoded = jwt.verify(incomingRefreshToken, ENV.ADMIN_REFRESH_TOKEN_SECRET);
+    decoded = jwt.verify(incomingRefreshToken, ENV.ADMIN_REFRESH_TOKEN_SECRET);
   } catch (err) {
-    logger.warn("Admin refresh: JWT verify failed", {
-      reason: err.message,
-      ip: req.ip,
-    });
+    logger.warn("Admin refresh: JWT verify failed", { reason: err.message, ip: req.ip });
     return next(new AppError("Invalid or expired refresh token. Please log in again.", 401));
   }
 
   // ── Step 3: User exists in DB? ───────────────────────────────────────────
-  const user = await User.findById(decoded._id).select("+refreshTokens");
+  const user = await prisma.user.findUnique({
+    where: { id: decoded._id },
+    select: {
+      id:            true,
+      fullName:      true,
+      email:         true,
+      username:      true,
+      role:          true,
+      accountStatus: true,
+      avatar:        true,
+    },
+  });
+
   if (!user) {
     logger.warn("Admin refresh: user not found", { userId: decoded._id });
     return next(new AppError("User not found.", 401));
   }
 
-  // ── Step 4: Still an admin? (never trust token payload for authz) ────────
+  // ── Step 4: Still an admin? ──────────────────────────────────────────────
   if (user.role !== "super_admin") {
-    logger.warn("Admin refresh: role downgraded", {
-      userId: user._id,
-      role: user.role,
-    });
+    logger.warn("Admin refresh: role downgraded", { userId: user.id, role: user.role });
     return next(new AppError("Access denied.", 403));
   }
 
   // ── Step 5: Token hash in DB and not expired? ────────────────────────────
-  const incomingHash = crypto.createHash("sha256").update(incomingRefreshToken).digest("hex");
+  const incomingHash = hashToken(incomingRefreshToken);
   const now          = new Date();
-  const storedToken  = user.refreshTokens.find(
-    (t) => t.tokenHash === incomingHash && t.expiresAt > now,
-  );
+
+  const storedToken = await prisma.refreshToken.findFirst({
+    where: {
+      userId:    user.id,
+      tokenHash: incomingHash,
+      expiresAt: { gt: now },
+    },
+  });
 
   if (!storedToken) {
     logger.warn("Admin refresh: token hash not found or expired", {
-      userId: user._id,
-      // Log first 8 chars of hash for debugging (never log full token)
-      hashPrefix: incomingHash.slice(0, 8),
-      totalTokensInDB: user.refreshTokens.length,
+      userId:          user.id,
+      hashPrefix:      incomingHash.slice(0, 8),
     });
     return next(new AppError("Session invalid. Please log in again.", 401));
   }
 
-
-  // Account status check
+  // ── Account status check ─────────────────────────────────────────────────
   if (user.accountStatus === "banned" || user.accountStatus === "suspended") {
-    await user.removeRefreshToken(incomingRefreshToken);
+    await prisma.refreshToken.delete({ where: { id: storedToken.id } });
     return next(new AppError("Your account has been suspended or banned.", 403));
   }
 
-  // ── Step 6: Rotate tokens (atomic — new method handles cleanup + push) ───
-  await user.removeRefreshToken(incomingRefreshToken);
-  // Purana access token blacklist karo
-const oldAccessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];
+  // ── Step 6: Rotate — delete old, create new ──────────────────────────────
+  await prisma.refreshToken.delete({ where: { id: storedToken.id } });
+
+  // Blacklist old access token
+  const oldAccessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];
   if (oldAccessToken) {
     try {
       const oldDecoded = jwt.decode(oldAccessToken);
@@ -164,29 +202,35 @@ const oldAccessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];
     } catch { /* ignore */ }
   }
 
-  const newAccessToken  = user.generateAdminAccessToken();
-const newRefreshToken = await user.generateAdminRefreshToken(
-  storedToken.deviceInfo,
-  storedToken.ipAddress,
-);
+  // Generate new tokens
+  // NOTE: generateAdminAccessToken / generateAdminRefreshToken are util functions
+  // that only need user.id and user.role — adjust import path as needed
+  const { generateAdminAccessToken, generateAdminRefreshToken } = await import("../../utils/userHelpers.js");
+
+  const newAccessToken  = generateAdminAccessToken(user);
+  const newRefreshToken = await generateAdminRefreshToken(user, {
+    deviceInfo: storedToken.deviceInfo,
+    ipAddress:  storedToken.ipAddress,
+  });
 
   // ── Step 7: Set new cookies ──────────────────────────────────────────────
   const isProduction = process.env.NODE_ENV === "production";
 
   const baseCookieOptions = {
     httpOnly: true,
-    path    : "/",
+    path:     "/",
     sameSite: isProduction ? "none" : "lax",
-    secure  : isProduction,
-    // In development: NO domain field — browser handles localhost correctly
-    // In production: set domain explicitly e.g. domain: ".yourdomain.com"
+    secure:   isProduction,
     ...(isProduction && process.env.COOKIE_DOMAIN
       ? { domain: process.env.COOKIE_DOMAIN }
       : {}),
   };
-await redis.del(`user:${user._id}`).catch(() => {});
+
+  // Clear Redis cache for this user
+  await redis.del(`user:${user.id}`).catch(() => {});
+
   logger.info("Admin token refreshed", {
-    userId:     user._id,
+    userId:     user.id,
     deviceInfo: storedToken.deviceInfo,
   });
 
@@ -194,7 +238,7 @@ await redis.del(`user:${user._id}`).catch(() => {});
     .status(200)
     .cookie(ADMIN_COOKIE_ACCESS, newAccessToken, {
       ...baseCookieOptions,
-      maxAge: 15 * 60 * 1000, // 15 min
+      maxAge: 15 * 60 * 1000,          // 15 min
     })
     .cookie(ADMIN_COOKIE_REFRESH, newRefreshToken, {
       ...baseCookieOptions,
@@ -203,50 +247,39 @@ await redis.del(`user:${user._id}`).catch(() => {});
     .json({
       success: true,
       message: "Token refreshed successfully",
-      // Only expose token in response body during local development
-      // Frontend does NOT need this — it reads from cookie automatically
       ...(process.env.NODE_ENV === "development" && {
         _debug: { accessToken: newAccessToken },
       }),
     });
 });
+
 // ═════════════════════════════════════════════
 //  GET /admin/auth/me  (protected)
 // ═════════════════════════════════════════════
 
 export const getAdminMe = asyncHandler(async (req, res) => {
-  const { _id, fullName, email, username, role, avatar } = req.user;
+  const { id, fullName, email, username, role, avatar } = req.user;
   return res.status(200).json({
     success: true,
-    data   : { _id, fullName, email, username, role, avatar },
+    data:    { id, fullName, email, username, role, avatar },
   });
 });
-
 
 // ═════════════════════════════════════════════
 //  GET /admin/auth/socket-token  (protected)
 // ═════════════════════════════════════════════
 
 export const getAdminSocketToken = asyncHandler(async (req, res) => {
-  // const token = jwt.sign(
-  //   {
-  //     _id:  req.user._id,
-  //     id:   req.user._id,
-  //     role: req.user.role,
-  //   },
-  //   ENV.ADMIN_ACCESS_TOKEN_SECRET,
-  //   { expiresIn: "1m" }
-  // );
-
   const token = jwt.sign(
-  {
-    _id:  req.user._id,
-    id:   req.user._id,
-    role: req.user.role,
-    jti:  generateJti(),
-  },
-  ENV.ADMIN_ACCESS_TOKEN_SECRET,
-  { expiresIn: "1m" }
-);
+    {
+      _id:  req.user.id,
+      id:   req.user.id,
+      role: req.user.role,
+      jti:  generateJti(),
+    },
+    ENV.ADMIN_ACCESS_TOKEN_SECRET,
+    { expiresIn: "1m" },
+  );
+
   return res.status(200).json({ success: true, data: { token } });
 });

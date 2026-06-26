@@ -1,125 +1,118 @@
-import mongoose from "mongoose";
+
+
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import Saved from "../../models/saved.model.js";
-import Post from "../../models/post.model.js";
-import Follow from "../../models/follow.model.js";
 import logger from "../../config/logger.js";
+import * as SavedHelper from "../../utils/savedHelpers.js";
 import redis from "../../config/redis.js";
-// ─────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────
+import prisma from "../../config/prisma.js";
 
-const validateObjectId = (id, label = "id") => {
-  if (!mongoose.isValidObjectId(id)) {
-    throw new AppError(`Invalid ${label}`, 400);
-  }
-};
-
-/**
- * Verify post exists and is visible to the viewer.
- * Private-account posts: only followers (and author) can see/save.
- */
-const assertPostVisible = async (postId, viewerId) => {
-  const post = await Post.findOne({ _id: postId, isDeleted: false, isDraft: false })
-    .select("_id savedCount author isArchived")
-    .lean();
-
-  if (!post) throw new AppError("Post not found", 404);
-  if (post.isArchived) throw new AppError("Post not found", 404);
-
-  // Check if author's account is private
-  const author = await mongoose
-    .model("User")
-    .findById(post.author)
-    .select("isPrivate")
-    .lean();
-
-  if (author?.isPrivate && post.author.toString() !== viewerId.toString()) {
-    // Follow.getFollowStatus returns string: "accepted"|"pending"|"rejected"|null
-    const status = await Follow.getFollowStatus(viewerId, post.author);
-    if (status !== "accepted") {
-      throw new AppError("This post is from a private account", 403);
-    }
-  }
-
-  return post;
-};
+const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 // ─────────────────────────────────────────────
 //  POST /api/v2/saved/:postId
 //  Toggle save / unsave a post
 // ─────────────────────────────────────────────
-export const toggleSave = asyncHandler(async (req, res) => {
+
+export const toggleSave = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
-  const userId = req.user._id;
+  const userId = req.user.id;
 
-  validateObjectId(postId, "postId");
+  if (!isValidUUID(postId)) {
+    return next(new AppError("Invalid post ID.", 400));
+  }
 
-  // Verify post is visible before saving
-  await assertPostVisible(postId, userId);
+  try {
+    // Verify post is visible before saving
+    await SavedHelper.assertPostVisible(postId, userId);
+  } catch (err) {
+    if (err.message.includes("private")) {
+      return next(new AppError(err.message, 403));
+    }
+    return next(new AppError(err.message, 404));
+  }
 
-  // Model handles: atomic toggle + savedCount update internally
-  // Do NOT call Post.updateCount separately — that would double-count
-  const { saved } = await Saved.toggleSave(userId, postId);
+  const { saved } = await SavedHelper.toggleSave(userId, postId);
 
-  // Fetch updated count from DB (model already updated it)
-  const updated = await Post.findById(postId).select("savedCount").lean();
-  const savedCount = Math.max(0, updated?.savedCount ?? 0);
+  // Fetch updated count
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { savedCount: true },
+  });
+
+  const savedCount = Math.max(0, post?.savedCount ?? 0);
 
   logger.info(`User ${userId} ${saved ? "saved" : "unsaved"} post ${postId}`);
 
+  // Invalidate cache
+  try {
+    await redis.del(`saved:${userId}`);
+  } catch {}
 
-  try { await redis.del(`saved:${userId}`); } catch { /* ignore */ }
-  res.status(200).json({ success: true, saved, savedCount });
+  return res.status(200).json({ success: true, saved, savedCount });
 });
 
 // ─────────────────────────────────────────────
 //  GET /api/v2/saved
 //  Get paginated saved posts for the current user
 // ─────────────────────────────────────────────
-export const getSavedPosts = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
 
-  // Model accepts: { limit, beforeId }
-  // beforeId = last _id from previous page (cursor)
+export const getSavedPosts = asyncHandler(async (req, res, next) => {
+  const userId = req.user.id;
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
+  const beforeId = req.query.beforeId || null;
 
+  // Validate cursor
+  if (beforeId && !isValidUUID(beforeId)) {
+    return next(new AppError("Invalid cursor.", 400));
+  }
 
-  if (!req.query.beforeId) {
+  // Check cache (first page only)
+  if (!beforeId) {
     try {
       const cached = await redis.get(`saved:${userId}`);
       if (cached) {
-        return res.status(200).json({ success: true, data: cached.data, pagination: cached.pagination, fromCache: true });
+        const parsed = JSON.parse(cached);
+        return res.status(200).json({
+          success: true,
+          data: parsed.data,
+          pagination: parsed.pagination,
+          fromCache: true,
+        });
       }
-    } catch { /* ignore */ }
+    } catch {}
   }
-  const beforeId = req.query.beforeId || null;
 
-  // Model returns: { items, hasMore, nextCursor }
-  const { items, hasMore, nextCursor } = await Saved.getSavedPosts(userId, {
-    beforeId: beforeId && mongoose.isValidObjectId(beforeId) ? beforeId : null,
+  const { items, hasMore, nextCursor } = await SavedHelper.getSavedPosts(userId, {
+    beforeId,
     limit,
   });
 
-  // Model already filters deleted/draft posts via populate match
+  // Filter out null posts (in case post was deleted)
   const data = items
     .filter((s) => s.post)
     .map((s) => ({
       savedAt: s.createdAt,
-      post:    s.post,
+      post: s.post,
     }));
 
+  const pagination = { limit, hasMore, nextCursor };
 
-    if (!beforeId) {
+  // Cache first page only
+  if (!beforeId) {
     try {
-      await redis.set(`saved:${userId}`, JSON.stringify({ data, pagination: { limit, hasMore, nextCursor } }), { ex: 30 });
-    } catch { /* ignore */ }
+      await redis.set(
+        `saved:${userId}`,
+        JSON.stringify({ data, pagination }),
+        { ex: 30 }
+      );
+    } catch {}
   }
-  res.status(200).json({
+
+  return res.status(200).json({
     success: true,
     data,
-    pagination: { limit, hasMore, nextCursor },
+    pagination,
   });
 });
 
@@ -127,15 +120,18 @@ export const getSavedPosts = asyncHandler(async (req, res) => {
 //  GET /api/v2/saved/:postId/status
 //  Check if current user has saved a specific post
 // ─────────────────────────────────────────────
-export const getSaveStatus = asyncHandler(async (req, res) => {
+
+export const getSaveStatus = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
-  const userId = req.user._id;
+  const userId = req.user.id;
 
-  validateObjectId(postId, "postId");
+  if (!isValidUUID(postId)) {
+    return next(new AppError("Invalid post ID.", 400));
+  }
 
-  const saved = await Saved.hasSaved(userId, postId);
+  const saved = await SavedHelper.hasSaved(userId, postId);
 
-  res.status(200).json({ success: true, saved });
+  return res.status(200).json({ success: true, saved });
 });
 
 // ─────────────────────────────────────────────
@@ -143,27 +139,31 @@ export const getSaveStatus = asyncHandler(async (req, res) => {
 //  Check save status for multiple posts (max 50)
 //  Body: { postIds: ["id1", "id2", ...] }
 // ─────────────────────────────────────────────
-export const getBulkSaveStatus = asyncHandler(async (req, res) => {
-  const userId    = req.user._id;
+
+export const getBulkSaveStatus = asyncHandler(async (req, res, next) => {
+  const userId = req.user.id;
   const { postIds } = req.body;
 
-  if (!Array.isArray(postIds) || postIds.length === 0)
-    throw new AppError("postIds must be a non-empty array", 400);
-
-  if (postIds.length > 50)
-    throw new AppError("Cannot check more than 50 posts at once", 400);
-
-  for (const id of postIds) {
-    validateObjectId(id, "postId");
+  if (!Array.isArray(postIds) || postIds.length === 0) {
+    return next(new AppError("postIds must be a non-empty array", 400));
   }
 
-  // Returns Set<string> of saved postIds
-  const savedSet = await Saved.getBulkSaveStatus(userId, postIds);
+  if (postIds.length > 50) {
+    return next(new AppError("Cannot check more than 50 posts at once", 400));
+  }
+
+  // Validate all IDs
+  const invalidId = postIds.find((id) => !isValidUUID(id));
+  if (invalidId) {
+    return next(new AppError("Invalid post ID in list.", 400));
+  }
+
+  const savedSet = await SavedHelper.getBulkSaveStatus(userId, postIds);
 
   const result = {};
   for (const id of postIds) {
-    result[id] = savedSet.has(id.toString());
+    result[id] = savedSet.has(id);
   }
 
-  res.status(200).json({ success: true, data: result });
+  return res.status(200).json({ success: true, data: result });
 });

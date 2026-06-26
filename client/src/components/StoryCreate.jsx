@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, Loader2, Type, Image } from "lucide-react";
 import { useDispatch } from "react-redux";
+import EmojiPicker from "emoji-picker-react";
 import { createStory, createTextStory, fetchStoriesFeed } from "../lib/redux/storySlice";
 import { toast } from "react-hot-toast";
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
@@ -31,6 +32,8 @@ export default function StoryCreate({ onClose, onCreated }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [caption, setCaption] = useState("");
+  const [showEmoji, setShowEmoji] = useState(false);
+   const [showCaptionEmoji, setShowCaptionEmoji] = useState(false);
 
   const [text, setText] = useState("");
   const [background, setBackground] = useState(BACKGROUNDS[0]);
@@ -109,11 +112,7 @@ export default function StoryCreate({ onClose, onCreated }) {
       const result = await dispatch(
         createTextStory({ text: text.trim(), background, textAlign, textColor })
       ).unwrap();
-      // if (result) {
-      //   dispatch(fetchStoriesFeed());
-      //   onCreated?.(result);
-      //   onClose();
-      // }
+    
 
       if (result) {
   onCreated?.(result);
@@ -180,10 +179,11 @@ export default function StoryCreate({ onClose, onCreated }) {
           {/* Media Pane */}
           {tab === "media" && (
             <>
-              <label
+             <label
                 htmlFor="story-file-input"
                 className="relative mx-5 mt-4 rounded-xl overflow-hidden cursor-pointer bg-[#f5ece0] flex items-center justify-center block"
                 style={{ height: 300 }}
+                onClick={(e) => e.stopPropagation()}
               >
                 {preview ? (
                   file?.type.startsWith("video") ? (
@@ -236,16 +236,35 @@ export default function StoryCreate({ onClose, onCreated }) {
                 />
               </label>
 
-              <div className="px-5 mt-3">
-                <input
-                  type="text"
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="Add a caption..."
-                  maxLength={200}
-                  disabled={uploading}
-                  className="w-full bg-[#f5ece0] rounded-full px-4 py-2.5 text-sm outline-none text-[#2d1f0f] placeholder:text-[#b0926a] focus:ring-1 focus:ring-[#c09a6e] disabled:opacity-50"
-                />
+             <div className="px-5 mt-3 relative">
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    placeholder="Add a caption..."
+                    maxLength={200}
+                    disabled={uploading}
+                    className="w-full bg-[#f5ece0] rounded-full px-4 py-2.5 pr-10 text-sm outline-none text-[#2d1f0f] placeholder:text-[#b0926a] focus:ring-1 focus:ring-[#c09a6e] disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCaptionEmoji((v) => !v)}
+                    className="absolute right-3 text-lg"
+                  >😊</button>
+                </div>
+                {showCaptionEmoji && (
+                  <div className="absolute z-50 right-0 bottom-12">
+                    <EmojiPicker
+                      onEmojiClick={(ed) => {
+                        setCaption((p) => p + ed.emoji);
+                      }}
+                      width={280} height={320}
+                      skinTonesDisabled
+                      previewConfig={{ showPreview: false }}
+                    />
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -264,6 +283,27 @@ export default function StoryCreate({ onClose, onCreated }) {
                 >
                   {text.trim() || "Your text here..."}
                 </p>
+              </div>
+
+             {/* Emoji Button + Picker */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowEmoji((v) => !v)}
+                  className="text-xl mb-1"
+                >😊</button>
+                {showEmoji && (
+                  <div className="absolute z-50" style={{ bottom: 36 }}>
+                    <EmojiPicker
+                      onEmojiClick={(ed) => {
+                        setText((p) => p + ed.emoji);
+                      }}
+                      width={280} height={320}
+                      skinTonesDisabled
+                      previewConfig={{ showPreview: false }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Text Input */}

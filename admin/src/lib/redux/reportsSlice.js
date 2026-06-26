@@ -86,7 +86,7 @@ export const fetchReportHistory = createAsyncThunk(
 export const updateReportStatus = createAsyncThunk(
   "reports/updateStatus",
   async ({ id, status, actionTaken, moderatorNote }, { rejectWithValue, getState }) => {
-    const prev       = getState().reports.reports.find((r) => r._id === id);
+    const prev       = getState().reports.reports.find((r) => r.id === id);
     const prevStatus = prev?.status ?? null;
     try {
       const { data } = await adminApi.patch(`/admin/reports/${id}/status`, {
@@ -105,7 +105,7 @@ export const bulkUpdateReports = createAsyncThunk(
   async ({ ids, status, actionTaken = "none" }, { rejectWithValue, getState }) => {
     const allReports   = getState().reports.reports;
     const prevStatuses = Object.fromEntries(
-      ids.map((id) => [id, allReports.find((r) => r._id === id)?.status ?? null])
+      ids.map((id) => [id, allReports.find((r) => r.id === id)?.status ?? null])
     );
     try {
       const { data } = await adminApi.patch("/admin/reports/bulk", {
@@ -246,7 +246,7 @@ const reportsSlice = createSlice({
       if (idx === -1) state.selectedIds.push(payload);
       else            state.selectedIds.splice(idx, 1);
     },
-    selectAllIds:    (state) => { state.selectedIds = state.reports.map((r) => r._id); },
+    selectAllIds:    (state) => { state.selectedIds = state.reports.map((r) => r.id); },
     clearSelectedIds:(state) => { state.selectedIds = []; },
   },
   extraReducers: (builder) => {
@@ -294,9 +294,9 @@ const reportsSlice = createSlice({
       .addCase(updateReportStatus.pending,   (s, { meta }) => { s.actionLoading = meta.arg.id; })
       .addCase(updateReportStatus.fulfilled, (s, { payload }) => {
         s.actionLoading = null;
-        const idx = s.reports.findIndex((r) => r._id === payload._id);
+        const idx = s.reports.findIndex((r) => r.id === payload.id);
         if (idx !== -1) s.reports[idx] = { ...s.reports[idx], ...payload };
-        if (s.selectedReport?._id === payload._id) {
+        if (s.selectedReport?.id === payload.id) {
           s.selectedReport = { ...s.selectedReport, ...payload };
         }
       
@@ -316,7 +316,7 @@ const reportsSlice = createSlice({
         const prevStatuses = payload.prevStatuses ?? {};
 
         payload.ids.forEach((id) => {
-          const idx = s.reports.findIndex((r) => r._id === id);
+          const idx = s.reports.findIndex((r) => r.id === id);
           if (idx !== -1) {
             
             const prevStatus = prevStatuses[id];
@@ -340,14 +340,14 @@ const reportsSlice = createSlice({
         s.claimLoading = null;
         // FIX: guard against missing claimData — don't silently null out claim fields
         if (!payload.claimData) return;
-        const idx = s.reports.findIndex((r) => r._id === payload.id);
+        const idx = s.reports.findIndex((r) => r.id === payload.id);
         if (idx !== -1) {
           s.reports[idx].claimedBy      = payload.claimData.claimedBy      ?? null;
           s.reports[idx].claimedAt      = payload.claimData.claimedAt      ?? null;
           s.reports[idx].claimExpiresAt = payload.claimData.claimExpiresAt ?? null;
         }
        
-        if (s.selectedReport?._id === payload.id) {
+        if (s.selectedReport?.id === payload.id) {
   s.selectedReport = {
     ...s.selectedReport,
     claimedBy:      payload.claimData.claimedBy      ?? null,
@@ -365,13 +365,13 @@ const reportsSlice = createSlice({
       .addCase(releaseReport.pending,   (s, { meta }) => { s.claimLoading = meta.arg; })
       .addCase(releaseReport.fulfilled, (s, { payload }) => {
         s.claimLoading = null;
-        const idx = s.reports.findIndex((r) => r._id === payload.id);
+        const idx = s.reports.findIndex((r) => r.id === payload.id);
         if (idx !== -1) {
           s.reports[idx].claimedBy      = null;
           s.reports[idx].claimedAt      = null;
           s.reports[idx].claimExpiresAt = null;
         }
-        if (s.selectedReport?._id === payload.id) {
+        if (s.selectedReport?.id === payload.id) {
           s.selectedReport = {
             ...s.selectedReport,
             claimedBy: null, claimedAt: null, claimExpiresAt: null,
@@ -387,9 +387,9 @@ const reportsSlice = createSlice({
       .addCase(escalateReport.pending,   (s, { meta }) => { s.escalateLoading = meta.arg.id; })
       .addCase(escalateReport.fulfilled, (s, { payload }) => {
         s.escalateLoading = null;
-        const idx = s.reports.findIndex((r) => r._id === payload._id);
+        const idx = s.reports.findIndex((r) => r.id === payload.id);
         if (idx !== -1) s.reports[idx] = { ...s.reports[idx], ...payload };
-        if (s.selectedReport?._id === payload._id) {
+        if (s.selectedReport?.id === payload.id) {
           s.selectedReport = { ...s.selectedReport, ...payload };
         }
       })

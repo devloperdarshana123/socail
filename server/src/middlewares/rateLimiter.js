@@ -51,7 +51,7 @@ export function createRateLimiter({
       //   : req.user?._id?.toString() ?? req.ip;
       const identifier = keyFn
   ? keyFn(req)
-  : req.user?._id?.toString() ?? getClientIp(req);
+  : req.user?.id ?? getClientIp(req);
 
       const key     = `rl:${route}:${identifier}`;
 

@@ -1,3 +1,5 @@
+
+
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 
@@ -39,76 +41,79 @@ Platform usage guides:
 export const chatWithAI = asyncHandler(async (req, res, next) => {
   const { message, history = [] } = req.body;
 
-  if (!message?.trim()) {
-  return next(new AppError("Message is required.", 400));
-}
+  if (!message?.trim())
+    return next(new AppError("Message is required.", 400));
 
-if (message.trim().length > 1000) {
-  return next(new AppError("Message cannot exceed 1000 characters.", 400));
-}
+  if (message.trim().length > 1000)
+    return next(new AppError("Message cannot exceed 1000 characters.", 400));
 
-if (!Array.isArray(history)) {
-  return next(new AppError("History must be an array.", 400));
-}
+  if (!Array.isArray(history))
+    return next(new AppError("History must be an array.", 400));
 
-if (history.length > 50) {
-  return next(new AppError("History too long.", 400));
-}
+  if (history.length > 50)
+    return next(new AppError("History too long.", 400));
 
-  if (!process.env.GROQ_API_KEY) {
+  if (!process.env.GROQ_API_KEY)
     return next(new AppError("AI service not configured.", 500));
-  }
 
-  // Build messages array for Groq
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
-   
-    ...history.slice(-10)
-  .filter((msg) => msg?.text?.trim())
-  .map((msg) => ({
-    role: msg.from === "user" ? "user" : "assistant",
-    content: String(msg.text).slice(0, 1000),
-  })),
+    ...history
+      .slice(-10)
+      .filter((msg) => msg?.text?.trim())
+      .map((msg) => ({
+        role: msg.from === "user" ? "user" : "assistant",
+        content: String(msg.text).slice(0, 1000),
+      })),
     { role: "user", content: message.trim() },
   ];
 
-  // const groqRes = await fetch(GROQ_API_URL, {
   const controller = new AbortController();
-const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout = setTimeout(() => controller.abort(), 15_000);
 
-const groqRes = await fetch(GROQ_API_URL, {
-  signal: controller.signal,
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages,
-      max_tokens: 512,
-      temperature: 0.7,
-      stream: false,
-    }),
-  });
+  try {
+    const groqRes = await fetch(GROQ_API_URL, {
+      signal: controller.signal,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages,
+        max_tokens: 512,
+        temperature: 0.7,
+        stream: false,
+      }),
+    });
 
-  if (!groqRes.ok) {
+    if (!groqRes.ok) {
+      const err = await groqRes.json().catch(() => ({}));
+      return next(new AppError(err?.error?.message || "AI service error.", 502));
+    }
+
+    const data = await groqRes.json();
+    const reply = data.choices?.[0]?.message?.content?.trim();
+
+    if (!reply)
+      return next(new AppError("No response from AI.", 502));
+
+    return res.status(200).json({
+      success: true,
+      message: "AI response generated.",
+      data: { reply },
+    });
+
+  } catch (err) {
+    // ✅ Timeout error handle
+    if (err.name === "AbortError")
+      return next(new AppError("AI service timed out. Please try again.", 504));
+
+    return next(new AppError("AI service error.", 502));
+
+  } finally {
+    // ✅ Har case mein clear hoga
     clearTimeout(timeout);
-    const err = await groqRes.json().catch(() => ({}));
-    return next(new AppError(err?.error?.message || "AI service error.", 502));
   }
-
-  const data = await groqRes.json();
-  const reply = data.choices?.[0]?.message?.content?.trim();
-   clearTimeout(timeout);
-
-  if (!reply) {
-    return next(new AppError("No response from AI.", 502));
-  }
-
-  res.status(200).json({
-    success: true,
-    message: "AI response generated.",
-    data: { reply },
-  });
 });

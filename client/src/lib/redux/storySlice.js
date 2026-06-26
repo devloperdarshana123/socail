@@ -221,7 +221,7 @@ const storySlice = createSlice({
     // Optimistic like toggle
     optimisticLike(state, { payload: { storyId, liked } }) {
       state.feed.forEach((group) => {
-        const story = group.stories.find((s) => s._id === storyId);
+        const story = group.stories.find((s) => s.id === storyId);
         if (story) {
          story.isLiked = liked;
 story.reactionsCount = liked
@@ -234,7 +234,7 @@ story.reactionsCount = liked
     // Story delete optimistic
     removeStoryFromFeed(state, { payload: storyId }) {
       state.feed = state.feed
-        .map((g) => ({ ...g, stories: g.stories.filter((s) => s._id !== storyId) }))
+        .map((g) => ({ ...g, stories: g.stories.filter((s) => s.id !== storyId) }))
         .filter((g) => g.stories.length > 0);
     },
 
@@ -303,7 +303,7 @@ story.reactionsCount = liked
     // ── Delete Story ──
     builder.addCase(deleteStory.fulfilled, (state, { payload: storyId }) => {
       state.feed = state.feed
-        .map((g) => ({ ...g, stories: g.stories.filter((s) => s._id !== storyId) }))
+        .map((g) => ({ ...g, stories: g.stories.filter((s) => s.id !== storyId) }))
         .filter((g) => g.stories.length > 0);
     });
 
@@ -311,7 +311,7 @@ story.reactionsCount = liked
     builder.addCase(toggleStoryLike.fulfilled, (state, { payload }) => {
       const { storyId, liked, reactionsCount } = payload;
       state.feed.forEach((group) => {
-        const story = group.stories.find((s) => s._id === storyId);
+        const story = group.stories.find((s) => s.id === storyId);
        if (story) {
   story.isLiked = liked;
   story.reactionsCount = reactionsCount;
@@ -340,15 +340,10 @@ story.reactionsCount = liked
       state.highlights.unshift(payload);
     });
 
-    // ── Add to Highlight ──
-    // builder.addCase(addToHighlight.fulfilled, (state, { payload }) => {
-    //   const idx = state.highlights.findIndex((h) => h._id === payload.highlightId);
-    //   if (idx > -1) state.highlights[idx] = payload.highlight;
-    // });
-
+    
 
     builder.addCase(addToHighlight.fulfilled, (state, { payload }) => {
-  const idx = state.highlights.findIndex((h) => h._id === payload.highlightId);
+  const idx = state.highlights.findIndex((h) => h.id === payload.highlightId);
   if (idx > -1) {
     // Deep replace — purana object nahi, naya server se aaya object
     state.highlights[idx] = { ...payload.highlight };
@@ -357,15 +352,15 @@ story.reactionsCount = liked
 
     // ── Delete Highlight ──
     builder.addCase(deleteHighlight.fulfilled, (state, { payload: highlightId }) => {
-      state.highlights = state.highlights.filter((h) => h._id !== highlightId);
+      state.highlights = state.highlights.filter((h) => h.id !== highlightId);
     });
 // ── Remove Snap from Highlight ──
     builder.addCase(removeSnapFromHighlight.fulfilled, (state, { payload }) => {
       const { highlightId, snapId } = payload;
-      const idx = state.highlights.findIndex((h) => h._id === highlightId);
+      const idx = state.highlights.findIndex((h) => h.id === highlightId);
       if (idx > -1) {
         state.highlights[idx].snapshots = state.highlights[idx].snapshots.filter(
-          (s) => s._id !== snapId
+          (s) => s.id !== snapId
         );
       }
     });

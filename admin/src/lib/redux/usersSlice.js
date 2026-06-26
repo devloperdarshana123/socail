@@ -195,15 +195,23 @@ const usersSlice = createSlice({
 
       // ── updateUserStatus ────────────────────────────────────────────────────
       .addCase(updateUserStatus.pending,   (s, { meta })    => { s.actionLoading = meta.arg.userId; })
-   .addCase(updateUserStatus.fulfilled, (s, { payload }) => {
+
+.addCase(updateUserStatus.fulfilled, (s, { payload }) => {
   s.actionLoading = null;
-  const u = s.users.find((x) => x._id === payload.userId);
+
+  const targetId = String(payload.userId);
+
+  // ✅ List mein update — string-safe comparison
+  const u = s.users.find((x) => String(x._id ?? x.id) === targetId);
   if (u) {
-    u.status          = payload.status;
-    u.accountStatus   = payload.status;
-    u.activeSuspension = payload.activeSuspension;
+    u.status           = payload.status;
+    u.accountStatus     = payload.status;
+    u.activeSuspension  = payload.activeSuspension;
   }
-  if (s.detail?.user?._id === payload.userId) {
+
+  
+  const detailId = s.detail?.user ? String(s.detail.user._id ?? s.detail.user.id) : null;
+  if (detailId && detailId === targetId) {
     s.detail.user.status           = payload.status;
     s.detail.user.accountStatus    = payload.status;
     s.detail.user.activeSuspension = payload.activeSuspension;
@@ -215,15 +223,23 @@ const usersSlice = createSlice({
 
       // ── toggleVerifiedBadge ─────────────────────────────────────────────────
       .addCase(toggleVerifiedBadge.pending,   (s, { meta })    => { s.actionLoading = meta.arg; })
+     
       .addCase(toggleVerifiedBadge.fulfilled, (s, { payload }) => {
-        s.actionLoading = null;
-        const u = s.users.find((x) => x._id === payload.userId);
-        if (u) { u.isVerified = payload.isVerified; u.isVerifiedBadge = payload.isVerified; }
-        if (s.detail?.user?._id === payload.userId) {
-          s.detail.user.isVerified    = payload.isVerified;
-          s.detail.user.isVerifiedBadge = payload.isVerified;
-        }
-      })
+  s.actionLoading = null;
+  const targetId = String(payload.userId);
+
+  const u = s.users.find((x) => String(x._id ?? x.id) === targetId);
+  if (u) {
+    u.isVerified      = payload.isVerified;
+    u.isVerifiedBadge = payload.isVerified;
+  }
+
+  const detailId = s.detail?.user ? String(s.detail.user._id ?? s.detail.user.id) : null;
+  if (detailId && detailId === targetId) {
+    s.detail.user.isVerified      = payload.isVerified;
+    s.detail.user.isVerifiedBadge = payload.isVerified;
+  }
+})
       .addCase(toggleVerifiedBadge.rejected,  (s, { payload }) => {
         s.actionLoading = null; s.actionError = payload;
       })

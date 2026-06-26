@@ -2,12 +2,13 @@
 
 import { useEffect, useCallback, useMemo, memo } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   PieChart, Pie, Cell, ResponsiveContainer,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
-// Top pe import add karo
+
 import { getAdminSocket, onAdminSocketReady } from "../lib/adminSocket";
 import {
   Users, Heart, MessageCircle, Eye,
@@ -32,7 +33,7 @@ import {
   selectGlobalLoading,
 } from "../lib/redux/dashboardSlice";
 
-// ─── Constants (stable references, never recreated) ───────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PIE_COLORS = ["#6366f1", "#f59e0b", "#10b981"];
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
@@ -55,10 +56,34 @@ const ENGAGEMENT_OPTS = [
   { label: "30D", value: "30days" },
 ];
 
-// Skeleton row count is fixed — no reason to allocate a new array each render
 const SKELETON_ROWS = Array.from({ length: 5 }, (_, i) => i);
 
-// ─── Pure utilities ────────────────────────────────────────────────────────────
+// ─── Framer Motion Variants ───────────────────────────────────────────────────
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  visible: (i = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.45, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] },
+  }),
+};
+
+const fadeIn = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.4 } },
+};
+
+const scaleIn = {
+  hidden: { opacity: 0, scale: 0.95 },
+  visible: (i = 0) => ({
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.4, delay: i * 0.06, ease: [0.22, 1, 0.36, 1] },
+  }),
+};
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function fmt(n) {
   if (n == null) return "—";
@@ -75,54 +100,88 @@ function relativeTime(iso) {
   return `${Math.floor(diff / 3600)}h ago`;
 }
 
-// ─── Sub-components (all memoized — stable props = zero re-renders) ────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 const SkeletonBox = memo(function SkeletonBox({ className = "" }) {
-  return <div className={`animate-pulse bg-slate-200 rounded-xl ${className}`} />;
+  return (
+    <div className={`animate-pulse bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded-xl ${className}`}
+      style={{ backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite" }} />
+  );
 });
 
-const KPICard = memo(function KPICard({ icon: Icon, label, value, sub, change, accent, loading }) {
+const KPICard = memo(function KPICard({ icon: Icon, label, value, sub, change, accent, loading, index }) {
   const isPositive = change >= 0;
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl border shadow-sm
-        hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-5 flex items-start gap-4"
+    <motion.div
+      custom={index}
+      variants={scaleIn}
+      initial="hidden"
+      animate="visible"
+      whileHover={{ y: -4, boxShadow: "0 12px 32px rgba(0,0,0,0.10)" }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      className="relative overflow-hidden rounded-2xl border shadow-sm p-5 flex items-start gap-4 cursor-default"
       style={{ backgroundColor: accent.bgHex, borderColor: accent.borderHex }}
     >
+      {/* Top accent bar with shimmer */}
       <div className={`absolute top-0 left-0 right-0 h-1 ${accent.bar}`} />
+
+      {/* Decorative background circle */}
       <div
-        className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+        className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full opacity-10"
+        style={{ backgroundColor: accent.iconBgHex }}
+      />
+
+      <motion.div
+        whileHover={{ rotate: 10, scale: 1.1 }}
+        transition={{ type: "spring", stiffness: 400 }}
+        className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 z-10"
         style={{ backgroundColor: accent.iconBgHex }}
       >
         <Icon size={22} className={accent.icon} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider truncate">{label}</p>
+      </motion.div>
+
+      <div className="flex-1 min-w-0 z-10">
+        <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider truncate">{label}</p>
         {loading ? (
           <SkeletonBox className="h-8 w-24 mt-1" />
         ) : (
-          <p className="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-none mt-1">{fmt(value)}</p>
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="text-2xl sm:text-3xl font-extrabold text-slate-800 leading-none mt-1"
+          >
+            {fmt(value)}
+          </motion.p>
         )}
         {sub && !loading && (
-          <p className="text-[11px] text-slate-500 mt-1 truncate">{sub}</p>
+          <p className="text-[11px] text-slate-400 mt-1 truncate">{sub}</p>
         )}
       </div>
+
       {change != null && !loading && (
-        <div className={`flex items-center gap-1 text-xs font-semibold shrink-0 mt-1
-          ${isPositive ? "text-emerald-600" : "text-red-500"}`}
+        <motion.div
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+          className={`flex items-center gap-1 text-xs font-bold shrink-0 mt-1 px-2 py-1 rounded-lg z-10
+            ${isPositive ? "text-emerald-700 bg-emerald-50" : "text-red-600 bg-red-50"}`}
         >
-          {isPositive ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+          {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
           {Math.abs(change)}%
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 });
 
 const SectionHeader = memo(function SectionHeader({ title, children }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h2 className="text-base font-bold text-slate-700">{title}</h2>
+      <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+        <span className="w-1.5 h-4 rounded-full bg-indigo-400 inline-block" />
+        {title}
+      </h2>
       {children}
     </div>
   );
@@ -136,12 +195,17 @@ const PeriodTabs = memo(function PeriodTabs({ value, options, onChange }) {
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
-          className={`px-3 py-1 rounded-md text-xs font-semibold transition-all
-            ${value === opt.value
-              ? "bg-white text-slate-800 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"}`}
+          className={`relative px-3 py-1 rounded-md text-xs font-semibold transition-all
+            ${value === opt.value ? "text-slate-800" : "text-slate-400 hover:text-slate-600"}`}
         >
-          {opt.label}
+          {value === opt.value && (
+            <motion.span
+              layoutId="period-pill"
+              className="absolute inset-0 bg-white rounded-md shadow-sm"
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            />
+          )}
+          <span className="relative z-10">{opt.label}</span>
         </button>
       ))}
     </div>
@@ -149,91 +213,112 @@ const PeriodTabs = memo(function PeriodTabs({ value, options, onChange }) {
 });
 
 const ChartCard = memo(function ChartCard({
-  title, loading, error, periodValue, periodOptions, onPeriodChange, height = 220, children,
+  title, loading, error, periodValue, periodOptions, onPeriodChange, height = 220, children, index = 0,
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+    <motion.div
+      custom={index}
+      variants={fadeUp}
+      initial="hidden"
+      animate="visible"
+      className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 hover:shadow-md transition-shadow duration-300"
+    >
       <SectionHeader title={title}>
         {periodOptions && (
           <PeriodTabs value={periodValue} options={periodOptions} onChange={onPeriodChange} />
         )}
       </SectionHeader>
-      {loading ? (
-        <SkeletonBox style={{ height }} />
-      ) : error ? (
-        <div className="flex items-center justify-center gap-2 text-red-400 text-sm" style={{ height }}>
-          <AlertTriangle size={16} /> Failed to load
-        </div>
-      ) : (
-        <div style={{ height }}>
-          <ResponsiveContainer width="100%" height="100%">
-            {children}
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
+
+      <AnimatePresence mode="wait">
+        {loading ? (
+          <motion.div key="skeleton" variants={fadeIn} initial="hidden" animate="visible" exit="hidden">
+            <SkeletonBox style={{ height }} />
+          </motion.div>
+        ) : error ? (
+          <motion.div
+            key="error"
+            variants={fadeIn} initial="hidden" animate="visible"
+            className="flex items-center justify-center gap-2 text-red-400 text-sm"
+            style={{ height }}
+          >
+            <AlertTriangle size={16} /> Failed to load
+          </motion.div>
+        ) : (
+          <motion.div
+            key="chart"
+            variants={fadeIn} initial="hidden" animate="visible"
+            style={{ height }}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              {children}
+            </ResponsiveContainer>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 });
 
-// Defined outside the component so Recharts receives the same reference every render.
-// Re-rendering ChartCard with an inline component causes Recharts to fully remount the tooltip.
 const CustomTooltip = memo(function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3 text-xs">
-      <p className="font-semibold text-slate-600 mb-1">{label}</p>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-white border border-slate-200 rounded-xl shadow-xl p-3 text-xs"
+    >
+      <p className="font-bold text-slate-700 mb-1.5 border-b border-slate-100 pb-1">{label}</p>
       {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }} className="flex items-center gap-1">
+        <p key={p.name} className="flex items-center gap-2 mt-1" style={{ color: p.color }}>
           <span className="inline-block w-2 h-2 rounded-full" style={{ background: p.color }} />
-          {p.name}: <b>{fmt(p.value)}</b>
+          <span className="text-slate-500">{p.name}:</span>
+          <b className="text-slate-800">{fmt(p.value)}</b>
         </p>
       ))}
-    </div>
+    </motion.div>
   );
 });
 
-// ─── KPI card config — defined once outside the component ────────────────────
-// Receives `s` (stats data) as a parameter so it doesn't close over stale state.
 function buildKpiCards(s) {
   return [
     {
-      icon: Users,         label: "Total Users",      value: s?.totalUsers,
-      sub: `${fmt(s?.activeToday)} active today`,     change: null,
+      icon: Users,         label: "Total Users",     value: s?.totalUsers,
+      sub: `${fmt(s?.activeToday)} active today`,    change: null,
       accent: { bar: "bg-indigo-400", icon: "text-indigo-500", bgHex: "#fafaff", borderHex: "#e0e0fa", iconBgHex: "#ebebfd" },
     },
     {
-      icon: LayoutGrid,    label: "Total Posts",      value: s?.totalPosts,
-      sub: null,                                       change: s?.postsChange,
+      icon: LayoutGrid,    label: "Total Posts",     value: s?.totalPosts,
+      sub: null,                                      change: s?.postsChange,
       accent: { bar: "bg-amber-400",  icon: "text-amber-500",  bgHex: "#fffefc", borderHex: "#faefd0", iconBgHex: "#fef5d8" },
     },
     {
-      icon: Heart,         label: "Total Likes",      value: s?.totalLikes,
-      sub: null,                                       change: null,
+      icon: Heart,         label: "Total Likes",     value: s?.totalLikes,
+      sub: null,                                      change: null,
       accent: { bar: "bg-rose-400",   icon: "text-rose-500",   bgHex: "#fffafa", borderHex: "#fad8d8", iconBgHex: "#fee2e2" },
     },
     {
-      icon: Eye,           label: "Total Views",      value: s?.totalViews,
-      sub: null,                                       change: null,
+      icon: Eye,           label: "Total Views",     value: s?.totalViews,
+      sub: null,                                      change: null,
       accent: { bar: "bg-sky-400",    icon: "text-sky-500",    bgHex: "#f8fcff", borderHex: "#d0eefa", iconBgHex: "#ddf2fd" },
     },
     {
-      icon: MessageCircle, label: "Total Comments",   value: s?.totalComments,
-      sub: null,                                       change: null,
+      icon: MessageCircle, label: "Total Comments",  value: s?.totalComments,
+      sub: null,                                      change: null,
       accent: { bar: "bg-emerald-400",icon: "text-emerald-500",bgHex: "#f7fefb", borderHex: "#c6f0da", iconBgHex: "#d4f7e5" },
     },
     {
-      icon: Activity,      label: "Active Today",     value: s?.activeToday,
-      sub: null,                                       change: null,
+      icon: Activity,      label: "Active Today",    value: s?.activeToday,
+      sub: null,                                      change: null,
       accent: { bar: "bg-violet-400", icon: "text-violet-500", bgHex: "#fcfaff", borderHex: "#e4d9fc", iconBgHex: "#ede5fd" },
     },
     {
-      icon: UserPlus,      label: "New Signups",      value: s?.newSignups,
-      sub: "this month",                              change: s?.newSignupsChange,
+      icon: UserPlus,      label: "New Signups",     value: s?.newSignups,
+      sub: "this month",                             change: s?.newSignupsChange,
       accent: { bar: "bg-teal-400",   icon: "text-teal-500",   bgHex: "#f7fefe", borderHex: "#c0f0e8", iconBgHex: "#d0f7f0" },
     },
     {
-      icon: AlertTriangle, label: "Pending Reports",  value: s?.pendingReports,
-      sub: null,                                       change: null,
+      icon: AlertTriangle, label: "Pending Reports", value: s?.pendingReports,
+      sub: null,                                      change: null,
       accent: { bar: "bg-red-400",    icon: "text-red-500",    bgHex: "#fffcfc", borderHex: "#facaca", iconBgHex: "#fee0e0" },
     },
   ];
@@ -255,38 +340,31 @@ export default function DashboardPage() {
 
   const s = stats.data;
 
-  // Initial fetch + auto-refresh
   useEffect(() => {
     dispatch(fetchAllDashboardData());
     const id = setInterval(() => dispatch(fetchAllDashboardData()), AUTO_REFRESH_MS);
     return () => clearInterval(id);
   }, [dispatch]);
 
-  // Existing useEffect ke baad yeh add karo
-useEffect(() => {
-  const handler = (payload) => {
-    if (payload.type !== "admin_new_comment") return;
-    dispatch(fetchAllDashboardData());
-  };
+  useEffect(() => {
+    const handler = (payload) => {
+      if (payload.type !== "admin_new_comment") return;
+      dispatch(fetchAllDashboardData());
+    };
+    const sock = getAdminSocket();
+    if (sock?.connected) {
+      sock.on("admin:notification", handler);
+      return () => sock.off("admin:notification", handler);
+    }
+    const unsubscribe = onAdminSocketReady((readySocket) => {
+      readySocket.on("admin:notification", handler);
+    });
+    return () => {
+      unsubscribe();
+      getAdminSocket()?.off("admin:notification", handler);
+    };
+  }, [dispatch]);
 
-  const s = getAdminSocket();
-  if (s?.connected) {
-    s.on("admin:notification", handler);
-    return () => s.off("admin:notification", handler);
-  }
-
-  const unsubscribe = onAdminSocketReady((readySocket) => {
-    readySocket.on("admin:notification", handler);
-  });
-
-  return () => {
-    unsubscribe();
-    const current = getAdminSocket();
-    current?.off("admin:notification", handler);
-  };
-}, [dispatch]);
-
-  // Single generic period handler — eliminates three near-identical callbacks
   const handleUserPeriod = useCallback((p) => {
     dispatch(setUserGrowthPeriod(p));
     dispatch(fetchUserGrowth({ period: p }));
@@ -302,7 +380,6 @@ useEffect(() => {
     dispatch(fetchEngagementTrend({ period: p }));
   }, [dispatch]);
 
-  // Derived data — only recalculated when postGrowth.data reference changes
   const postTypeDonut = useMemo(() => {
     const totals = { photo: 0, reel: 0, text: 0 };
     postGrowth.data.forEach((d) => {
@@ -317,43 +394,77 @@ useEffect(() => {
     ];
   }, [postGrowth.data]);
 
-  // KPI card config — only recalculated when stats data changes
   const kpiCards = useMemo(() => buildKpiCards(s), [s]);
 
-  // Stable last-refreshed label — recalculated only when lastRefresh changes
   const lastRefreshedLabel = useMemo(
     () => (lastRefresh ? `Last updated ${relativeTime(lastRefresh)}` : "Loading data…"),
     [lastRefresh],
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-1 space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/20 to-slate-50">
+
+      {/* Subtle background grid pattern */}
+      <div
+        className="fixed inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: "radial-gradient(circle, #6366f1 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
+      />
+
+      <div className="relative max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
 
         {/* ── Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          animate="visible"
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        >
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
+            <motion.h1
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight"
+            >
               Dashboard
-            </h1>
-            <p className="text-sm text-slate-400 mt-0.5">{lastRefreshedLabel}</p>
+              <span className="ml-2 text-indigo-400">✦</span>
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-sm text-slate-400 mt-0.5 flex items-center gap-1.5"
+            >
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {lastRefreshedLabel}
+            </motion.p>
           </div>
-          <button
+
+          <motion.button
             type="button"
             onClick={() => dispatch(fetchAllDashboardData())}
             disabled={globalLoad}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700
-              text-white text-sm font-semibold shadow-sm transition-all disabled:opacity-60 self-start sm:self-auto"
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.97 }}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700
+              text-white text-sm font-semibold shadow-md shadow-indigo-200 transition-colors
+              disabled:opacity-60 self-start sm:self-auto"
           >
             <RefreshCw size={15} className={globalLoad ? "animate-spin" : ""} />
             Refresh
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
 
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {kpiCards.map((card) => (
-            <KPICard key={card.label} {...card} loading={stats.loading || !s} />
+          {kpiCards.map((card, i) => (
+            <KPICard key={card.label} {...card} index={i} loading={stats.loading || !s} />
           ))}
         </div>
 
@@ -367,16 +478,17 @@ useEffect(() => {
             periodOptions={PERIOD_OPTS_6}
             onPeriodChange={handleUserPeriod}
             height={220}
+            index={0}
           >
             <AreaChart data={userGrowth.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.18} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}    />
+                  <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}   />
                 </linearGradient>
                 <linearGradient id="gradNew" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.18} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}    />
+                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}   />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -384,8 +496,8 @@ useEffect(() => {
               <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area type="monotone" dataKey="totalUsers" name="Total Users" stroke="#6366f1" strokeWidth={2} fill="url(#gradTotal)" dot={false} />
-              <Area type="monotone" dataKey="newUsers"   name="New Users"   stroke="#10b981" strokeWidth={2} fill="url(#gradNew)"   dot={false} />
+              <Area type="monotone" dataKey="totalUsers" name="Total Users" stroke="#6366f1" strokeWidth={2.5} fill="url(#gradTotal)" dot={false} activeDot={{ r: 5, fill: "#6366f1" }} />
+              <Area type="monotone" dataKey="newUsers"   name="New Users"   stroke="#10b981" strokeWidth={2.5} fill="url(#gradNew)"   dot={false} activeDot={{ r: 5, fill: "#10b981" }} />
             </AreaChart>
           </ChartCard>
 
@@ -394,17 +506,20 @@ useEffect(() => {
             loading={postGrowth.loading}
             error={postGrowth.error}
             height={220}
+            index={1}
           >
             <PieChart>
               <Pie
                 data={postTypeDonut}
                 cx="50%" cy="50%"
                 innerRadius={60} outerRadius={90}
-                paddingAngle={3}
+                paddingAngle={4}
                 dataKey="value"
+                animationBegin={200}
+                animationDuration={800}
               >
                 {postTypeDonut.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="none" />
                 ))}
               </Pie>
               <Tooltip formatter={(v) => fmt(v)} />
@@ -427,6 +542,7 @@ useEffect(() => {
             periodOptions={PERIOD_OPTS_6}
             onPeriodChange={handlePostPeriod}
             height={220}
+            index={0}
           >
             <BarChart data={postGrowth.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -434,9 +550,9 @@ useEffect(() => {
               <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="photo" name="Photos" stackId="a" fill="#6366f1" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="photo" name="Photos" stackId="a" fill="#6366f1" radius={[0,0,0,0]} />
               <Bar dataKey="reel"  name="Reels"  stackId="a" fill="#f59e0b" />
-              <Bar dataKey="text"  name="Text"   stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="text"  name="Text"   stackId="a" fill="#10b981" radius={[4,4,0,0]} />
             </BarChart>
           </ChartCard>
 
@@ -448,6 +564,7 @@ useEffect(() => {
             periodOptions={ENGAGEMENT_OPTS}
             onPeriodChange={handleEngagementPeriod}
             height={220}
+            index={1}
           >
             <LineChart data={engagement.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -455,9 +572,9 @@ useEffect(() => {
               <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="likes"    name="Likes"    stroke="#f43f5e" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="comments" name="Comments" stroke="#8b5cf6" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="views"    name="Views"    stroke="#0ea5e9" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="likes"    name="Likes"    stroke="#f43f5e" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="comments" name="Comments" stroke="#8b5cf6" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="views"    name="Views"    stroke="#0ea5e9" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
             </LineChart>
           </ChartCard>
         </div>
@@ -470,24 +587,32 @@ useEffect(() => {
               loading={hourly.loading}
               error={hourly.error}
               height={180}
+              index={0}
             >
               <AreaChart data={hourly.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradHourly" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}    />
+                    <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}   />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="hour" tick={{ fontSize: 9, fill: "#94a3b8" }} interval={3} />
                 <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="users" name="Active Users" stroke="#f59e0b" strokeWidth={2} fill="url(#gradHourly)" dot={false} />
+                <Area type="monotone" dataKey="users" name="Active Users" stroke="#f59e0b" strokeWidth={2.5} fill="url(#gradHourly)" dot={false} activeDot={{ r: 5, fill: "#f59e0b" }} />
               </AreaChart>
             </ChartCard>
           </div>
 
-          <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          {/* Top Posts Table */}
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            custom={1}
+            className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-5 hover:shadow-md transition-shadow duration-300"
+          >
             <SectionHeader title="Top Posts" />
             {topPosts.loading ? (
               <div className="space-y-3">
@@ -512,40 +637,58 @@ useEffect(() => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {topPosts.data.map((post) => {
+                    {topPosts.data.map((post, i) => {
                       const badge = TYPE_BADGE[post.type] ?? TYPE_BADGE.text;
                       return (
-                        <tr key={post._id} className="hover:bg-slate-50 transition-colors">
+                        <motion.tr
+                          key={post._id}
+                          custom={i}
+                          variants={fadeUp}
+                          initial="hidden"
+                          animate="visible"
+                          whileHover={{ backgroundColor: "#f8fafc" }}
+                          className="transition-colors cursor-default"
+                        >
                           <td className="py-2.5 pr-3 max-w-40">
                             <p className="font-medium text-slate-700 truncate">{post.title}</p>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${badge.cls}`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${badge.cls}`}>
                               {badge.label}
                             </span>
                           </td>
-                          <td className="py-2.5 pr-3 hidden sm:table-cell text-slate-500 text-xs">
+                          <td className="py-2.5 pr-3 hidden sm:table-cell text-slate-400 text-xs">
                             @{post.author}
                           </td>
-                          <td className="py-2.5 text-right text-slate-600 font-medium">{fmt(post.views)}</td>
-                          <td className="py-2.5 text-right text-slate-600 font-medium">{fmt(post.likes)}</td>
-                          <td className="py-2.5 text-right text-slate-600 font-medium hidden sm:table-cell">
+                          <td className="py-2.5 text-right text-slate-600 font-semibold">{fmt(post.views)}</td>
+                          <td className="py-2.5 text-right text-slate-600 font-semibold">{fmt(post.likes)}</td>
+                          <td className="py-2.5 text-right text-slate-600 font-semibold hidden sm:table-cell">
                             {fmt(post.comments)}
                           </td>
-                        </tr>
+                        </motion.tr>
                       );
                     })}
                     {topPosts.data.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-slate-400 text-sm">No posts yet</td>
+                        <td colSpan={5} className="py-10 text-center text-slate-300 text-sm">
+                          No posts yet
+                        </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
+          </motion.div>
         </div>
 
       </div>
+
+      {/* Shimmer keyframe */}
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
     </div>
   );
 }

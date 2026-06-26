@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../services/api";
-import { togglePostLike, addComment, recordPostView } from "./postSlice";
+import { togglePostLike, addComment, recordPostView, deletePost, createPost } from "./postSlice";
 
 const BASE = "/explore";
 
@@ -131,6 +131,12 @@ hasMoreByType: { all: true, image: true, reel: true, text: true },
   state.nextCursor = state.cursorByType[type]  || null;
   state.hasMore    = state.hasMoreByType[type] ?? true;
 },
+removePostFromExplore(state, action) {
+    state.posts = state.posts.filter(p => p.id !== action.payload);
+  },
+  addPostToExplore(state, action) {
+    state.posts = [action.payload, ...state.posts];
+  },
   },
 
   extraReducers: (builder) => {
@@ -140,12 +146,7 @@ hasMoreByType: { all: true, image: true, reel: true, text: true },
         state.loading = true;
         state.error   = null;
       })
-      // .addCase(fetchExplorePosts.fulfilled, (state, action) => {
-      //   state.loading    = false;
-      //   state.posts      = action.payload.posts;
-      //   state.nextCursor = action.payload.nextCursor;
-      //   state.hasMore    = action.payload.hasMore;
-      // })
+      
 
       .addCase(fetchExplorePosts.fulfilled, (state, action) => {
   state.loading    = false;
@@ -218,7 +219,7 @@ builder
   .addCase(togglePostLike.pending, (state, action) => {
     const { postId } = action.meta.arg;
     const update = (p) => {
-      if (p._id !== postId) return p;
+      if (p.id !== postId) return p;
       const newLiked = !p.isLiked;
       return { ...p, isLiked: newLiked, likesCount: newLiked ? (p.likesCount||0)+1 : Math.max(0,(p.likesCount||0)-1) };
     };
@@ -227,14 +228,14 @@ builder
   })
   .addCase(togglePostLike.fulfilled, (state, action) => {
     const { postId, liked, likesCount } = action.payload;
-    const update = (p) => p._id !== postId ? p : { ...p, isLiked: liked, likesCount };
+    const update = (p) => p.id !== postId ? p : { ...p, isLiked: liked, likesCount };
     state.posts       = state.posts.map(update);
     state.searchPosts = state.searchPosts.map(update);
   })
   .addCase(togglePostLike.rejected, (state, action) => {
     const { postId } = action.meta.arg;
     const rollback = (p) => {
-      if (p._id !== postId) return p;
+      if (p.id !== postId) return p;
       const rb = !p.isLiked;
       return { ...p, isLiked: rb, likesCount: rb ? (p.likesCount||0)+1 : Math.max(0,(p.likesCount||0)-1) };
     };
@@ -244,22 +245,38 @@ builder
 
 // ── Comment count sync ──
 builder.addCase(addComment.fulfilled, (state, action) => {
-  const { postId } = action.payload;
-  const update = (p) => p._id !== postId ? p : { ...p, commentsCount: (p.commentsCount||0)+1 };
+  const { postId, commentsCount } = action.payload;
+  const update = (p) => p.id !== postId ? p : { ...p, commentsCount: commentsCount ?? (p.commentsCount||0)+1 };
   state.posts       = state.posts.map(update);
   state.searchPosts = state.searchPosts.map(update);
 });
 
 // ── View count sync ──
 builder.addCase(recordPostView.fulfilled, (state, action) => {
-  const postId = action.payload;
-  const update = (p) => p._id !== postId ? p : { ...p, viewsCount: (p.viewsCount||0)+1 };
+  const { postId, viewsCount } = action.payload;
+  const update = (p) => p.id !== postId ? p : { ...p, viewsCount: viewsCount ?? (p.viewsCount||0)+1 };
   state.posts       = state.posts.map(update);
   state.searchPosts = state.searchPosts.map(update);
+});
+// ── Delete post — remove from explore instantly ──
+builder.addCase(deletePost.fulfilled, (state, action) => {
+  const postId = action.payload;
+  state.posts = state.posts.filter(p => p.id !== postId);
+  Object.keys(state.postsByType).forEach(type => {
+    state.postsByType[type] = state.postsByType[type].filter(p => p.id !== postId);
+  });
+});
+
+// ── Create post — add to explore instantly ──
+builder.addCase(createPost.fulfilled, (state, action) => {
+  const post = action.payload;
+  if (!post || post.isDraft) return;
+  state.posts = [post, ...state.posts];
+  state.postsByType["all"] = [post, ...state.postsByType["all"]];
 });
   },
   
 });
 
-export const { setActiveType, setSearchMode, clearExplore , setPostsFromCache } = exploreSlice.actions;
+export const { setActiveType, setSearchMode, clearExplore, setPostsFromCache, removePostFromExplore, addPostToExplore } = exploreSlice.actions;
 export default exploreSlice.reducer;

@@ -1,4 +1,6 @@
 
+
+
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -13,7 +15,7 @@ import {
   transcribeLimiter,
   globalRouteLimiter,
 } from "./middlewares/rateLimiter.js";
-import mongoose from "mongoose";
+import prisma from "./config/prisma.js";
 import authRoute from "./routes/auth/auth.route.js";
 import globalErrorHandler from "./middlewares/globalErrorHandler.js";
 import AppError from "./utils/AppError.js";
@@ -35,8 +37,7 @@ import transcribeRoute from "./routes/auth/transcribe.route.js";
 import reportRouter from "./routes/auth/report.route.js";
 import "./cron/suspensionCron.js";
 
-
-//admin//
+// admin
 import adminAuthRoute from "./routes/admin/admin.auth.route.js";
 import adminSettingsRoute from "./routes/admin/admin.settings.route.js";
 import adminUserRoute from "./routes/admin/admin.user.routes.js";
@@ -45,13 +46,13 @@ import dashboardRoutes from "./routes/admin/admin.dashboard.route.js";
 import auditLogRoute from "./routes/admin/admin.auditlog.route.js";
 import commentRoutes from "./routes/admin/admin.comment.routes.js";
 import adminNotificationRoute from "./routes/admin/adminNotification.routes.js";
+
 const app = express();
 app.set("trust proxy", 1);
+
 // ── Security ──
 app.use(helmet());
 app.use(compression());
-
-
 
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",").map((o) => o.trim())
@@ -72,31 +73,34 @@ app.use(
     exposedHeaders: ["set-cookie"],
   }),
 );
+
 // ── Body Parsers ──
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// CHANGE 2: Request logging — har request log hogi
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan("combined"));
 }
-
-
-
 
 app.use("/api/", globalRouteLimiter);
 app.use("/api/v2/auth/login", authRouteLimiter);
 app.use("/api/v2/auth/register", authRouteLimiter);
 app.use("/api/v2/auth/forgot-password", authRouteLimiter);
 
-// ── Health Check — CHANGE 4: DB status bhi check karo ──
-app.get("/health", (req, res) => {
-  const dbState = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+// ── Health Check — Prisma DB ping ──
+app.get("/health", async (req, res) => {
+  let dbStatus = "connected";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    dbStatus = "disconnected";
+  }
+
   res.status(200).json({
-    status: "ok",
-    db: dbState,
-    uptime: Math.floor(process.uptime()),
+    status     : "ok",
+    db         : dbStatus,
+    uptime     : Math.floor(process.uptime()),
     environment: process.env.NODE_ENV,
   });
 });
@@ -126,13 +130,10 @@ app.use("/api/v2/admin/auth", adminAuthRoute);
 app.use("/api/v2/admin/dashboard", dashboardRoutes);
 app.use("/api/v2/admin/comments", commentRoutes);
 app.use("/api/v2/admin/notifications", adminNotificationRoute);
-app.use("/api/v2/admin",      adminUserRoute); 
+app.use("/api/v2/admin", adminUserRoute);
 app.use("/api/v2/admin", adminReportRoute);
 app.use("/api/v2/admin/settings", adminSettingsRoute);
 app.use("/api/v2/admin/audit-logs", auditLogRoute);
-
-
-
 
 // ── 404 Handler ──
 app.all("/{*splat}", (req, res, next) => {

@@ -93,7 +93,7 @@ export default function useChat() {
       conversationId,
       message: {
         _id: tempId, conversationId,
-       sender: { _id: String(userId) },
+       sender: { _id: String(userId), id: String(userId), fullName: user?.fullName, username: user?.username, avatar: user?.avatar },
         text: text || "", image: image || null,
         replyTo: replyTo || null,
         createdAt: new Date().toISOString(),
@@ -106,7 +106,7 @@ export default function useChat() {
       conversationId,
       message: { text: text?.trim() || "", image: image || null, replyTo: replyTo || null, tempId },
     });
-  }, [userId, dispatch]);
+  }, [userId,user , dispatch]);
 
   // ── Send image message ───────────────────────────────────────────────────
   const sendImageMessage = useCallback(async ({ conversationId, file, text, replyTo, onProgress }) => {
@@ -123,7 +123,7 @@ export default function useChat() {
         conversationId,
         message: {
           _id: tempId, conversationId,
-         sender: { _id: String(userId) },
+         sender: { _id: String(userId), id: String(userId), fullName: user?.fullName, username: user?.username, avatar: user?.avatar },
           text: text?.trim() || "",
           image: { url: URL.createObjectURL(file) },
           replyTo: replyTo || null,
@@ -143,7 +143,7 @@ export default function useChat() {
       onProgress?.(null);
       return { success: false, error: err.message };
     }
-  }, [userId, dispatch]);
+  }, [userId,user ,dispatch]);
 
   // ── Voice recording ──────────────────────────────────────────────────────
 
@@ -246,7 +246,7 @@ recordingTimerRef.current = setInterval(() => {
         conversationId,
         message: {
           _id: tempId, conversationId,
-          sender: { _id: String(userId) },
+         sender: { _id: String(userId), id: String(userId), fullName: user?.fullName, username: user?.username, avatar: user?.avatar },
           text: "", image: null,
           audio: { url: blobUrl, duration: audioData.duration || 0 }, // local preview
           replyTo: replyTo || null,
@@ -272,7 +272,7 @@ recordingTimerRef.current = setInterval(() => {
       onProgress?.(null);
       return { success: false, error: err.message };
     }
-  }, [userId, dispatch]);
+  }, [userId,user , dispatch]);
 
   // ── Mark seen ────────────────────────────────────────────────────────────
   const markSeen = useCallback(({ conversationId, messageId }) => {

@@ -145,7 +145,6 @@ const adminAuthSlice = createSlice({
       .addCase(fetchAdminMe.pending, (state) => {
         state.fetchMe.loading = true;
         state.fetchMe.error = null;
-        state.fetchMe.initialized = false;
       })
       .addCase(fetchAdminMe.fulfilled, (state, action) => {
         state.fetchMe.loading = false;

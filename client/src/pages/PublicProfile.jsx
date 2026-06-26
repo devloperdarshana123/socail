@@ -121,7 +121,7 @@ if (followState === "following") {
     ...p,
     followersCount: Math.max(0, (p.followersCount || 0) - 1),
   }));
-  const res = await dispatch(unfollowUser(profile._id));
+  const res = await dispatch(unfollowUser(profile.id));
   if (unfollowUser.rejected.match(res)) {
     setFollowState(prev);
     setProfile((p) => ({
@@ -132,7 +132,7 @@ if (followState === "following") {
 } else {
   setFollowState("following");
   setProfile((p) => ({ ...p, followersCount: (p.followersCount || 0) + 1 }));
-  const res = await dispatch(followUser(profile._id));
+  const res = await dispatch(followUser(profile.id));
   if (followUser.rejected.match(res)) {
     setFollowState(prev);
     setProfile((p) => ({
@@ -145,7 +145,7 @@ if (followState === "following") {
 };
 
  const handleMessage = () => {
-    navigate(`/messages?with=${profile._id}`);
+    navigate(`/messages?with=${profile.id}`);
   };
 
   if (loading) return (
@@ -358,7 +358,7 @@ const followBtnConfig = {
       post={{
         ...selectedPost,
         author: selectedPost.author || {
-          _id: profile._id,
+          _id: profile.id,
           fullName: profile.fullName,
           username: profile.username,
           avatar: profile.avatar,
@@ -373,7 +373,7 @@ const followBtnConfig = {
 </AnimatePresence>
 {followModal && (
   <FollowListModal
-    userId={profile?._id}
+    userId={profile?.id}
     type={followModal}
    onClose={() => {
   setFollowModal(null);

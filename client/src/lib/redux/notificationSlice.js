@@ -10,33 +10,6 @@ const BASE = "/notifications";
 
 
 
-// export const fetchNotifications = createAsyncThunk(
-//   "notifications/fetch",
-//   async ({ page = 1 } = {}, { rejectWithValue }) => {
-//     try {
-//       const { data } = await api.get(BASE, { params: { page, limit: 20 } });
-      
-//       const payload       = data?.data ?? {};
-//       const notifData     = payload.notifications ?? {};
-      
-//       // ✅ items array ke andar hai
-//       const notifications = Array.isArray(notifData.items) 
-//         ? notifData.items 
-//         : Array.isArray(notifData) 
-//         ? notifData 
-//         : [];
-
-//       return {
-//         notifications,
-//         unreadCount: payload.unreadCount ?? 0,
-//         hasMore:     notifData.hasMore   ?? notifications.length === 20,
-//         page,
-//       };
-//     } catch (err) {
-//       return rejectWithValue(err.response?.data?.message || "Failed to fetch");
-//     }
-//   }
-// );
 
 
 export const fetchNotifications = createAsyncThunk(

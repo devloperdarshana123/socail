@@ -1,65 +1,66 @@
-import asyncHandler from "../../middlewares/asyncHandler.js";
-import AppError from "../../utils/AppError.js";
-import FormData from "form-data";
-import fetch from "node-fetch";
-
-const GROQ_TRANSCRIBE_URL =
-  "https://api.groq.com/openai/v1/audio/transcriptions";
-
+import asyncHandler from 'express-async-handler';
+import AppError from '../../utils/AppError.js';
+import { transcribeAudio as transcribeAudioHelper } from '../../utils/transcribeHelpers.js';
+import logger from '../../config/logger.js';           // adjust path if needed
 export const transcribeAudio = asyncHandler(async (req, res, next) => {
   if (!req.file) {
     return next(new AppError("Audio file is required.", 400));
   }
 
-  if (!process.env.GROQ_API_KEY) {
-    return next(new AppError("AI service not configured.", 500));
+  // Validate file type (optional but recommended)
+  const validAudioMimes = [
+    "audio/webm",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/mp4",
+    "audio/m4a",
+    "audio/ogg",
+    "audio/flac",
+  ];
+
+  if (!validAudioMimes.includes(req.file.mimetype)) {
+    return next(
+      new AppError(
+        `Invalid audio format. Supported: ${validAudioMimes.join(", ")}`,
+        400
+      )
+    );
   }
 
-  // File size check — Groq max 25MB hai
-  if (req.file.size > 25 * 1024 * 1024) {
-    return next(new AppError("Audio file too large. Max 25MB allowed.", 400));
-  }
+  try {
+   const transcript = await transcribeAudioHelper(
+  req.file.buffer,
+  req.file.originalname || "audio.webm",
+  req.file.mimetype || "audio/webm"
+);
 
-  const form = new FormData();
-  form.append("file", req.file.buffer, {
-    filename: req.file.originalname || "audio.webm",
-    contentType: req.file.mimetype || "audio/webm",
-  });
-  form.append("model", "whisper-large-v3-turbo"); // fast + accurate + free tier
-  form.append("response_format", "text");
-  form.append("temperature", "0");
-  // language set nahi kar rahe — Whisper auto-detect karega (Hindi/English dono)
+    logger.info("Audio transcribed", {
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      transcriptLength: transcript.length,
+    });
 
-  const groqRes = await fetch(GROQ_TRANSCRIBE_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      ...form.getHeaders(),
-    },
-    body: form,
-  });
-
-
-  if (!groqRes.ok) {
-    const err = await groqRes.json().catch(() => ({}));
-    
-    if (groqRes.status === 429) {
-      return next(new AppError("Voice service busy. Try again in a moment.", 429));
+    return res.status(200).json({
+      success: true,
+      data: { transcript },
+    });
+  } catch (err) {
+    // Handle specific errors
+    if (err.message.includes("RATE_LIMIT")) {
+      return next(new AppError(err.message.replace("RATE_LIMIT: ", ""), 429));
     }
-    if (groqRes.status === 413) {
-      return next(new AppError("Audio too long. Please keep it under 2 minutes.", 413));
+    if (err.message.includes("PAYLOAD_TOO_LARGE")) {
+      return next(new AppError(err.message.replace("PAYLOAD_TOO_LARGE: ", ""), 413));
     }
-    
-    return next(new AppError(err?.error?.message || "Transcription failed.", 502));
-  }
-  const transcript = await groqRes.text();
+    if (err.message.includes("not configured")) {
+      return next(new AppError("AI service not configured.", 500));
+    }
+    if (err.message.includes("25MB")) {
+      return next(new AppError(err.message, 400));
+    }
 
-  if (!transcript?.trim()) {
-    return next(new AppError("Could not transcribe audio.", 422));
+    // Generic error
+    logger.error("Transcription failed", { error: err.message });
+    return next(new AppError("Transcription failed. Please try again.", 502));
   }
-
-  res.status(200).json({
-    success: true,
-    data: { transcript: transcript.trim() },
-  });
 });

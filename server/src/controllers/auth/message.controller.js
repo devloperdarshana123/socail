@@ -1,292 +1,145 @@
 
+
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import Conversation from "../../models/conversation.model.js";
-import { ConversationMember } from "../../models/conversation.model.js";
-import Message from "../../models/message.model.js";
-
+import * as MsgHelper from "../../utils/messageHelpers.js";
+import prisma from "../../config/prisma.js";
 import { encryptMessage, decryptMessage } from "../../utils/encryption.js";
-import mongoose from "mongoose";
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+const isValidUUID = (id) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-/**
- * Conversation ka lastMessage preview update karo (denormalized sub-schema)
- */
-const syncLastMessage = async (conversationId, msg) => {
-  await Conversation.findByIdAndUpdate(conversationId, {
-    $set: {
-      lastMessage: {
-        messageId: msg._id,
-        // text: msg.isDeleted ? "" : (msg.text?.slice(0, 100) ?? ""),
-        text: msg.isDeleted ? "" : encryptMessage(msg.text?.slice(0, 100) ?? ""),
-        senderId: msg.sender,
-        sentAt: msg.createdAt,
-        isDeleted: msg.isDeleted ?? false,
-      },
-    },
-  });
-};
 
-/**
- * Participant verification — reusable
- */
-const verifyParticipant = (conv, userId) => {
-  return conv.participants.map((p) => p.toString()).includes(userId.toString());
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  CONVERSATIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/messages/conversations
- * Logged-in user ki saari conversations — sorted by latest activity.
- * Paginated: ?page=1&limit=20
- */
 export const getConversations = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const page = Math.max(parseInt(req.query.page) || 1, 1);
+  const userId = req.user.id;
+  const page  = Math.max(parseInt(req.query.page)  || 1, 1);
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-  const skip = (page - 1) * limit;
 
- const members = await ConversationMember.find({ userId, isDeleted: false })
-    .select("conversationId unreadCount").lean();
-  const convIds = members.map((m) => m.conversationId);
-  const memberMap = {};
-  members.forEach((m) => { memberMap[m.conversationId.toString()] = m; });
+  const { conversations, hasMore } = await MsgHelper.getConversationsList(
+    userId, page, limit
+  );
 
-  const conversations = await Conversation.find({
-    _id: { $in: convIds },
-    isActive: true,
-  })
-    .sort({ updatedAt: -1 })
-    .skip(skip)
-    .limit(limit + 1) // hasMore check ke liye
-    .populate("participants", "username fullName avatar isVerifiedBadge accountStatus")
-    .lean();
-
-  const hasMore = conversations.length > limit;
-  if (hasMore) conversations.pop();
-
-  // Unread count — Map field properly extract karo
-const formatted = conversations.map((conv) => {
-  const member = memberMap[conv._id.toString()] ?? {};
-  return {
-    ...conv,
-    unreadCount: member.unreadCount ?? 0,
-    // ✅ avatar normalize — frontend avatar.url expect karta hai
-    participants: (conv.participants || []).map((p) => ({
-      ...p,
-      avatar: p.avatar?.url !== undefined
-        ? p.avatar
-        : { url: p.avatar || null, publicId: null },
-    })),
-  };
-});
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
-    data: formatted,
+    data: conversations,
     pagination: { page, limit, hasMore },
   });
 });
 
 
 export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+  const userId = req.user.id;
   const { participantId } = req.body;
 
   if (!participantId)
     return next(new AppError("participantId is required.", 400));
 
-  if (participantId === userId.toString())
+  if (participantId === userId)
     return next(new AppError("Cannot start a conversation with yourself.", 400));
 
-  if (!mongoose.isValidObjectId(participantId))
+  if (!isValidUUID(participantId))
     return next(new AppError("Invalid participantId.", 400));
 
-  const { conversation } = await Conversation.createDM(userId, participantId);
+  // Check participant exists
+  const participant = await prisma.user.findUnique({
+    where: { id: participantId },
+    select: { id: true },
+  });
+  if (!participant)
+    return next(new AppError("User not found.", 404));
 
-  const populated = await Conversation.findById(conversation._id).populate(
-    "participants",
-    "username fullName avatar isVerifiedBadge accountStatus",
-  );
+  const conversation = await MsgHelper.getOrCreateDM(userId, participantId);
 
-  res.status(200).json({ success: true, data: populated });
+  return res.status(200).json({ success: true, data: conversation });
 });
-/**
- * GET /api/messages/conversations/unread-count
- * Navbar badge ke liye total unread count across all conversations.
- */
+
+
 export const getTotalUnreadCount = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-
- const members = await ConversationMember.find({ userId, isDeleted: false })
-    .select("unreadCount").lean();
-  const total = members.reduce((sum, m) => sum + (m.unreadCount ?? 0), 0);
- 
-
-  res.status(200).json({ success: true, data: { unreadCount: total } });
+  const unreadCount = await MsgHelper.getTotalUnread(req.user.id);
+  return res.status(200).json({ success: true, data: { unreadCount } });
 });
 
-/**
- * PATCH /api/messages/conversations/:conversationId/read
- * Conversation open karne par — unread reset + seenBy + readBy mark karo.
- */
+
 export const markConversationRead = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+  const userId = req.user.id;
   const { conversationId } = req.params;
 
-  if (!mongoose.isValidObjectId(conversationId))
+  if (!isValidUUID(conversationId))
     return next(new AppError("Invalid conversationId.", 400));
 
-  const conv = await Conversation.findById(conversationId).lean();
-  if (!conv) return next(new AppError("Conversation not found.", 404));
-  if (!verifyParticipant(conv, userId))
+  const isMember = await MsgHelper.isParticipant(conversationId, userId);
+  if (!isMember)
     return next(new AppError("Unauthorized.", 403));
 
-  // Unread counter reset
- await ConversationMember.findOneAndUpdate(
-    { conversationId, userId },
-    { $set: { unreadCount: 0, lastSeenAt: new Date() } },
-  );
+  await MsgHelper.markConversationRead(conversationId, userId);
 
-  // Saare unread messages — seenBy aur readBy dono update karo (blue tick)
-
-  await Message.updateMany(
-  {
-    conversation: conversationId,
-    seenBy: { $ne: userId },
-    isDeleted: false,
-  },
-  { $addToSet: { seenBy: userId } },
-);
-  
-
-  res.status(200).json({ success: true });
+  return res.status(200).json({ success: true });
 });
 
-/**fgetMessages
- * DELETE /api/messages/conversations/:conversationId
- * Conversation soft-delete (sirf apne liye) — doosre ke liye exist karti rahegi.
- */
+
 export const deleteConversation = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+  const userId = req.user.id;
   const { conversationId } = req.params;
 
-  if (!mongoose.isValidObjectId(conversationId))
+  if (!isValidUUID(conversationId))
     return next(new AppError("Invalid conversationId.", 400));
 
-  const conv = await Conversation.findById(conversationId).lean();
-  if (!conv) return next(new AppError("Conversation not found.", 404));
-  if (!verifyParticipant(conv, userId))
+  const conv = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { id: true },
+  });
+  if (!conv)
+    return next(new AppError("Conversation not found.", 404));
+
+  const isMember = await MsgHelper.isParticipant(conversationId, userId);
+  if (!isMember)
     return next(new AppError("Unauthorized.", 403));
 
-  await Conversation.softDeleteForUser(conversationId, userId);
+  await MsgHelper.softDeleteConversationForUser(conversationId, userId);
 
-  res.status(200).json({ success: true });
+  return res.status(200).json({ success: true });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  MESSAGES
-// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * GET /api/messages/conversations/:conversationId/messages
- * Cursor-based paginated messages — stable under concurrent inserts.
- * Query: ?limit=30&before=<messageId>
- */
 export const getMessages = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+  const userId = req.user.id;
   const { conversationId } = req.params;
-  const limit = Math.min(parseInt(req.query.limit) || 30, 100);
-  const before = req.query.before; // cursor messageId
+  const limit  = Math.min(parseInt(req.query.limit) || 30, 100);
+  const before = req.query.before || null;
 
-  if (!mongoose.isValidObjectId(conversationId))
+  if (!isValidUUID(conversationId))
     return next(new AppError("Invalid conversationId.", 400));
 
-  const conv = await Conversation.findById(conversationId).lean();
-  if (!conv) return next(new AppError("Conversation not found.", 404));
-  if (!verifyParticipant(conv, userId))
+  if (before && !isValidUUID(before))
+    return next(new AppError("Invalid cursor.", 400));
+
+  const isMember = await MsgHelper.isParticipant(conversationId, userId);
+  if (!isMember)
     return next(new AppError("Unauthorized.", 403));
 
-  // Cursor query build karo
-  // const query = { conversation: conversationId, isDeleted: false };
-
-  // NAYA
-const member = await ConversationMember.findOne({ conversationId, userId }).lean();
-const query = { 
-  conversation: conversationId, 
-  isDeleted: false,
-  ...(member?.clearedAt && { createdAt: { $gt: member.clearedAt } }),
-};
-  if (before && mongoose.isValidObjectId(before)) {
-    const cursorMsg = await Message.findById(before).select("createdAt").lean();
-    if (cursorMsg) query.createdAt = { $lt: cursorMsg.createdAt };
-  }
-
-  const messages = await Message.find(query)
-    .sort({ createdAt: -1 })
-    .limit(limit + 1)
-    .populate("sender", "username fullName avatar isVerifiedBadge")
-    .populate({
-      path: "replyTo.messageId",
-      select: "text image isDeleted sender",
-      populate: { path: "sender", select: "username fullName" },
-    })
-    .lean();
-
-  const hasMore = messages.length > limit;
-  if (hasMore) messages.pop();
-
-  // UI ke liye ascending order
-  messages.reverse();
-
-  // messages.reverse(); ke baad yeh add karo:
-
-const decryptedMessages = messages.map((msg) => ({
-  ...msg,
-  text: msg.text ? decryptMessage(msg.text) : "",
-  // lastMessage preview bhi decrypt karo
-  replyTo: msg.replyTo
-    ? {
-        ...msg.replyTo,
-        text: msg.replyTo.text ? decryptMessage(msg.replyTo.text) : "",
-      }
-    : null,
-}));
-
-// Aur response mein data: messages ko badlo:
-// data: messages  ❌
-// data: decryptedMessages  ✅
-
-  // Background mein read mark karo
-
-
-  await ConversationMember.findOneAndUpdate(
-    { conversationId, userId },
-    { $set: { unreadCount: 0, lastSeenAt: new Date() } },
+ const { messages, hasMore, nextCursor } = await MsgHelper.getMessages(
+    conversationId, userId, { limit, before }
   );
 
-  res.status(200).json({
+  // Decrypt messages
+  const decryptedMessages = messages.map((msg) => ({
+    ...msg,
+    text: msg.text ? decryptMessage(msg.text) : msg.text,
+  }));
+
+  // Background: reset unread
+  MsgHelper.markConversationRead(conversationId, userId).catch(() => {});
+
+  return res.status(200).json({
     success: true,
-   data: decryptedMessages, 
-    pagination: {
-      hasMore,
-      nextCursor: hasMore ? messages[0]?._id : null,
-    },
+    data: decryptedMessages,
+    pagination: { hasMore, nextCursor },
   });
 });
 
-/**
- * POST /api/messages/send
- * REST fallback — primary path socket hai.
- * Body: { conversationId, text?, image?, replyTo? }
- */
+
 export const sendMessage = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+  const userId = req.user.id;
   const { conversationId, text, image, replyTo } = req.body;
 
   if (!conversationId)
@@ -296,205 +149,150 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
   if (text && text.trim().length > 2000)
     return next(new AppError("Message cannot exceed 2000 characters.", 400));
 
-  const conv = await Conversation.findById(conversationId).lean();
-  if (!conv) return next(new AppError("Conversation not found.", 404));
-  if (!verifyParticipant(conv, userId))
+  if (!isValidUUID(conversationId))
+    return next(new AppError("Invalid conversationId.", 400));
+
+  if (replyTo && !isValidUUID(replyTo))
+    return next(new AppError("Invalid replyTo ID.", 400));
+
+  const isMember = await MsgHelper.isParticipant(conversationId, userId);
+  if (!isMember)
     return next(new AppError("Unauthorized.", 403));
 
-  // replyTo — denormalized preview banao
-  let replyPreview = null;
-  if (replyTo && mongoose.isValidObjectId(replyTo)) {
-    const parent = await Message.findById(replyTo)
-      .select("text image isDeleted sender")
-      .lean();
-    if (parent) {
-      replyPreview = {
-        messageId: parent._id,
-        text: parent.isDeleted ? "" : (parent.text?.slice(0, 100) ?? ""),
-        senderId: parent.sender,
-        isDeleted: parent.isDeleted ?? false,
-      };
-    }
-  }
-
-  const msg = await Message.create({
-    conversation: conversationId,
-    sender: userId,
-    // text: text?.trim() || "",
-    text: text?.trim() ? encryptMessage(text.trim()) : "",
-    image: image || null,
-    replyTo: replyPreview,
-    type: image && !text?.trim() ? "image" : "text",
+  const msg = await MsgHelper.createMessage(conversationId, userId, {
+    text: text?.trim() ? encryptMessage(text.trim()) : null,
+    image,
+    replyTo: replyTo || null,
   });
-
-  await msg.populate([
-    { path: "sender", select: "username fullName avatar isVerifiedBadge" },
+  // Sync lastMessage + increment unread (parallel)
+  await Promise.all([
+    MsgHelper.syncLastMessage(conversationId, msg),
+    MsgHelper.incrementUnreadForRecipients(conversationId, userId),
   ]);
 
-  // lastMessage preview + unread increment (doosre participants ke liye)
-  await syncLastMessage(conversationId, msg);
-
- const recipientIds = conv.participants
-    .map((p) => p.toString())
-    .filter((pid) => pid !== userId.toString());
-
-  if (recipientIds.length) {
-    await ConversationMember.bulkWrite(
-      recipientIds.map((pid) => ({
-        updateOne: {
-          filter: { conversationId, userId: pid },
-          update: { $inc: { unreadCount: 1 } },
-        },
-      })),
-    );
-  }
-
-  // res.status(201).json({ success: true, data: msg });
-  // ✅ Yeh karo — plain text bhejo frontend ko
-res.status(201).json({ 
-  success: true, 
-  data: {
-    ...msg.toObject(),
-    text: text?.trim() || "",  // original plain text
-  }
-});
-});
-
-/**
- * PATCH /api/messages/:messageId
- * Message edit — sirf sender kar sakta hai, deleted message edit nahi hoga.
- * Body: { text }
- */
-export const editMessage = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
-  const { messageId } = req.params;
-  const { text } = req.body;
-
-  if (!text?.trim()) return next(new AppError("text is required.", 400));
-  if (text.trim().length > 2000)
-    return next(new AppError("Message cannot exceed 2000 characters.", 400));
-
-  const msg = await Message.findById(messageId);
-  if (!msg) return next(new AppError("Message not found.", 404));
-  if (msg.isDeleted)
-    return next(new AppError("Cannot edit a deleted message.", 400));
-  if (msg.sender.toString() !== userId.toString())
-    return next(new AppError("Unauthorized.", 403));
-
-  // msg.text = text.trim();
-  msg.text = encryptMessage(text.trim());
-  msg.isEdited = true;
-  msg.editedAt = new Date(); // ← missing tha pehle
-  await msg.save();
-
-  // Agar lastMessage tha toh preview bhi update karo
-  await syncLastMessage(msg.conversation, msg);
-
-  res.status(200).json({
+  return res.status(201).json({
     success: true,
-    data: {
-      messageId: msg._id,
-      // text: msg.text,
-        text: text.trim(),
-      isEdited: true,
-      editedAt: msg.editedAt,
+   data: {
+      ...msg,
+      text: text?.trim() || "", // plain text — encrypted nahi
     },
   });
 });
 
-/**
- * DELETE /api/messages/:messageId
- * Soft delete — text/image clear, lastMessage preview update.
- */
-export const deleteMessage = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+
+export const editMessage = asyncHandler(async (req, res, next) => {
+  const userId = req.user.id;
   const { messageId } = req.params;
+  const { text } = req.body;
 
-  const msg = await Message.findById(messageId);
-  if (!msg) return next(new AppError("Message not found.", 404));
-  if (msg.isDeleted)
-    return next(new AppError("Message already deleted.", 400));
-  if (msg.sender.toString() !== userId.toString())
-    return next(new AppError("Unauthorized.", 403));
+  if (!isValidUUID(messageId))
+    return next(new AppError("Invalid messageId.", 400));
 
-  msg.isDeleted = true;
-  msg.deletedAt = new Date();
-  msg.text = "";      // content clear karo
-  msg.image = null;   // image bhi remove
-  msg.reactions = []; // reactions bhi clear
-  await msg.save();
+  if (!text?.trim())
+    return next(new AppError("text is required.", 400));
+  if (text.trim().length > 2000)
+    return next(new AppError("Message cannot exceed 2000 characters.", 400));
 
-  // lastMessage tha toh preview update karo
-  await syncLastMessage(msg.conversation, msg);
+  try {
+   const updated = await MsgHelper.editMessage(messageId, userId, encryptMessage(text.trim()));
+    await MsgHelper.syncLastMessage(updated.conversationId, updated);
 
-  res.status(200).json({
-    success: true,
-    data: { messageId: msg._id, isDeleted: true },
-  });
+    return res.status(200).json({
+      success: true,
+      data: {
+        messageId: updated.id,
+        text: text.trim(), 
+        isEdited: true,
+        editedAt: updated.editedAt,
+      },
+    });
+  } catch (err) {
+    const status = err.message === "Unauthorized" ? 403
+      : err.message === "Message not found" ? 404
+      : 400;
+    return next(new AppError(err.message, status));
+  }
 });
 
-/**
- * PATCH /api/messages/:messageId/react
- * Emoji reaction add/change/remove.
- * Body: { emoji } — empty string = remove reaction
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  DELETE /api/v2/messages/:messageId
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const deleteMessage = asyncHandler(async (req, res, next) => {
+  const userId = req.user.id;
+  const { messageId } = req.params;
+
+  if (!isValidUUID(messageId))
+    return next(new AppError("Invalid messageId.", 400));
+
+  try {
+    const deleted = await MsgHelper.softDeleteMessage(messageId, userId);
+    await MsgHelper.syncLastMessage(deleted.conversationId, deleted);
+
+    return res.status(200).json({
+      success: true,
+      data: { messageId: deleted.id, isDeleted: true },
+    });
+  } catch (err) {
+    const status = err.message === "Unauthorized" ? 403
+      : err.message.includes("not found") ? 404
+      : 400;
+    return next(new AppError(err.message, status));
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PATCH /api/v2/messages/:messageId/react
+//  Body: { emoji } — empty = remove reaction
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const reactToMessage = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+  const userId = req.user.id;
   const { messageId } = req.params;
   const { emoji } = req.body;
 
-  if (!mongoose.isValidObjectId(messageId))
+  if (!isValidUUID(messageId))
     return next(new AppError("Invalid messageId.", 400));
 
-  const msg = await Message.findById(messageId);
-  if (!msg) return next(new AppError("Message not found.", 404));
-  if (msg.isDeleted)
-    return next(new AppError("Cannot react to a deleted message.", 400));
-
   // Participant check
-  const conv = await Conversation.findById(msg.conversation).lean();
-  if (!conv || !verifyParticipant(conv, userId))
+  const msg = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { conversationId: true },
+  });
+  if (!msg)
+    return next(new AppError("Message not found.", 404));
+
+  const isMember = await MsgHelper.isParticipant(msg.conversationId, userId);
+  if (!isMember)
     return next(new AppError("Unauthorized.", 403));
 
-  // Purani reaction remove karo
-  msg.reactions = msg.reactions.filter(
-    (r) => r.userId.toString() !== userId.toString(),
-  );
-
-  // Nai reaction add karo (agar emoji empty nahi hai)
-  if (emoji?.trim()) {
-    msg.reactions.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
+  try {
+    const updated = await MsgHelper.reactToMessage(messageId, userId, emoji);
+    return res.status(200).json({
+      success: true,
+      data: { messageId: updated.id, reactions: updated.reactions },
+    });
+  } catch (err) {
+    return next(new AppError(err.message, 400));
   }
-
-  await msg.save();
-
-  res.status(200).json({
-    success: true,
-    data: { messageId: msg._id, reactions: msg.reactions },
-  });
 });
 
-/**
- * DELETE /api/messages/conversations/:conversationId/clear
- * Sirf apne liye chat clear karo — doosre ke messages rahenge
- */
+// ─────────────────────────────────────────────────────────────────────────────
+//  DELETE /api/v2/messages/conversations/:conversationId/clear
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const clearChat = asyncHandler(async (req, res, next) => {
-  const userId = req.user._id;
+  const userId = req.user.id;
   const { conversationId } = req.params;
 
-  if (!mongoose.isValidObjectId(conversationId))
+  if (!isValidUUID(conversationId))
     return next(new AppError("Invalid conversationId.", 400));
 
-  const conv = await Conversation.findById(conversationId).lean();
-  if (!conv) return next(new AppError("Conversation not found.", 404));
-  if (!verifyParticipant(conv, userId))
+  const isMember = await MsgHelper.isParticipant(conversationId, userId);
+  if (!isMember)
     return next(new AppError("Unauthorized.", 403));
 
-  // Sirf is user ke liye clearedAt timestamp set karo
-  await ConversationMember.findOneAndUpdate(
-    { conversationId, userId },
-    { $set: { clearedAt: new Date() } },
-  );
+  await MsgHelper.clearChatForUser(conversationId, userId);
 
   return res.status(200).json({ success: true, message: "Chat cleared." });
 });

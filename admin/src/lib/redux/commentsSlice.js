@@ -121,7 +121,7 @@ export const fetchCommentById = createAsyncThunk(
 export const updateCommentStatus = createAsyncThunk(
   "comments/updateStatus",
   async ({ commentId, status, reason }, { rejectWithValue, getState }) => {
-    const prev       = getState().comments.comments.find((c) => c._id === commentId);
+    const prev       = getState().comments.comments.find((c) =>  c.id === commentId);
     const prevStatus = prev?.status ?? null;
     try {
       const { data: body } = await commentsAPI.updateStatus(commentId, { status, reason });
@@ -141,7 +141,7 @@ export const updateCommentStatus = createAsyncThunk(
 export const deleteComment = createAsyncThunk(
   "comments/delete",
   async (commentId, { rejectWithValue, getState }) => {
-    const comment    = getState().comments.comments.find((c) => c._id === commentId);
+    const comment    = getState().comments.comments.find((c) =>  c.id === commentId);
     const prevStatus = comment?.status ?? null;
     try {
       await commentsAPI.remove(commentId);
@@ -159,7 +159,7 @@ export const bulkUpdateComments = createAsyncThunk(
     // stats accurately without a second getState() call inside the reducer.
     const allComments  = getState().comments.comments;
     const prevStatuses = Object.fromEntries(
-      commentIds.map((id) => [id, allComments.find((c) => c._id === id)?.status ?? null])
+      commentIds.map((id) => [id, allComments.find((c) =>  c.id === id)?.status ?? null])
     );
     try {
       const { data: body } = await commentsAPI.bulkAction({ ids: commentIds, action, reason });
@@ -225,7 +225,7 @@ const commentsSlice = createSlice({
       if (idx === -1) state.selectedIds.push(payload);
       else            state.selectedIds.splice(idx, 1);
     },
-    selectAllIds:      (state)              => { state.selectedIds = state.comments.map((c) => c._id); },
+    selectAllIds:      (state)              => { state.selectedIds = state.comments.map((c) =>  c.id); },
     clearSelectedIds:  (state)              => { state.selectedIds = []; },
   },
   extraReducers: (builder) => {
@@ -253,34 +253,34 @@ const commentsSlice = createSlice({
       // ── updateCommentStatus ─────────────────────────────────────────────────
       .addCase(updateCommentStatus.pending, (s, { meta }) => {
         s.actionLoading = meta.arg.commentId;
-        const c = s.comments.find((x) => x._id === meta.arg.commentId);
+        const c = s.comments.find((x) => x.id === meta.arg.commentId);
         if (c && c.status !== meta.arg.status) {
           moveStat(s.stats, c.status, meta.arg.status);  // optimistic stats
           c.status = meta.arg.status;
         }
-        if (s.detail?._id === meta.arg.commentId) s.detail.status = meta.arg.status;
+        if (s.detail?.id === meta.arg.commentId) s.detail.status = meta.arg.status;
       })
       .addCase(updateCommentStatus.fulfilled, (s, { payload }) => {
         s.actionLoading = null;
-        const c = s.comments.find((x) => x._id === payload.commentId);
+        const c = s.comments.find((x) => x.id === payload.commentId);
         if (c && c.status !== payload.status) {
           // Server confirmed a different status than our optimistic update — correct it
           moveStat(s.stats, c.status, payload.status);
           c.status = payload.status;
         }
-        if (s.detail?._id === payload.commentId) s.detail.status = payload.status;
+        if (s.detail?.id === payload.commentId) s.detail.status = payload.status;
       })
       .addCase(updateCommentStatus.rejected, (s, { payload }) => {
         s.actionLoading = null;
         s.actionError   = payload?.message ?? payload;
         // Rollback optimistic update
         if (payload?.commentId && payload?.prevStatus) {
-          const c = s.comments.find((x) => x._id === payload.commentId);
+          const c = s.comments.find((x) => x.id === payload.commentId);
           if (c && c.status !== payload.prevStatus) {
             moveStat(s.stats, c.status, payload.prevStatus);
             c.status = payload.prevStatus;
           }
-          if (s.detail?._id === payload.commentId) s.detail.status = payload.prevStatus;
+          if (s.detail?.id === payload.commentId) s.detail.status = payload.prevStatus;
         }
       })
 
@@ -288,7 +288,7 @@ const commentsSlice = createSlice({
       .addCase(deleteComment.pending,   (s, { meta })    => { s.actionLoading = meta.arg; })
       .addCase(deleteComment.fulfilled, (s, { payload }) => {
         s.actionLoading = null;
-        s.comments      = s.comments.filter((c) => c._id !== payload.commentId);
+        s.comments      = s.comments.filter((c) =>  c.id !== payload.commentId);
         s.pagination.totalComments = Math.max(0, s.pagination.totalComments - 1);
 
         // FIX: stats were never updated on delete — stat cards showed stale counts.
@@ -317,11 +317,11 @@ const commentsSlice = createSlice({
       //   const prevStatuses = payload.prevStatuses ?? {};        // FIX: captured in thunk before API call
 
       //   s.comments = s.comments.map((c) => {
-      //     if (!successIds.has(c._id)) return c;
+      //     if (!successIds.has( c.id)) return c;
 
       //     // FIX: stats were never updated on bulk action — counts stayed wrong after approve/flag/remove.
       //     // Now we move each affected comment from its old stat bucket to the new one.
-      //     const prevStatus = prevStatuses[c._id];
+      //     const prevStatus = prevStatuses[ c.id];
       //     if (prevStatus && prevStatus !== newStatus) {
       //       moveStat(s.stats, prevStatus, newStatus);
       //     }
@@ -347,7 +347,7 @@ const commentsSlice = createSlice({
   );
 
   if (action === "remove") {
-    s.comments = s.comments.filter((c) => !successIds.has(c._id));
+    s.comments = s.comments.filter((c) => !successIds.has( c.id));
     s.pagination.totalComments = Math.max(0, s.pagination.totalComments - successIds.size);
     successIds.forEach((id) => {
       const prevStatus = prevStatuses[id];
@@ -358,8 +358,8 @@ const commentsSlice = createSlice({
     });
   } else {
     s.comments = s.comments.map((c) => {
-      if (!successIds.has(c._id)) return c;
-      const prevStatus = prevStatuses[c._id];
+      if (!successIds.has( c.id)) return c;
+      const prevStatus = prevStatuses[ c.id];
       if (prevStatus && prevStatus !== newStatus) {
         moveStat(s.stats, prevStatus, newStatus);
       }

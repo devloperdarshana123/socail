@@ -161,8 +161,8 @@ const coverPreview  = localCoverPreview  || user?.coverPhoto?.url || null;
   const loadMoreRef = useRef(null);   
  
   useEffect(() => {
-    if (user?._id) dispatch(fetchMyPosts(user._id));
-  }, [user?._id]);
+    if (user?.id) dispatch(fetchMyPosts(user.id));
+  }, [user?.id]);
   
   useEffect(() => {
     dispatch(fetchMyHighlights());
@@ -175,12 +175,12 @@ useEffect(() => {
   if (!postId) return;
 
   // Pehle myPosts mein dhundho
-  const found = myPosts.find((p) => p._id === postId);
+  const found = myPosts.find((p) => p.id === postId);
   if (found) { setSelectedPost(found); return; }
 
   // Nahi mila toh savedPosts fetch karke dhundho
   if (savedPosts.length > 0) {
-    const foundInSaved = savedPosts.find((p) => p._id === postId);
+    const foundInSaved = savedPosts.find((p) => p.id === postId);
     if (foundInSaved) { setSelectedPost(foundInSaved); return; }
   } else {
     dispatch(fetchSavedPosts(1));
@@ -194,13 +194,7 @@ useEffect(() => {
     if (activeTab === "saved") dispatch(fetchSavedPosts(1));
   }, [activeTab]);
 
-  // useEffect(() => {
-  //   if (avatar?.url) setLocalAvatarPreview(null);
-  // }, [avatar?.url]);
-
-  // useEffect(() => {
-  //   if (coverPhoto?.url) setLocalCoverPreview(null);
-  // }, [coverPhoto?.url]);
+  
 
 
   // ✅ REPLACE KARO — user se check karo
@@ -214,7 +208,7 @@ useEffect(() => {
 
 useEffect(() => {
   if (!selectedPost) return;
-  const postId = selectedPost._id;
+  const postId = selectedPost.id;
   dispatch(initInteraction({
     postId,
     likesCount: selectedPost.likesCount ?? 0,
@@ -227,7 +221,7 @@ useEffect(() => {
     viewedPosts.current.add(postId);
     dispatch(recordPostView(postId));
   }
-}, [selectedPost?._id]);
+}, [selectedPost?.id]);
 
 useEffect(() => {
   if (activeTab !== "posts") return;
@@ -238,9 +232,9 @@ useEffect(() => {
         myPostsHasMore &&
         !myPostsLoadingMore &&
         myPostsNextCursor &&
-        user?._id
+        user?.id
       ) {
-        dispatch(fetchMoreMyPosts({ userId: user._id, cursor: myPostsNextCursor }));
+        dispatch(fetchMoreMyPosts({ userId: user.id, cursor: myPostsNextCursor }));
       }
     },
     { threshold: 0.1 }
@@ -248,7 +242,7 @@ useEffect(() => {
   const el = loadMoreRef.current;
   if (el) observer.observe(el);
   return () => { if (el) observer.unobserve(el); };
-}, [activeTab, myPostsHasMore, myPostsLoadingMore, myPostsNextCursor, user?._id]);
+}, [activeTab, myPostsHasMore, myPostsLoadingMore, myPostsNextCursor, user?.id]);
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -501,7 +495,7 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
 
         return (
           <motion.div
-            key={post._id}
+            key={post.id}
             whileHover={{ scale: 1.02 }}
             transition={{ duration: 0.2 }}
             onClick={() => setEditingDraft(post)}
@@ -557,13 +551,13 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
                   <Pencil size={11} /> Edit
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); dispatch(publishDraftPost(post._id)); }}
+                  onClick={(e) => { e.stopPropagation(); dispatch(publishDraftPost(post.id)); }}
                   className="flex items-center gap-1.5 bg-[#5a3e2b] text-white text-xs font-bold px-3 py-1.5 rounded-full"
                 >
                   <Play size={11} /> Publish
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); dispatch(deletePost(post._id)); }}
+                  onClick={(e) => { e.stopPropagation(); dispatch(deletePost(post.id)); }}
                   className="flex items-center gap-1.5 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full"
                 >
                   <Trash2 size={11} /> Delete
@@ -594,12 +588,12 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
 
               return (
                 <motion.div
-                  key={post._id}
+                  key={post.id}
                   whileHover={{ scale: 1.02 }}
                   transition={{ duration: 0.2 }}
                  onClick={() => {
   setSelectedPost(post);
-  window.history.pushState({}, "", `?post=${post._id}`);
+  window.history.pushState({}, "", `?post=${post.id}`);
 }}
                   className="relative cursor-pointer group overflow-hidden"
                   style={{ paddingBottom: "100%", height: 0 }}
@@ -677,7 +671,7 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
                  </div>
 
                     <PostGridMenu
-                      onDelete={() => dispatch(deletePost(post._id))}
+                      onDelete={() => dispatch(deletePost(post.id))}
                     />
                   </div>
                 </motion.div>
@@ -712,7 +706,7 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
      {/* FOLLOW LIST MODAL */}
 {followModal && (
   <FollowListModal
-    userId={user?._id}
+    userId={user?.id}
     type={followModal}
     onClose={() => setFollowModal(null)}
     onUnfollow={() => {}}
@@ -753,8 +747,8 @@ const isTextPost = post.type === "text" || (!imgSrc && post.caption);
     onSaved={(result) => {
   setEditingDraft(null);
   dispatch(fetchDraftPosts());
-  if (result?.type === "published" && user?._id) {
-    dispatch(fetchMyPosts(user._id));
+  if (result?.type === "published" && user?.id) {
+    dispatch(fetchMyPosts(user.id));
   }
 }}
   />

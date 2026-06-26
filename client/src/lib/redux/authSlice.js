@@ -1,7 +1,10 @@
 
-
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import api , { setTokenExpiry } from "../services/api";
+import api, { setTokenExpiry } from "../services/api";
+
+// ── Normalize user — id guarantee karo ──
+const normUser = (u) => u ? { ...u, id: u.id ?? u._id } : null;
+
 // ─────────────────────────────────────────────
 //  Thunks
 // ─────────────────────────────────────────────
@@ -48,7 +51,6 @@ export const verifyOtp = createAsyncThunk(
     }
   },
 );
-
 
 export const googleLogin = createAsyncThunk(
   "auth/googleLogin",
@@ -142,7 +144,6 @@ export const setUsername = createAsyncThunk(
   },
 );
 
-
 export const forgotPassword = createAsyncThunk(
   "auth/forgotPassword",
   async (email, { rejectWithValue }) => {
@@ -166,7 +167,6 @@ export const resetPassword = createAsyncThunk(
     }
   }
 );
-
 
 export const followUser = createAsyncThunk(
   "auth/followUser",
@@ -192,7 +192,6 @@ export const unfollowUser = createAsyncThunk(
   }
 );
 
-
 // ─────────────────────────────────────────────
 //  Initial State
 // ─────────────────────────────────────────────
@@ -200,7 +199,7 @@ export const unfollowUser = createAsyncThunk(
 const initialState = {
   user: null,
   isAuthenticated: false,
- expiresAt: null,
+  expiresAt: null,
   pendingUserId: null,
   pendingPurpose: null,
   nextRoute: null,
@@ -230,7 +229,7 @@ const authSlice = createSlice({
 
   reducers: {
     setUser: (state, action) => {
-      state.user = action.payload;
+      state.user = normUser(action.payload);
       state.isAuthenticated = !!action.payload;
     },
     clearRegisterState: (state) => {
@@ -263,18 +262,17 @@ const authSlice = createSlice({
         error: null,
       };
     },
-   resetAuth: () => initialState, 
-updateUserAvatar(state, action) {
-  if (state.user) state.user.avatar = action.payload;
-},
-updateUserCoverPhoto(state, action) {
-  if (state.user) state.user.coverPhoto = action.payload;
-},
-setPending(state, action) {
-  state.pendingUserId = action.payload.userId;
-  state.pendingPurpose = action.payload.purpose;
-},
-
+    resetAuth: () => initialState,
+    updateUserAvatar(state, action) {
+      if (state.user) state.user.avatar = action.payload;
+    },
+    updateUserCoverPhoto(state, action) {
+      if (state.user) state.user.coverPhoto = action.payload;
+    },
+    setPending(state, action) {
+      state.pendingUserId = action.payload.userId;
+      state.pendingPurpose = action.payload.purpose;
+    },
   },
 
   extraReducers: (builder) => {
@@ -308,14 +306,13 @@ setPending(state, action) {
       .addCase(verifyOtp.fulfilled, (state, action) => {
         state.otp.loading = false;
         state.otp.success = true;
-        state.user = action.payload.data || null;
+        state.user = normUser(action.payload.data || null);
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
         state.expiresAt = action.payload.expiresAt || null;
-         if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
+        if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
         state.pendingUserId = null;
         state.pendingPurpose = null;
-        
       })
       .addCase(verifyOtp.rejected, (state, action) => {
         state.otp.loading = false;
@@ -332,19 +329,18 @@ setPending(state, action) {
         state.fetchMe.loading = true;
         state.fetchMe.error = null;
       })
-
-.addCase(fetchMe.fulfilled, (state, action) => {
-  state.fetchMe.loading = false;
-  state.user = action.payload.data?.user || action.payload.data || null;
-  state.isAuthenticated = !!state.user;
-  if (state.expiresAt) setTokenExpiry(state.expiresAt);
-})
-    .addCase(fetchMe.rejected, (state, action) => {
-  state.fetchMe.loading  = false;
-  state.fetchMe.error    = action.payload;
-  state.user             = null;
-  state.isAuthenticated  = false;
-})
+      .addCase(fetchMe.fulfilled, (state, action) => {
+        state.fetchMe.loading = false;
+        state.user = normUser(action.payload.data?.user || action.payload.data || null);
+        state.isAuthenticated = !!state.user;
+        if (state.expiresAt) setTokenExpiry(state.expiresAt);
+      })
+      .addCase(fetchMe.rejected, (state, action) => {
+        state.fetchMe.loading = false;
+        state.fetchMe.error = action.payload;
+        state.user = null;
+        state.isAuthenticated = false;
+      });
 
     // ── Login ──
     builder
@@ -353,17 +349,17 @@ setPending(state, action) {
         state.login.error = null;
         state.login.success = false;
       })
-     .addCase(loginUser.fulfilled, (state, action) => {
+      .addCase(loginUser.fulfilled, (state, action) => {
         state.login.loading = false;
         state.login.success = true;
-        state.user = action.payload.data || null;
+        state.user = normUser(action.payload.data || null);
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
-state.expiresAt = action.payload.expiresAt || null;
-if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
-         
+        state.expiresAt = action.payload.expiresAt || null;
+        if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
+
         if (action.payload.nextRoute === "/verify-otp") {
-          state.pendingUserId = action.payload.data?._id || null;
+          state.pendingUserId = action.payload.data?.id ?? action.payload.data?._id ?? null;
           state.pendingPurpose =
             action.payload.data?.authProvider === "phone"
               ? "mobile_verify"
@@ -393,8 +389,8 @@ if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
 
     // ── Logout ──
     builder
-    .addCase(logoutUser.fulfilled,  () => initialState)
-.addCase(logoutUser.rejected,   () => initialState); 
+      .addCase(logoutUser.fulfilled, () => initialState)
+      .addCase(logoutUser.rejected, () => initialState);
 
     // ── Username Suggestions ──
     builder
@@ -434,7 +430,7 @@ if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
       })
       .addCase(setUsername.fulfilled, (state, action) => {
         state.onboarding.setLoading = false;
-        state.user = action.payload.data || null;
+        state.user = normUser(action.payload.data || null);
         state.isAuthenticated = !!action.payload.data;
         state.nextRoute = action.payload.nextRoute || "/feed";
       })
@@ -443,52 +439,47 @@ if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
         state.onboarding.error = action.payload;
       });
 
+    // ── Follow User ──
+    builder
+      .addCase(followUser.fulfilled, (state, action) => {
+        if (state.user && action.payload?.status === "accepted") {
+          state.user.followingCount = (state.user.followingCount || 0) + 1;
+        }
+      });
 
+    // ── Unfollow User ──
+    builder
+      .addCase(unfollowUser.fulfilled, (state) => {
+        if (state.user) {
+          state.user.followingCount = Math.max(0, (state.user.followingCount || 0) - 1);
+        }
+      });
 
-
-builder
-  .addCase(followUser.fulfilled, (state, action) => {
-    if (state.user && action.payload?.status === "accepted") {
-      state.user.followingCount = (state.user.followingCount || 0) + 1;
-    }
-  });
-
-// ── Unfollow User ──
-builder
-  .addCase(unfollowUser.fulfilled, (state) => {
-    if (state.user) {
-      state.user.followingCount = Math.max(0, (state.user.followingCount || 0) - 1);
-    }
-  });
-
-  // ── Google Login ──
-builder
-  .addCase(googleLogin.pending, (state) => {
-    state.login.loading = true;
-    state.login.error   = null;
-  })
-  .addCase(googleLogin.fulfilled, (state, action) => {
-    state.login.loading   = false;
-    state.login.success   = true;
-    state.user            = action.payload.data || null;
-    state.isAuthenticated = !!action.payload.data;
-    state.nextRoute       = action.payload.nextRoute || "/feed";
-    state.expiresAt       = action.payload.expiresAt || null; 
-    if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
-    
-
-  })
-  .addCase(googleLogin.rejected, (state, action) => {
-    state.login.loading = false;
-    state.login.error   = action.payload;
-  });
-
+    // ── Google Login ──
+    builder
+      .addCase(googleLogin.pending, (state) => {
+        state.login.loading = true;
+        state.login.error = null;
+      })
+      .addCase(googleLogin.fulfilled, (state, action) => {
+        state.login.loading = false;
+        state.login.success = true;
+        state.user = normUser(action.payload.data || null);
+        state.isAuthenticated = !!action.payload.data;
+        state.nextRoute = action.payload.nextRoute || "/feed";
+        state.expiresAt = action.payload.expiresAt || null;
+        if (action.payload.expiresAt) setTokenExpiry(action.payload.expiresAt);
+      })
+      .addCase(googleLogin.rejected, (state, action) => {
+        state.login.loading = false;
+        state.login.error = action.payload;
+      });
   },
 });
 
 export const {
   setUser,
-  setPending,  
+  setPending,
   clearRegisterState,
   clearLoginState,
   clearOtpState,
@@ -496,7 +487,7 @@ export const {
   clearNextRoute,
   clearOnboardingState,
   resetAuth,
-  updateUserAvatar,      // ✅
+  updateUserAvatar,
   updateUserCoverPhoto,
 } = authSlice.actions;
 

@@ -11,7 +11,7 @@ import EmojiPickerReact from "emoji-picker-react";
 import ImageVideoUploader from "./ImageVideoUploader";
 import LocationSelect from "./LocationSelect";
 
-const MAX_CAPTION = 2200;
+const MAX_CAPTION = 500;
 
 const VISIBILITY_OPTIONS = [
   { value: "public",    label: "Everyone",       icon: Globe,  color: "#22c55e" },
@@ -380,7 +380,12 @@ useEffect(() => {
                   <textarea
                     className="pcm-textarea w-full resize-none rounded-2xl px-4 py-3.5 border transition-colors duration-200 font-[inherit]"
                     value={caption}
-                    onChange={(e) => setCaption(e.target.value.slice(0, MAX_CAPTION))}
+                  onChange={(e) => setCaption(e.target.value.slice(0, MAX_CAPTION))}
+onPaste={(e) => {
+  e.preventDefault();
+  const pasted = e.clipboardData.getData("text");
+  setCaption((c) => (c + pasted).slice(0, MAX_CAPTION));
+}}
                     placeholder="What's on your mind? Use #hashtags and @mentions…"
                     style={{
                       minHeight:   220, flex: 1,

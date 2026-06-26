@@ -1,20 +1,23 @@
 
-import Notification from "../../models/notification.model.js";
-import asyncHandler from "../../middlewares/asyncHandler.js";
 
-// ── GET /api/notifications ────────────────────────────────────────────────
-// Paginated inbox — page refresh ke baad bhi saari notifications milti hain
+import asyncHandler from "../../middlewares/asyncHandler.js";
+import * as NotifHelper from "../../utils/notificationHelpers.js";
+
+const isValidUUID = (id) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+// ── GET /api/v2/notifications ─────────────────────────────────────────────
 export const getNotifications = asyncHandler(async (req, res) => {
-  const userId = req.user._id;
-  const page   = Math.max(1, parseInt(req.query.page)  || 1);
-  const limit  = Math.min(50, parseInt(req.query.limit) || 20);
+  const userId = req.user.id;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(50, parseInt(req.query.limit) || 20);
 
   const [notifications, unreadCount] = await Promise.all([
-    Notification.getInbox(userId, page, limit),
-    Notification.getUnreadCount(userId),
+    NotifHelper.getInbox(userId, page, limit),
+    NotifHelper.getUnreadCount(userId),
   ]);
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     data: {
       notifications,
@@ -25,55 +28,52 @@ export const getNotifications = asyncHandler(async (req, res) => {
   });
 });
 
-// ── GET /api/notifications/count ──────────────────────────────────────────
-// Sirf badge count — page load pe badge ke liye
+// ── GET /api/v2/notifications/count ──────────────────────────────────────
 export const getUnreadCount = asyncHandler(async (req, res) => {
-  const count = await Notification.getUnreadCount(req.user._id);
-  res.status(200).json({ success: true, data: { count } });
+  const count = await NotifHelper.getUnreadCount(req.user.id);
+  return res.status(200).json({ success: true, data: { count } });
 });
 
-// ── PUT /api/notifications/read ───────────────────────────────────────────
-// Mark ALL as read — bell icon open karne pe call karo
+// ── PUT /api/v2/notifications/read ───────────────────────────────────────
 export const markAllRead = asyncHandler(async (req, res) => {
-  await Notification.markAllAsRead(req.user._id);
-  res.status(200).json({ success: true, data: { count: 0 } });
+  await NotifHelper.markAllAsRead(req.user.id);
+  return res.status(200).json({ success: true, data: { count: 0 } });
 });
 
-// ── PUT /api/notifications/:id/read ──────────────────────────────────────
-// Mark ONE notification as read
+// ── PUT /api/v2/notifications/:id/read ───────────────────────────────────
 export const markOneRead = asyncHandler(async (req, res) => {
-  const notification = await Notification.markAsRead(
-    req.params.id,
-    req.user._id
-  );
-
-  if (!notification) {
-    return res.status(404).json({ success: false, message: "Notification not found" });
+  if (!isValidUUID(req.params.id)) {
+    return res.status(400).json({ success: false, message: "Invalid notification ID." });
   }
 
-  const count = await Notification.getUnreadCount(req.user._id);
-  res.status(200).json({ success: true, data: { notification, unreadCount: count } });
+  const notification = await NotifHelper.markOneAsRead(req.params.id, req.user.id);
+
+  if (!notification) {
+    return res.status(404).json({ success: false, message: "Notification not found." });
+  }
+
+  const unreadCount = await NotifHelper.getUnreadCount(req.user.id);
+  return res.status(200).json({ success: true, data: { notification, unreadCount } });
 });
 
-// ── DELETE /api/notifications/:id ─────────────────────────────────────────
-// Soft delete single notification
+// ── DELETE /api/v2/notifications/:id ─────────────────────────────────────
 export const deleteNotification = asyncHandler(async (req, res) => {
-  const notification = await Notification.softDelete(req.params.id, req.user._id);
-
-  if (!notification) {
-    return res.status(404).json({ success: false, message: "Notification not found" });
+  if (!isValidUUID(req.params.id)) {
+    return res.status(400).json({ success: false, message: "Invalid notification ID." });
   }
 
-  const count = await Notification.getUnreadCount(req.user._id);
-  res.status(200).json({ success: true, data: { unreadCount: count } });
+  const notification = await NotifHelper.softDeleteOne(req.params.id, req.user.id);
+
+  if (!notification) {
+    return res.status(404).json({ success: false, message: "Notification not found." });
+  }
+
+  const unreadCount = await NotifHelper.getUnreadCount(req.user.id);
+  return res.status(200).json({ success: true, data: { unreadCount } });
 });
 
-// ── DELETE /api/notifications ─────────────────────────────────────────────
-// Clear all (soft delete all) — "Clear All" button
+// ── DELETE /api/v2/notifications ─────────────────────────────────────────
 export const clearAllNotifications = asyncHandler(async (req, res) => {
-  await Notification.updateMany(
-    { receiver: req.user._id, isDeleted: false },
-    { isDeleted: true, deletedAt: new Date() }
-  );
-  res.status(200).json({ success: true, data: { count: 0 } });
+  await NotifHelper.softDeleteAll(req.user.id);
+  return res.status(200).json({ success: true, data: { count: 0 } });
 });

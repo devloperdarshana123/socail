@@ -490,7 +490,7 @@ const UserRowMenu = memo(function UserRowMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const isLoading = actionLoading === user._id;
+  const isLoading = actionLoading === user.id;
 
   useEffect(() => {
     const handler = (e) => {
@@ -532,7 +532,7 @@ const UserRowMenu = memo(function UserRowMenu({
           </button>
           <button
             type="button"
-            onClick={() => { setOpen(false); onToggleVerify(user._id); }}
+            onClick={() => { setOpen(false); onToggleVerify(user.id); }}
             className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
           >
             <svg className="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -666,7 +666,7 @@ export default function UsersPage() {
 
   const toggleSelectAll = useCallback(() => {
     setSelected((prev) =>
-      prev.size === users.length ? new Set() : new Set(users.map((u) => u._id)),
+      prev.size === users.length ? new Set() : new Set(users.map((u) => u.id)),
     );
   }, [users]);
 
@@ -691,7 +691,7 @@ export default function UsersPage() {
   const handleStatusConfirm = useCallback(async ({ action, duration, reason }) => {
     const statusMap = { suspend: "suspended", lift: "active", ban: "banned" };
     const res = await dispatch(updateUserStatus({
-      userId:   statusModal.user._id,
+      userId:   statusModal.user.id,
       status:   statusMap[action],
       reason,
       duration: action === "suspend" ? duration : undefined,
@@ -710,7 +710,7 @@ export default function UsersPage() {
 
   const handleDeleteConfirm = useCallback(async () => {
     setDeleteLoading(true);
-    const res = await dispatch(deleteUser(deleteModal.user._id));
+    const res = await dispatch(deleteUser(deleteModal.user.id));
     setDeleteLoading(false);
     if (res.meta?.requestStatus !== "rejected") {
       showToast(`@${deleteModal.user.username} deleted`);
@@ -793,7 +793,7 @@ export default function UsersPage() {
         user={statusModal.user}
         onClose={() => setStatusModal({ open: false, user: null })}
         onConfirm={handleStatusConfirm}
-        loading={actionLoading === statusModal.user?._id}
+        loading={actionLoading === statusModal.user?.id}
       />
       <BulkActionModal
         isOpen={bulkModal.open}
@@ -992,19 +992,19 @@ export default function UsersPage() {
                     </tr>
                   ) : (
                     users.map((user) => (
-                      <tr key={user._id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
+                      <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors group">
                         <td className="px-4 py-3.5 w-10">
                           <input
                             type="checkbox"
-                            checked={selected.has(user._id)}
-                            onChange={() => toggleSelect(user._id)}
+                            checked={selected.has(user.id)}
+                            onChange={() => toggleSelect(user.id)}
                             className="w-4 h-4 rounded accent-violet-600 cursor-pointer"
                           />
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-3">
                             {/* <Avatar user={user} /> */}
-                            <Avatar user={user} onClick={() => navigate(`/users/${user._id}`)} />
+                            <Avatar user={user} onClick={() => navigate(`/users/${user.id}`)} />
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-semibold text-slate-800 truncate">
@@ -1029,7 +1029,7 @@ export default function UsersPage() {
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               type="button"
-                              onClick={() => navigate(`/users/${user._id}`)}
+                              onClick={() => navigate(`/users/${user.id}`)}
                               className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 transition-colors"
                             >
                               View

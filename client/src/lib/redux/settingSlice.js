@@ -27,14 +27,10 @@ export const updateProfile = createAsyncThunk(
   "settings/updateProfile",
   async (formData, { rejectWithValue, dispatch }) => {
     try {
-// const res = await api.patch(`/settings/profile`, formData);
-// dispatch({ type: "auth/setUser", payload: res.data.data }); // ← .user hata do
-// return res.data;
+
+
 const res = await api.patch(`/settings/profile`, formData);
 dispatch({ type: "auth/setUser", payload: res.data.data });
-dispatch({ type: "auth/fetchMe/pending" }); // loading state
-const meRes = await api.get("/auth/me");
-dispatch({ type: "auth/fetchMe/fulfilled", payload: meRes.data });
 return res.data;
     } catch (err) {
       return rejectWithValue(
@@ -47,11 +43,16 @@ return res.data;
 // 3. Password update karo
 export const updatePassword = createAsyncThunk(
   "settings/updatePassword",
-  async ({ oldPassword, newPassword }, { rejectWithValue }) => {
+  async ({ oldPassword, newPassword }, { rejectWithValue, dispatch, getState }) => {
     try {
       const payload = { newPassword };
       if (oldPassword) payload.oldPassword = oldPassword; // ← Google user ke liye skip
       const res = await api.patch(`${BASE}/password`, payload);
+
+      // User object ko poora replace na karke, sirf hasPassword update karo
+      const currentUser = getState().auth.user;
+      dispatch({ type: "auth/setUser", payload: { ...currentUser, hasPassword: true } });
+
       return res.data;
     } catch (err) {
       return rejectWithValue(

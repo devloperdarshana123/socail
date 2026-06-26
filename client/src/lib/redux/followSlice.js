@@ -196,7 +196,7 @@ const followSlice = createSlice({
     optimisticToggleFollow(state, { payload: { userId, currentStatus } }) {
       if (currentStatus === "accepted") {
         state.followStatus[userId] = "none";
-        state.following = state.following.filter((u) => u._id !== userId && u._id !== userId.toString());
+        state.following = state.following.filter((u) => u.id !== userId && u.id !== userId.toString());
       } else {
         // Will become "pending" or "accepted" — server confirms in fulfilled
         state.followStatus[userId] = "pending";
@@ -233,7 +233,7 @@ const followSlice = createSlice({
           state.following = payload.items;
           // Seed followStatus map from fresh list
           payload.items.forEach((u) => {
-            state.followStatus[u._id] = "accepted";
+            state.followStatus[u.id] = "accepted";
           });
         }
         state.followingCursor  = payload.nextCursor;
@@ -285,7 +285,7 @@ const followSlice = createSlice({
       .addCase(unfollowUser.fulfilled, (state, { payload }) => {
         state.followStatus[payload.targetUserId] = "none";
         state.following = state.following.filter(
-          (u) => u._id !== payload.targetUserId && u._id?.toString() !== payload.targetUserId
+          (u) => u.id !== payload.targetUserId && u.id?.toString() !== payload.targetUserId
         );
       })
       .addCase(unfollowUser.rejected, (state, { payload, meta }) => {

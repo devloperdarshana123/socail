@@ -50,7 +50,7 @@ export default function CreateGroupModal({ following = [], onClose }) {
   }, [following, search]);
 
   const selectedUsers = useMemo(
-    () => following.filter((u) => selectedIds.includes(u._id?.toString())),
+    () => following.filter((u) => selectedIds.includes(u.id?.toString())),
     [following, selectedIds]
   );
 
@@ -59,17 +59,43 @@ export default function CreateGroupModal({ following = [], onClose }) {
   };
 
   const handleNext = () => {
-    if (selectedIds.length < 1) { setError("Kam se kam 1 member select karo."); return; }
+    if (selectedIds.length < 1) { setError("Please select at least one member."); return; }
     setError(null); setStep(2);
   };
 
+
+
   const handleCreate = async () => {
-    if (!groupName.trim()) { setError("Group ka naam likhna zaroori hai."); return; }
-    setError(null);
-    const action = await dispatch(createGroupConversation({ groupName: groupName.trim(), participantIds: selectedIds }));
-    if (action?.payload?._id) { dispatch(setActiveConversation(action.payload._id)); onClose?.(); }
-    else setError(action?.payload || "Group banane mein dikkat hui. Try again.");
-  };
+  if (!groupName.trim()) { 
+    setError("Group name is required."); 
+    return; 
+  }
+
+  // ✅ FILTER OUT NULL/UNDEFINED VALUES
+  const validIds = selectedIds.filter(id => id && id !== 'null' && id !== 'undefined');
+  
+  if (validIds.length < 1) {
+    setError("Please select at least one member for the group."); 
+    return; 
+  }
+
+  try {
+    const action = await dispatch(
+      createGroupConversation({
+        groupName: groupName.trim(),
+        participantIds: validIds,
+        // avatarUrl: selectedImage || undefined,  // ← REMOVE THIS LINE
+      })
+    );
+
+    if (action?.payload?.id) {
+      dispatch(setActiveConversation(action.payload.id));
+      onClose();
+    }
+  } catch (err) {
+    setError("Failed to create group.");
+  }
+};
 
   return createPortal(
     <div
@@ -157,7 +183,7 @@ export default function CreateGroupModal({ following = [], onClose }) {
                 borderBottom: "1px solid #f0f0f0", flexShrink: 0,
               }}>
                 {selectedUsers.map((u) => {
-                  const uid = u._id?.toString();
+                  const uid = u.id?.toString();
                   return (
                     <div key={uid} style={{ position: "relative", flexShrink: 0, textAlign: "center" }}>
                       <MiniAvatar name={u.fullName || u.username} userId={uid} src={u.avatar?.url} size={44} />
@@ -196,7 +222,7 @@ export default function CreateGroupModal({ following = [], onClose }) {
                 <p style={{ textAlign: "center", fontSize: 13, color: "#aaa", padding: 24 }}>No users found</p>
               )}
               {filtered.map((u) => {
-                const uid = u._id?.toString();
+                const uid = u.id?.toString();
                 const isSelected = selectedIds.includes(uid);
                 return (
                   <button key={uid} onClick={() => toggleSelect(uid)} style={{
@@ -295,8 +321,8 @@ export default function CreateGroupModal({ following = [], onClose }) {
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                 {selectedUsers.map((u) => (
-                  <div key={u._id} style={{ textAlign: "center" }}>
-                    <MiniAvatar name={u.fullName || u.username} userId={u._id?.toString()} src={u.avatar?.url} size={44} />
+                  <div key={u.id} style={{ textAlign: "center" }}>
+                    <MiniAvatar name={u.fullName || u.username} userId={u.id?.toString()} src={u.avatar?.url} size={44} />
                     <p style={{ fontSize: 10, margin: "4px 0 0", maxWidth: 44, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#888" }}>
                       {u.fullName || u.username}
                     </p>

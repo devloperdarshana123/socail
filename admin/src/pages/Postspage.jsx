@@ -142,13 +142,13 @@ const PostTile = memo(function PostTile({ post, onDelete, deleteLoading, onOpen 
   const isVid   = post.type === "reel" || post.media?.[0]?.resourceType === "video";
   const isMulti = post.media?.length > 1;
   const thumb   = resolveThumb(post);
-  const busy    = deleteLoading === post._id;
+  const busy    = deleteLoading === post.id;
 
   const handleConfirm = useCallback(() => {
-    onDelete(post._id, reason.trim() || "Violation of community guidelines");
+    onDelete(post.id, reason.trim() || "Violation of community guidelines");
     setConfirmDel(false);
     setReason("");
-  }, [onDelete, post._id, reason]);
+  }, [onDelete, post.id, reason]);
 
   return (
     <div
@@ -695,7 +695,7 @@ export default function PostsPage() {
             <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
               {posts.map((post) => (
                 <PostTile
-                  key={post._id}
+                  key={post.id}
                   post={post}
                   onDelete={handleDelete}
                   deleteLoading={deleteLoading}

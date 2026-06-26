@@ -1,33 +1,27 @@
 
+
 import { config } from "dotenv";
-config(); // ✅ SABSE PEHLE
+config();
 
 import http from "http";
-import mongoose from "mongoose";
 import app from "./app.js";
 import { initSocket } from "./src/socket/index.js";
 import { connectRedis, disconnectRedis } from "./src/config/redis.js";
 import logger from "./src/utils/logger.js";
+import prisma from "./src/config/prisma.js";
 
 const server = http.createServer(app);
 
-mongoose.connection.on("disconnected", () =>
-  logger.error("❌ MongoDB disconnected")
-);
-mongoose.connection.on("error", (err) =>
-  logger.error("❌ MongoDB error", { err })
-);
-
 const startServer = async () => {
   try {
-    // 1. MongoDB
-    await mongoose.connect(process.env.MONGO_URI);
-    logger.info("✅ MongoDB connected");
+    // 1. Prisma — DB connection test
+    await prisma.$connect();
+    logger.info("✅ PostgreSQL connected via Prisma");
 
-    // 2. Redis — env loaded hone ke baad
+    // 2. Redis
     const { pubClient, subClient } = await connectRedis();
 
-    // 3. Socket — Redis clients ke saath
+    // 3. Socket
     initSocket(server, pubClient, subClient);
 
     // 4. Server start
@@ -43,22 +37,6 @@ const startServer = async () => {
 
 startServer();
 
-// const shutdown = async (signal) => {
-//   logger.warn(`⚠️ ${signal} received — shutting down gracefully`);
-
-//   server.close(async () => {
-//     await mongoose.connection.close();
-//     logger.info("✅ MongoDB closed");
-
-//     await disconnectRedis();
-//     logger.info("✅ Redis closed");
-
-//     logger.info("✅ Server closed");
-//     process.exit(0);
-//   });
-// };
-
-
 const shutdown = async (signal) => {
   logger.warn(`⚠️ ${signal} received — shutting down gracefully`);
 
@@ -69,8 +47,8 @@ const shutdown = async (signal) => {
 
   server.close(async () => {
     clearTimeout(forceExit);
-    await mongoose.connection.close();
-    logger.info("✅ MongoDB closed");
+    await prisma.$disconnect();
+    logger.info("✅ PostgreSQL disconnected");
 
     await disconnectRedis();
     logger.info("✅ Redis closed");
@@ -79,6 +57,7 @@ const shutdown = async (signal) => {
     process.exit(0);
   });
 };
+
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 process.on("unhandledRejection", (reason) => {

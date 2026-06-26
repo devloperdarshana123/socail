@@ -5,6 +5,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import toast from "react-hot-toast";
 import Select from "react-select";
+import LoadingOverlay from "../components/LoadingOverlay";
 import { Country, State, City } from "country-state-city";
 import {
   User, Lock, AlertTriangle, Eye, EyeOff,
@@ -274,6 +275,7 @@ function ProfileTab({ user }) {
 
   return (
     <div>
+      {profile.loading && <LoadingOverlay message="Saving changes..." />}
       <div className="flex items-center gap-2 mb-6">
         <div className="w-1 h-5 rounded-full" style={{ background: T.accent }} />
         <p className="text-base font-bold" style={{ color: T.brown }}>Personal Information</p>
@@ -442,8 +444,9 @@ function PasswordTab() {
   const { password } = useSelector((s) => s.settings);
   const { user }     = useSelector((s) => s.auth);
 
-  const isGoogleUser = user?.authProvider === "google" && !user?.hasPassword;
-
+ const [isGoogleUser, setIsGoogleUser] = useState(
+  user?.authProvider === "google" && !user?.hasPassword
+);
   const [oldPwd,  setOldPwd]  = useState("");
   const [newPwd,  setNewPwd]  = useState("");
   const [confPwd, setConfPwd] = useState("");
@@ -467,6 +470,7 @@ function PasswordTab() {
           ? "Password created! You can now login with email too."
           : "Password updated successfully!"
         );
+        setIsGoogleUser(false);
       })
       .catch((err) => toast.error(err || "Failed"));
   };

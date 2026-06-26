@@ -1,32 +1,517 @@
+// import prisma from "../../config/prisma.js";
+// import { fetchSender, isBlocked } from "../../services/userService.js";
+// import {
+//   addSocket, removeSocket,
+//   getSockets, isOnline, getAllOnline,
+// } from "../../services/onlineStore.js";
+// import logger from "../../utils/logger.js";
+// import { encryptMessage, decryptMessage } from "../../utils/encryption.js";
+
+// const syncLastMessage = async (conversationId, msg) => {
+//   try {
+//     await prisma.conversation.update({
+//       where: { id: conversationId },
+//       data: {
+//         lastMessage: {
+//           messageId: msg.id,
+//           text:      msg.isDeleted ? "" : (msg.text?.slice(0, 100) ?? ""),
+//           senderId:  msg.senderId,
+//           sentAt:    msg.createdAt ?? new Date(),
+//           isDeleted: msg.isDeleted ?? false,
+//         },
+//         updatedAt: new Date(),
+//       },
+//     });
+//   } catch (err) {
+//     logger.error("❌ syncLastMessage error", { message: err.message });
+//   }
+// };
+
+// const normalizeParticipants = (conv) => {
+//   if (!conv) return null;
+//   return {
+//     ...conv,
+//     participants: (conv.members || [])
+//       .map((m) => {
+//         const p = m.user;
+//         if (!p) return null;
+//         return {
+//           _id:             p.id,
+//           fullName:        p.fullName        ?? null,
+//           username:        p.username        ?? null,
+//           avatar:          p.avatar?.url
+//             ? { url: p.avatar.url, publicId: p.avatar.publicId ?? null }
+//             : { url: null, publicId: null },
+//           isVerifiedBadge: p.isVerifiedBadge ?? false,
+//           accountStatus:   p.accountStatus   ?? "active",
+//         };
+//       })
+//       .filter(Boolean),
+//   };
+// };
+
+// const aggregateReactions = (reactions = []) => {
+//   const map = {};
+//   reactions.forEach(({ emoji, userId }) => {
+//     if (!map[emoji]) map[emoji] = { emoji, count: 0, users: [] };
+//     map[emoji].count += 1;
+//     map[emoji].users.push(userId);
+//   });
+//   return Object.values(map);
+// };
+
+// const saveOfflineNotification = async ({ receiver, sender, conversationId }) => {
+//   try {
+//     await prisma.notification.create({
+//       data: {
+//         receiverId: receiver,
+//         senderId:   sender,
+//         type:       "new_message",
+//         refId:      conversationId,
+//         refModel:   "Conversation",
+//       },
+//     });
+//   } catch (err) {
+//     logger.error("❌ Offline notification save error", { message: err.message });
+//   }
+// };
+
+// export default async (io, socket) => {
+//   const userId = (socket.user.id || socket.user._id)?.toString();
+
+//   const messageTimestamps = [];
+//   const isRateLimited = () => {
+//     const now = Date.now();
+//     const windowMs = 10_000;
+//     const maxMessages = 10;
+//     const recent = messageTimestamps.filter((t) => now - t < windowMs);
+//     messageTimestamps.length = 0;
+//     recent.forEach((t) => messageTimestamps.push(t));
+//     if (recent.length >= maxMessages) return true;
+//     messageTimestamps.push(now);
+//     return false;
+//   };
+
+//   await addSocket(userId, socket.id);
+//   socket.broadcast.emit("user:online", { userId });
+//   const allOnline = await getAllOnline();
+//   socket.emit("online:list", allOnline);
+
+//   const notifyUser = async (recipientId, event, payload) => {
+//     const sockets = await getSockets(recipientId.toString());
+//     if (sockets?.size) {
+//       sockets.forEach((sid) => io.to(sid).emit(event, payload));
+//     }
+//   };
+
+//   const getPopulatedConversation = async (conversationId) => {
+//     const conv = await prisma.conversation.findUnique({
+//       where: { id: conversationId },
+//       include: {
+//         members: {
+//           include: {
+//             user: {
+//               select: {
+//                 id: true,
+//                 fullName: true,
+//                 username: true,
+//                 avatar: true,
+//                 isVerifiedBadge: true,
+//                 accountStatus: true,
+//               },
+//             },
+//           },
+//         },
+//       },
+//     });
+//     return normalizeParticipants(conv);
+//   };
+
+//   const getParticipantIds = (conv) =>
+//     (conv?.participants || []).map((p) =>
+//       typeof p === "object" ? p._id.toString() : p.toString()
+//     );
+
+//   socket.on("conversation:join", ({ conversationId }) =>
+//     conversationId && socket.join(conversationId)
+//   );
+//   socket.on("conversation:leave", ({ conversationId }) =>
+//     conversationId && socket.leave(conversationId)
+//   );
+
+//   // ── Message send ──────────────────────────────────────────────────────────
+//   socket.on("message:send", async ({ conversationId, message }) => {
+//     if (socket.tokenExpired)
+//       return socket.emit("error", { message: "Session expired. Please refresh." });
+//     if (isRateLimited())
+//       return socket.emit("error", { message: "Too many messages. Slow down!" });
+//     if (!conversationId || !message) return;
+//     if (!message.text?.trim() && !message.image && !message.audio) return;
+//     if (message.text && message.text.length > 2000)
+//       return socket.emit("error", { message: "Message too long." });
+
+//     try {
+//       const conv = await getPopulatedConversation(conversationId);
+//       if (!conv) return socket.emit("error", { message: "Conversation not found." });
+
+//       const participants = getParticipantIds(conv);
+//       if (!participants.includes(userId))
+//         return socket.emit("error", { message: "Unauthorized." });
+
+//       const otherParticipant = participants.find((p) => p !== userId);
+//       if (otherParticipant) {
+//         const blocked = await isBlocked(userId, otherParticipant);
+//         if (blocked)
+//           return socket.emit("error", { message: "You cannot message this user.", code: "BLOCKED" });
+//       }
+
+//       let replyPreview = null;
+//       if (message.replyTo) {
+//         const parent = await prisma.message.findUnique({
+//           where: { id: message.replyTo },
+//           select: { id: true, text: true, isDeleted: true, senderId: true },
+//         });
+//         if (parent) {
+//           replyPreview = {
+//             messageId: parent.id,
+//             text:      parent.isDeleted ? "" : (parent.text?.slice(0, 100) ?? ""),
+//             senderId:  parent.senderId,
+//             isDeleted: parent.isDeleted ?? false,
+//           };
+//         }
+//       }
+
+//       let msgType = "text";
+//       if (message.audio && !message.text?.trim()) msgType = "audio";
+//       else if (message.image && !message.text?.trim()) msgType = "image";
+
+//       const newMsg = await prisma.message.create({
+//         data: {
+//           conversationId,
+//           senderId: userId,
+//           text:     message.text?.trim() ? encryptMessage(message.text.trim()) : "",
+//           image:    message.image ? { url: message.image?.url || message.image } : null,
+//           type:     msgType,
+//           replyTo:  replyPreview,
+//         },
+//       });
+
+//       const senderDoc = await fetchSender(userId);
+//       const senderObj = {
+//         _id:      userId,
+//         fullName: senderDoc?.fullName || null,
+//         username: senderDoc?.username || null,
+//         avatar:   senderDoc?.avatar   || null,
+//       };
+
+//       const msgToEmit = {
+//         ...newMsg,
+//         text: newMsg.text ? decryptMessage(newMsg.text) : newMsg.text,
+//         sender: senderObj,
+//       };
+//       const isNewConversation = !conv.lastMessage;
+
+//       // Unread count increment
+//       const recipientIds = participants.filter((pid) => pid !== userId);
+//       if (recipientIds.length) {
+//         await prisma.$transaction(
+//           recipientIds.map((pid) =>
+//             prisma.conversationParticipant.updateMany({
+//               where: { conversationId, userId: pid },
+//               data:  { unreadCount: { increment: 1 } },
+//             })
+//           )
+//         );
+//       }
+
+//       for (const pid of participants) {
+//         await notifyUser(pid, "message:receive", {
+//           conversationId,
+//           message: msgToEmit,
+//           tempId: pid === userId ? (message.tempId || null) : null,
+//         });
+//       }
+
+//       if (isNewConversation) {
+//         for (const pid of participants) {
+//           await notifyUser(pid, "conversation:new", {
+//             conversation: {
+//               ...conv,
+//               lastMessage: {
+//                 messageId: newMsg.id,
+//                 text:      newMsg.text?.slice(0, 100) ?? "",
+//                 senderId:  userId,
+//                 sentAt:    newMsg.createdAt,
+//                 isDeleted: false,
+//               },
+//               unreadCount: pid === userId ? 0 : 1,
+//               updatedAt:   new Date().toISOString(),
+//             },
+//           });
+//         }
+//       }
+
+//       const members = await prisma.conversationParticipant.findMany({
+//         where: { conversationId, userId: { in: participants } },
+//       });
+
+//       await syncLastMessage(conversationId, newMsg);
+
+//       const unreadMap = Object.fromEntries(
+//         members.map((m) => [m.userId, m.unreadCount ?? 0])
+//       );
+
+//       for (const pid of participants) {
+//         await notifyUser(pid, "conversation:updated", {
+//           conversation: {
+//             ...conv,
+//             lastMessage: {
+//               messageId: newMsg.id,
+//               text:      newMsg.text?.slice(0, 100) ?? "",
+//               senderId:  userId,
+//               sentAt:    newMsg.createdAt,
+//               isDeleted: false,
+//             },
+//             unreadCount: pid === userId ? 0 : (unreadMap[pid] ?? 0),
+//             updatedAt:   new Date().toISOString(),
+//           },
+//         });
+//       }
+
+//       const preview = newMsg.type === "audio"
+//         ? "🎙️ Voice message"
+//         : newMsg.text
+//         ? newMsg.text.length > 60 ? newMsg.text.slice(0, 60) + "…" : newMsg.text
+//         : "📷 Image";
+
+//       for (const pid of participants) {
+//         if (pid === userId) continue;
+//         const online = await isOnline(pid);
+//         if (online) {
+//           await notifyUser(pid, "notification:message", {
+//             conversationId, sender: senderObj, preview,
+//           });
+//         } else {
+//           await saveOfflineNotification({ receiver: pid, sender: userId, conversationId });
+//         }
+//       }
+//     } catch (err) {
+//       logger.error("❌ message:send error", { message: err.message });
+//       socket.emit("error", { message: "Failed to send message." });
+//     }
+//   });
+
+//   // ── Typing ────────────────────────────────────────────────────────────────
+//   socket.on("typing:start", ({ conversationId }) => {
+//     if (!conversationId) return;
+//     socket.to(conversationId).emit("typing:start", { conversationId, userId });
+//   });
+//   socket.on("typing:stop", ({ conversationId }) => {
+//     if (!conversationId) return;
+//     socket.to(conversationId).emit("typing:stop", { conversationId, userId });
+//   });
+
+//   // ── Message seen ──────────────────────────────────────────────────────────
+//   socket.on("message:seen", async ({ conversationId, messageId }) => {
+//     if (!conversationId || !messageId) return;
+//     try {
+//       await prisma.messageReceipt.upsert({
+//         where: { messageId_userId: { messageId, userId } },
+//         update: { seenAt: new Date(), readAt: new Date() },
+//         create: { messageId, userId, conversationId, seenAt: new Date(), readAt: new Date() },
+//       });
+
+//       await prisma.conversationParticipant.updateMany({
+//         where: { conversationId, userId },
+//         data:  { unreadCount: 0, lastSeenAt: new Date() },
+//       });
+
+//       const seenConv = await prisma.conversation.findUnique({
+//         where: { id: conversationId },
+//         include: { members: { select: { userId: true } } },
+//       });
+//       const participants = (seenConv?.members || []).map((m) => m.userId);
+
+//       for (const pid of participants) {
+//         if (pid !== userId)
+//           await notifyUser(pid, "message:seen", { conversationId, messageId, seenBy: userId });
+//       }
+//     } catch (err) {
+//       logger.error("❌ message:seen error", { message: err.message });
+//     }
+//   });
+
+//   // ── Message edit ──────────────────────────────────────────────────────────
+//   const EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+//   socket.on("message:edit", async ({ conversationId, messageId, newText }) => {
+//     if (socket.tokenExpired)
+//       return socket.emit("error", { message: "Session expired. Please refresh." });
+//     if (!conversationId || !messageId || !newText?.trim()) return;
+//     if (newText.trim().length > 2000)
+//       return socket.emit("error", { message: "Message too long." });
+//     try {
+//       const msg = await prisma.message.findUnique({ where: { id: messageId } });
+//       if (!msg) return socket.emit("error", { message: "Message not found." });
+//       if (msg.isDeleted) return socket.emit("error", { message: "Cannot edit deleted message." });
+//       if (msg.senderId !== userId) return socket.emit("error", { message: "Unauthorized." });
+//       if (Date.now() - new Date(msg.createdAt).getTime() > EDIT_WINDOW_MS)
+//         return socket.emit("error", { message: "Edit window of 15 minutes has passed." });
+
+//      const updated = await prisma.message.update({
+//         where: { id: messageId },
+//         data: { text: encryptMessage(newText.trim()), isEdited: true, editedAt: new Date() },
+//       });
+//       await syncLastMessage(conversationId, updated);
+
+//       const editConv = await prisma.conversation.findUnique({
+//         where: { id: conversationId },
+//         include: { members: { select: { userId: true } } },
+//       });
+//       const participants = (editConv?.members || []).map((m) => m.userId);
+
+//       for (const pid of participants) {
+//         await notifyUser(pid, "message:edited", {
+//           conversationId, messageId,
+//           newText: decryptMessage(updated.text), isEdited: true, editedAt: updated.editedAt,
+//         });
+//       }
+//     } catch (err) {
+//       logger.error("❌ message:edit error", { message: err.message });
+//       socket.emit("error", { message: "Failed to edit message." });
+//     }
+//   });
+
+//   // ── Message delete ────────────────────────────────────────────────────────
+//   socket.on("message:delete", async ({ conversationId, messageId }) => {
+//     if (socket.tokenExpired)
+//       return socket.emit("error", { message: "Session expired. Please refresh." });
+//     if (!conversationId || !messageId) return;
+//     try {
+//       const msg = await prisma.message.findUnique({ where: { id: messageId } });
+//       if (!msg) return socket.emit("error", { message: "Message not found." });
+//       if (msg.isDeleted) return socket.emit("error", { message: "Already deleted." });
+//       if (msg.senderId !== userId) return socket.emit("error", { message: "Unauthorized." });
+
+//       const deleted = await prisma.message.update({
+//         where: { id: messageId },
+//         data: { isDeleted: true, deletedAt: new Date(), text: "", image: null, reactions: [] },
+//       });
+//       await syncLastMessage(conversationId, deleted);
+
+//       const delConv = await prisma.conversation.findUnique({
+//         where: { id: conversationId },
+//         include: { members: { select: { userId: true } } },
+//       });
+//       const participants = (delConv?.members || []).map((m) => m.userId);
+
+//       for (const pid of participants) {
+//         await notifyUser(pid, "message:deleted", { conversationId, messageId, deletedBy: userId });
+//       }
+//     } catch (err) {
+//       logger.error("❌ message:delete error", { message: err.message });
+//       socket.emit("error", { message: "Failed to delete message." });
+//     }
+//   });
+
+//   // ── Emoji reaction ────────────────────────────────────────────────────────
+//   socket.on("message:react", async ({ conversationId, messageId, emoji }) => {
+//     if (!conversationId || !messageId) return;
+//     try {
+//       const msg = await prisma.message.findUnique({ where: { id: messageId } });
+//       if (!msg || msg.isDeleted)
+//         return socket.emit("error", { message: "Message not found." });
+
+//       let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+//       const existingIdx = reactions.findIndex(
+//         (r) => r.userId === userId && r.emoji === emoji
+//       );
+//       if (existingIdx !== -1) {
+//         reactions.splice(existingIdx, 1);
+//       } else {
+//         reactions = reactions.filter((r) => r.userId !== userId);
+//         if (emoji?.trim())
+//           reactions.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
+//       }
+
+//       const updated = await prisma.message.update({
+//         where: { id: messageId },
+//         data: { reactions },
+//       });
+
+//       const aggregated = aggregateReactions(updated.reactions);
+//       const reactConv = await prisma.conversation.findUnique({
+//         where: { id: conversationId },
+//         include: { members: { select: { userId: true } } },
+//       });
+//       const participants = (reactConv?.members || []).map((m) => m.userId);
+
+//       for (const pid of participants) {
+//         await notifyUser(pid, "message:reaction", {
+//           conversationId, messageId,
+//           reactions: aggregated, rawReactions: updated.reactions,
+//         });
+//       }
+//     } catch (err) {
+//       logger.error("❌ message:react error", { message: err.message });
+//       socket.emit("error", { message: "Failed to add reaction." });
+//     }
+//   });
+
+//   // ── Block status ──────────────────────────────────────────────────────────
+//   socket.on("user:blockStatus", async ({ targetUserId }) => {
+//     if (!targetUserId) return;
+//     try {
+//       const blocked = await isBlocked(userId, targetUserId);
+//       const iBlockedThem = await prisma.block.findFirst({
+//         where: { blockerId: userId, blockedId: targetUserId },
+//         select: { id: true },
+//       });
+//       socket.emit("user:blockStatus", {
+//         targetUserId, blocked, iBlockedThem: !!iBlockedThem,
+//       });
+//     } catch (err) {
+//       logger.error("❌ user:blockStatus error", { message: err.message });
+//     }
+//   });
+
+//   // ── Online check ──────────────────────────────────────────────────────────
+//   socket.on("user:isOnline", async ({ targetUserId }) => {
+//     const online = await isOnline(targetUserId);
+//     socket.emit("user:isOnline", { userId: targetUserId, isOnline: online });
+//   });
+
+//   // ── Disconnect ────────────────────────────────────────────────────────────
+//   socket.on("disconnect", async () => {
+//     const wasLastSocket = await removeSocket(userId, socket.id);
+//     if (wasLastSocket) {
+//       io.emit("user:offline", { userId });
+//       logger.info(`❌ User fully offline: ${userId}`);
+//     }
+//   });
+// };
 
 
-// src/socket/handlers/Chathandler.js
-import Message from "../../../models/Message.js";
 
-import Notification from "../../../models/Notification.js";
+
+import prisma from "../../config/prisma.js";
 import { fetchSender, isBlocked } from "../../services/userService.js";
-// ✅ Yeh rakho — ab ConversationMember export hoga
-import Conversation, { ConversationMember } from "../../../models/Conversation.js";
 import {
   addSocket, removeSocket,
   getSockets, isOnline, getAllOnline,
 } from "../../services/onlineStore.js";
 import logger from "../../utils/logger.js";
+import { encryptMessage, decryptMessage } from "../../utils/encryption.js";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-
-
-
-// ✅ NAYA
 const syncLastMessage = async (conversationId, msg) => {
   try {
-    await Conversation.findByIdAndUpdate(conversationId, {
-      $set: {
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
         lastMessage: {
-          messageId: msg._id,
+          messageId: msg.id,
           text:      msg.isDeleted ? "" : (msg.text?.slice(0, 100) ?? ""),
-          senderId:  msg.sender,
+          senderId:  msg.senderId,
           sentAt:    msg.createdAt ?? new Date(),
           isDeleted: msg.isDeleted ?? false,
         },
@@ -38,19 +523,16 @@ const syncLastMessage = async (conversationId, msg) => {
   }
 };
 
-
-
-const PARTICIPANT_SELECT = "_id fullName username avatar isVerifiedBadge accountStatus";
-
 const normalizeParticipants = (conv) => {
   if (!conv) return null;
   return {
     ...conv,
-    participants: (conv.participants || [])
-      .map((p) => {
-        if (!p || typeof p !== "object" || !p._id) return null;
+    participants: (conv.members || [])
+      .map((m) => {
+        const p = m.user;
+        if (!p) return null;
         return {
-          _id:             p._id.toString(),
+          _id:             p.id,
           fullName:        p.fullName        ?? null,
           username:        p.username        ?? null,
           avatar:          p.avatar?.url
@@ -63,42 +545,42 @@ const normalizeParticipants = (conv) => {
       .filter(Boolean),
   };
 };
+
 const aggregateReactions = (reactions = []) => {
   const map = {};
-  reactions.forEach(({ emoji, user }) => {
+  reactions.forEach(({ emoji, userId }) => {
     if (!map[emoji]) map[emoji] = { emoji, count: 0, users: [] };
     map[emoji].count += 1;
-    map[emoji].users.push(user.toString());
+    map[emoji].users.push(userId);
   });
   return Object.values(map);
 };
 
 const saveOfflineNotification = async ({ receiver, sender, conversationId }) => {
   try {
-    await Notification.createNotification({
-      receiver,
-      sender,
-      type: "new_message",
-      refId: conversationId,
-      refModel: "Conversation",
+    await prisma.notification.create({
+      data: {
+        receiverId: receiver,
+        senderId:   sender,
+        type:       "new_message",
+        refId:      conversationId,
+        refModel:   "Conversation",
+      },
     });
   } catch (err) {
     logger.error("❌ Offline notification save error", { message: err.message });
   }
 };
 
-// ── Main handler ──────────────────────────────────────────────────────────────
-
 export default async (io, socket) => {
   const userId = (socket.user.id || socket.user._id)?.toString();
 
-  // ── Rate limiter ───────────────────────────────────────────────────────────
   const messageTimestamps = [];
   const isRateLimited = () => {
-    const now         = Date.now();
-    const windowMs    = 10_000;
+    const now = Date.now();
+    const windowMs = 10_000;
     const maxMessages = 10;
-    const recent      = messageTimestamps.filter((t) => now - t < windowMs);
+    const recent = messageTimestamps.filter((t) => now - t < windowMs);
     messageTimestamps.length = 0;
     recent.forEach((t) => messageTimestamps.push(t));
     if (recent.length >= maxMessages) return true;
@@ -106,13 +588,11 @@ export default async (io, socket) => {
     return false;
   };
 
-  // ── Online tracking ────────────────────────────────────────────────────────
   await addSocket(userId, socket.id);
   socket.broadcast.emit("user:online", { userId });
   const allOnline = await getAllOnline();
   socket.emit("online:list", allOnline);
 
-  // ── notifyUser — Redis se getSockets ──────────────────────────────────────
   const notifyUser = async (recipientId, event, payload) => {
     const sockets = await getSockets(recipientId.toString());
     if (sockets?.size) {
@@ -120,20 +600,34 @@ export default async (io, socket) => {
     }
   };
 
-
   const getPopulatedConversation = async (conversationId) => {
-  const conv = await Conversation.findById(conversationId)
-    .populate("participants", PARTICIPANT_SELECT)
-    .lean();
-  return normalizeParticipants(conv);
-};
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                username: true,
+                avatar: true,
+                isVerifiedBadge: true,
+                accountStatus: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return normalizeParticipants(conv);
+  };
 
-const getParticipantIds = (conv) =>
-  (conv?.participants || []).map((p) =>
-    typeof p === "object" ? p._id.toString() : p.toString()
-  );
+  const getParticipantIds = (conv) =>
+    (conv?.participants || []).map((p) =>
+      typeof p === "object" ? p._id.toString() : p.toString()
+    );
 
-  // ── Conversation join / leave ──────────────────────────────────────────────
   socket.on("conversation:join", ({ conversationId }) =>
     conversationId && socket.join(conversationId)
   );
@@ -141,7 +635,7 @@ const getParticipantIds = (conv) =>
     conversationId && socket.leave(conversationId)
   );
 
-  // ── Message send ───────────────────────────────────────────────────────────
+  // ── Message send ──────────────────────────────────────────────────────────
   socket.on("message:send", async ({ conversationId, message }) => {
     if (socket.tokenExpired)
       return socket.emit("error", { message: "Session expired. Please refresh." });
@@ -154,9 +648,9 @@ const getParticipantIds = (conv) =>
 
     try {
       const conv = await getPopulatedConversation(conversationId);
-if (!conv) return socket.emit("error", { message: "Conversation not found." });
+      if (!conv) return socket.emit("error", { message: "Conversation not found." });
 
-const participants = getParticipantIds(conv);
+      const participants = getParticipantIds(conv);
       if (!participants.includes(userId))
         return socket.emit("error", { message: "Unauthorized." });
 
@@ -164,43 +658,42 @@ const participants = getParticipantIds(conv);
       if (otherParticipant) {
         const blocked = await isBlocked(userId, otherParticipant);
         if (blocked)
-          return socket.emit("error", {
-            message: "You cannot message this user.",
-            code: "BLOCKED",
-          });
+          return socket.emit("error", { message: "You cannot message this user.", code: "BLOCKED" });
       }
 
-      // Reply preview
       let replyPreview = null;
       if (message.replyTo) {
-        const parent = await Message.findById(message.replyTo)
-          .select("text image audio isDeleted sender")
-          .lean();
+        const parent = await prisma.message.findUnique({
+          where: { id: message.replyTo },
+          select: { id: true, text: true, isDeleted: true, senderId: true },
+        });
         if (parent) {
           replyPreview = {
-            messageId: parent._id,
-            text:      parent.isDeleted ? "" : (parent.text?.slice(0, 100) ?? ""),
-            senderId:  parent.sender,
+            messageId: parent.id,
+            text:      parent.isDeleted ? "" : (parent.text ? decryptMessage(parent.text).slice(0, 100) : ""),
+            senderId:  parent.senderId,
             isDeleted: parent.isDeleted ?? false,
           };
         }
       }
 
-      // Message type
       let msgType = "text";
       if (message.audio && !message.text?.trim()) msgType = "audio";
       else if (message.image && !message.text?.trim()) msgType = "image";
 
-      const newMsg = await Message.create({
-        conversation: conversationId,
-        sender:       userId,
-        text:         message.text?.trim() || "",
-       image: message.image?.url || message.image || null,
-        audio:        message.audio || null,
-        replyTo:      replyPreview,
-        type:         msgType,
-        seenBy:       [userId],
+      const newMsg = await prisma.message.create({
+        data: {
+          conversationId,
+          senderId: userId,
+          text:     message.text?.trim() ? encryptMessage(message.text.trim()) : "",
+          image:    message.image ? { url: message.image?.url || message.image } : null,
+          type:     msgType,
+          replyTo:  replyPreview,
+        },
       });
+
+      // Plain decrypted text — used everywhere we show/preview/store last message
+      const decryptedText = newMsg.text ? decryptMessage(newMsg.text) : "";
 
       const senderDoc = await fetchSender(userId);
       const senderObj = {
@@ -210,92 +703,85 @@ const participants = getParticipantIds(conv);
         avatar:   senderDoc?.avatar   || null,
       };
 
-      const msgToEmit = { ...newMsg.toObject(), sender: senderObj };
-
-      // await syncLastMessage(conversationId, newMsg);
+      const msgToEmit = {
+        ...newMsg,
+        text: decryptedText,
+        sender: senderObj,
+      };
       const isNewConversation = !conv.lastMessage;
 
       // Unread count increment
-      // ✅ NAYA — ConversationMember mein increment karo
-const recipientIds = participants.filter((pid) => pid !== userId);
-if (recipientIds.length) {
-  await ConversationMember.bulkWrite(
-    recipientIds.map((pid) => ({
-      updateOne: {
-        filter: { conversationId, userId: pid },
-        update: { $inc: { unreadCount: 1 } },
-      },
-    })),
-  );
-}
+      const recipientIds = participants.filter((pid) => pid !== userId);
+      if (recipientIds.length) {
+        await prisma.$transaction(
+          recipientIds.map((pid) =>
+            prisma.conversationParticipant.updateMany({
+              where: { conversationId, userId: pid },
+              data:  { unreadCount: { increment: 1 } },
+            })
+          )
+        );
+      }
 
       for (const pid of participants) {
-  if (pid !== userId) {
-    const blocked = await isBlocked(userId, pid);
-    if (blocked) continue;
-  }
-  await notifyUser(pid, "message:receive", {
-    conversationId,
-    message: msgToEmit,
-    tempId: pid === userId ? (message.tempId || null) : null,
-  });
-}
+        await notifyUser(pid, "message:receive", {
+          conversationId,
+          message: msgToEmit,
+          tempId: pid === userId ? (message.tempId || null) : null,
+        });
+      }
 
+      if (isNewConversation) {
+        for (const pid of participants) {
+          await notifyUser(pid, "conversation:new", {
+            conversation: {
+              ...conv,
+              lastMessage: {
+                messageId: newMsg.id,
+                text:      decryptedText.slice(0, 100),
+                senderId:  userId,
+                sentAt:    newMsg.createdAt,
+                isDeleted: false,
+              },
+              unreadCount: pid === userId ? 0 : 1,
+              updatedAt:   new Date().toISOString(),
+            },
+          });
+        }
+      }
 
-if (isNewConversation) {
-  for (const pid of participants) {
-    await notifyUser(pid, "conversation:new", {
-      conversation: {
-        ...conv,
-        lastMessage: {
-          messageId: newMsg._id,
-          text:      newMsg.text?.slice(0, 100) ?? "",
-          senderId:  userId,
-          sentAt:    newMsg.createdAt,
-          isDeleted: false,
-        },
-        unreadCount: pid === userId ? 0 : 1,
-        updatedAt:   new Date().toISOString(),
-      },
-    });
-  }
-}
+      const members = await prisma.conversationParticipant.findMany({
+        where: { conversationId, userId: { in: participants } },
+      });
 
+      // Save lastMessage in DB with the DECRYPTED text (so REST API fetches show plain text too)
+      await syncLastMessage(conversationId, { ...newMsg, text: decryptedText });
 
+      const unreadMap = Object.fromEntries(
+        members.map((m) => [m.userId, m.unreadCount ?? 0])
+      );
 
+      for (const pid of participants) {
+        await notifyUser(pid, "conversation:updated", {
+          conversation: {
+            ...conv,
+            lastMessage: {
+              messageId: newMsg.id,
+              text:      decryptedText.slice(0, 100),
+              senderId:  userId,
+              sentAt:    newMsg.createdAt,
+              isDeleted: false,
+            },
+            unreadCount: pid === userId ? 0 : (unreadMap[pid] ?? 0),
+            updatedAt:   new Date().toISOString(),
+          },
+        });
+      }
 
-const [members] = await Promise.all([
-  ConversationMember.find({
-    conversationId,
-    userId: { $in: participants },
-  }).lean(),
-  syncLastMessage(conversationId, newMsg),
-]);
-
-const unreadMap = Object.fromEntries(
-  members.map((m) => [m.userId.toString(), m.unreadCount ?? 0])
-);
-
-for (const pid of participants) {
-  await notifyUser(pid, "conversation:updated", {
-    conversation: {
-      ...conv,
-      lastMessage: {
-        messageId: newMsg._id,
-        text:      newMsg.text?.slice(0, 100) ?? "",
-        senderId:  userId,
-        sentAt:    newMsg.createdAt,
-        isDeleted: false,
-      },
-      unreadCount: pid === userId ? 0 : (unreadMap[pid] ?? 0),
-      updatedAt:   new Date().toISOString(),
-    },
-  });
-}
-      const preview = newMsg.audio
+      const preview = newMsg.type === "audio"
         ? "🎙️ Voice message"
-        : newMsg.text
-        ? newMsg.text.length > 60 ? newMsg.text.slice(0, 60) + "…" : newMsg.text
+        : decryptedText
+        ? decryptedText.length > 60 ? decryptedText.slice(0, 60) + "…" : decryptedText
         : "📷 Image";
 
       for (const pid of participants) {
@@ -303,14 +789,10 @@ for (const pid of participants) {
         const online = await isOnline(pid);
         if (online) {
           await notifyUser(pid, "notification:message", {
-            conversationId,
-            sender: senderObj,
-            preview,
+            conversationId, sender: senderObj, preview,
           });
         } else {
-          await saveOfflineNotification({
-            receiver: pid, sender: userId, conversationId,
-          });
+          await saveOfflineNotification({ receiver: pid, sender: userId, conversationId });
         }
       }
     } catch (err) {
@@ -319,33 +801,37 @@ for (const pid of participants) {
     }
   });
 
-  // ── Typing ─────────────────────────────────────────────────────────────────
+  // ── Typing ────────────────────────────────────────────────────────────────
   socket.on("typing:start", ({ conversationId }) => {
     if (!conversationId) return;
     socket.to(conversationId).emit("typing:start", { conversationId, userId });
   });
-
   socket.on("typing:stop", ({ conversationId }) => {
     if (!conversationId) return;
     socket.to(conversationId).emit("typing:stop", { conversationId, userId });
   });
 
-  // ── Message seen ───────────────────────────────────────────────────────────
+  // ── Message seen ──────────────────────────────────────────────────────────
   socket.on("message:seen", async ({ conversationId, messageId }) => {
     if (!conversationId || !messageId) return;
     try {
-      await Message.findByIdAndUpdate(messageId, { $addToSet: { seenBy: userId } });
-     // ✅ NAYA
-await ConversationMember.findOneAndUpdate(
-  { conversationId, userId },
-  { $set: { unreadCount: 0, lastSeenAt: new Date() } },
-);
-      // const participants = await getParticipants(conversationId);
+      await prisma.messageReceipt.upsert({
+        where: { messageId_userId: { messageId, userId } },
+        update: { seenAt: new Date(), readAt: new Date() },
+        create: { messageId, userId, conversationId, seenAt: new Date(), readAt: new Date() },
+      });
 
-      const seenConv = await Conversation.findById(conversationId)
-  .select("participants")
-  .lean();
-const participants = (seenConv?.participants || []).map((p) => p.toString());
+      await prisma.conversationParticipant.updateMany({
+        where: { conversationId, userId },
+        data:  { unreadCount: 0, lastSeenAt: new Date() },
+      });
+
+      const seenConv = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: { members: { select: { userId: true } } },
+      });
+      const participants = (seenConv?.members || []).map((m) => m.userId);
+
       for (const pid of participants) {
         if (pid !== userId)
           await notifyUser(pid, "message:seen", { conversationId, messageId, seenBy: userId });
@@ -355,7 +841,7 @@ const participants = (seenConv?.participants || []).map((p) => p.toString());
     }
   });
 
-  // ── Message edit ───────────────────────────────────────────────────────────
+  // ── Message edit ──────────────────────────────────────────────────────────
   const EDIT_WINDOW_MS = 15 * 60 * 1000;
 
   socket.on("message:edit", async ({ conversationId, messageId, newText }) => {
@@ -365,29 +851,33 @@ const participants = (seenConv?.participants || []).map((p) => p.toString());
     if (newText.trim().length > 2000)
       return socket.emit("error", { message: "Message too long." });
     try {
-      const msg = await Message.findById(messageId);
+      const msg = await prisma.message.findUnique({ where: { id: messageId } });
       if (!msg) return socket.emit("error", { message: "Message not found." });
       if (msg.isDeleted) return socket.emit("error", { message: "Cannot edit deleted message." });
-      if (msg.sender.toString() !== userId) return socket.emit("error", { message: "Unauthorized." });
+      if (msg.senderId !== userId) return socket.emit("error", { message: "Unauthorized." });
       if (Date.now() - new Date(msg.createdAt).getTime() > EDIT_WINDOW_MS)
         return socket.emit("error", { message: "Edit window of 15 minutes has passed." });
 
-      msg.text     = newText.trim();
-      msg.isEdited = true;
-      msg.editedAt = new Date();
-      await msg.save();
-      await syncLastMessage(conversationId, msg);
+      const updated = await prisma.message.update({
+        where: { id: messageId },
+        data: { text: encryptMessage(newText.trim()), isEdited: true, editedAt: new Date() },
+      });
 
-      // const participants = await getParticipants(conversationId);
+      const decryptedEditedText = decryptMessage(updated.text);
 
-      const editConv = await Conversation.findById(conversationId)
-  .select("participants")
-  .lean();
-const participants = (editConv?.participants || []).map((p) => p.toString());
+      // Keep lastMessage in DB as plain text too
+      await syncLastMessage(conversationId, { ...updated, text: decryptedEditedText });
+
+      const editConv = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: { members: { select: { userId: true } } },
+      });
+      const participants = (editConv?.members || []).map((m) => m.userId);
+
       for (const pid of participants) {
         await notifyUser(pid, "message:edited", {
           conversationId, messageId,
-          newText: msg.text, isEdited: true, editedAt: msg.editedAt,
+          newText: decryptedEditedText, isEdited: true, editedAt: updated.editedAt,
         });
       }
     } catch (err) {
@@ -396,28 +886,29 @@ const participants = (editConv?.participants || []).map((p) => p.toString());
     }
   });
 
-  // ── Message delete ─────────────────────────────────────────────────────────
+  // ── Message delete ────────────────────────────────────────────────────────
   socket.on("message:delete", async ({ conversationId, messageId }) => {
     if (socket.tokenExpired)
       return socket.emit("error", { message: "Session expired. Please refresh." });
     if (!conversationId || !messageId) return;
     try {
-      const msg = await Message.findById(messageId);
+      const msg = await prisma.message.findUnique({ where: { id: messageId } });
       if (!msg) return socket.emit("error", { message: "Message not found." });
       if (msg.isDeleted) return socket.emit("error", { message: "Already deleted." });
-      if (msg.sender.toString() !== userId) return socket.emit("error", { message: "Unauthorized." });
+      if (msg.senderId !== userId) return socket.emit("error", { message: "Unauthorized." });
 
-      msg.isDeleted = true;
-      msg.deletedAt = new Date();
-      msg.text = ""; msg.image = null; msg.audio = null; msg.reactions = [];
-      await msg.save();
-      await syncLastMessage(conversationId, msg);
+      const deleted = await prisma.message.update({
+        where: { id: messageId },
+        data: { isDeleted: true, deletedAt: new Date(), text: "", image: null, reactions: [] },
+      });
+      await syncLastMessage(conversationId, deleted);
 
-      // const participants = await getParticipants(conversationId);
-      const reactConv = await Conversation.findById(conversationId)
-  .select("participants")
-  .lean();
-const participants = (reactConv?.participants || []).map((p) => p.toString());
+      const delConv = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: { members: { select: { userId: true } } },
+      });
+      const participants = (delConv?.members || []).map((m) => m.userId);
+
       for (const pid of participants) {
         await notifyUser(pid, "message:deleted", { conversationId, messageId, deletedBy: userId });
       }
@@ -427,39 +918,42 @@ const participants = (reactConv?.participants || []).map((p) => p.toString());
     }
   });
 
-  // ── Emoji reaction ─────────────────────────────────────────────────────────
+  // ── Emoji reaction ────────────────────────────────────────────────────────
   socket.on("message:react", async ({ conversationId, messageId, emoji }) => {
     if (!conversationId || !messageId) return;
     try {
-      const msg = await Message.findById(messageId);
+      const msg = await prisma.message.findUnique({ where: { id: messageId } });
       if (!msg || msg.isDeleted)
         return socket.emit("error", { message: "Message not found." });
 
-      const existingIdx = msg.reactions.findIndex(
-        (r) => r.user.toString() === userId && r.emoji === emoji
+      let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+      const existingIdx = reactions.findIndex(
+        (r) => r.userId === userId && r.emoji === emoji
       );
       if (existingIdx !== -1) {
-        msg.reactions.splice(existingIdx, 1);
+        reactions.splice(existingIdx, 1);
       } else {
-        msg.reactions = msg.reactions.filter((r) => r.user.toString() !== userId);
+        reactions = reactions.filter((r) => r.userId !== userId);
         if (emoji?.trim())
-          msg.reactions.push({ user: userId, emoji: emoji.trim(), reactedAt: new Date() });
+          reactions.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
       }
-      await msg.save();
 
-      // const aggregated   = aggregateReactions(msg.reactions);
-      // const participants = await getParticipants(conversationId);
+      const updated = await prisma.message.update({
+        where: { id: messageId },
+        data: { reactions },
+      });
 
+      const aggregated = aggregateReactions(updated.reactions);
+      const reactConv = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: { members: { select: { userId: true } } },
+      });
+      const participants = (reactConv?.members || []).map((m) => m.userId);
 
-      const aggregated = aggregateReactions(msg.reactions);
-const reactConv  = await Conversation.findById(conversationId)
-  .select("participants")
-  .lean();
-const participants = (reactConv?.participants || []).map((p) => p.toString());
       for (const pid of participants) {
         await notifyUser(pid, "message:reaction", {
           conversationId, messageId,
-          reactions: aggregated, rawReactions: msg.reactions,
+          reactions: aggregated, rawReactions: updated.reactions,
         });
       }
     } catch (err) {
@@ -468,44 +962,30 @@ const participants = (reactConv?.participants || []).map((p) => p.toString());
     }
   });
 
-  // ── Block status ───────────────────────────────────────────────────────────
+  // ── Block status ──────────────────────────────────────────────────────────
   socket.on("user:blockStatus", async ({ targetUserId }) => {
     if (!targetUserId) return;
     try {
       const blocked = await isBlocked(userId, targetUserId);
-      const me = await import("../../../models/User.js").then((m) =>
-        m.default.findById(userId).select("blockedUsers").lean()
-      );
-      const iBlockedThem = me?.blockedUsers?.map(String).includes(String(targetUserId));
-      socket.emit("user:blockStatus", { targetUserId, blocked, iBlockedThem });
+      const iBlockedThem = await prisma.block.findFirst({
+        where: { blockerId: userId, blockedId: targetUserId },
+        select: { id: true },
+      });
+      socket.emit("user:blockStatus", {
+        targetUserId, blocked, iBlockedThem: !!iBlockedThem,
+      });
     } catch (err) {
       logger.error("❌ user:blockStatus error", { message: err.message });
     }
   });
 
-  // ── Report user ────────────────────────────────────────────────────────────
-  socket.on("user:report", async ({ targetUserId, reason }) => {
-    if (!targetUserId || targetUserId === userId) return;
-    try {
-      await Notification.createNotification({
-        receiver: targetUserId, sender: userId,
-        type: "user_report", refId: targetUserId, refModel: "User",
-        meta: { reason: reason || "No reason provided" },
-      });
-      socket.emit("user:report:success", { targetUserId });
-    } catch (err) {
-      logger.error("❌ user:report error", { message: err.message });
-      socket.emit("error", { message: "Failed to report user." });
-    }
-  });
-
-  // ── Online check ───────────────────────────────────────────────────────────
+  // ── Online check ──────────────────────────────────────────────────────────
   socket.on("user:isOnline", async ({ targetUserId }) => {
     const online = await isOnline(targetUserId);
     socket.emit("user:isOnline", { userId: targetUserId, isOnline: online });
   });
 
-  // ── Disconnect ─────────────────────────────────────────────────────────────
+  // ── Disconnect ────────────────────────────────────────────────────────────
   socket.on("disconnect", async () => {
     const wasLastSocket = await removeSocket(userId, socket.id);
     if (wasLastSocket) {
@@ -514,4 +994,3 @@ const participants = (reactConv?.participants || []).map((p) => p.toString());
     }
   });
 };
-

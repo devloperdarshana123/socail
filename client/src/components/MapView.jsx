@@ -171,12 +171,12 @@ const mapRef = useRef(null);
   // ── Follow / Unfollow ─────────────────────────────────────
  const handleFollow = async (seller, e) => {
   e.stopPropagation();
-  const { _id, isFollowing } = seller;
+  const { id, isFollowing } = seller;
 
   // Optimistic update
   setSellers((prev) =>
     prev.map((s) => {
-      if (s._id !== _id) return s;
+      if (s.id !== id) return s;
       return isFollowing
         ? { ...s, isFollowing: false, followersCount: Math.max(0, (s.followersCount || 0) - 1) }
         : { ...s, isFollowing: true,  followersCount: (s.followersCount || 0) + 1 };
@@ -185,14 +185,14 @@ const mapRef = useRef(null);
 
   try {
     if (isFollowing) {
-      await api.delete(`/follow/${_id}`);
+      await api.delete(`/follow/${id}`);
     } else {
-      await api.post(`/follow/${_id}`);
+      await api.post(`/follow/${id}`);
     }
   } catch {
     // Rollback on failure
     setSellers((prev) =>
-      prev.map((s) => s._id === _id ? { ...s, isFollowing } : s)
+      prev.map((s) => s.id === id ? { ...s, isFollowing } : s)
     );
   }
 };
@@ -200,7 +200,7 @@ const mapRef = useRef(null);
   // ── Message ───────────────────────────────────────────────
 const handleMessage = (seller, e) => {
   e.stopPropagation();
-  navigate(`/messages?with=${seller._id}`);
+  navigate(`/messages?with=${seller.id}`);
 };
 
   // ── View Profile ──────────────────────────────────────────
@@ -289,13 +289,13 @@ const handleMessage = (seller, e) => {
           if (!lat || !lng) return null;
 
           const color    = categoryColor(seller.businessCategory);
-          const isMe     = currentUser?._id === seller._id;
+          const isMe     = currentUser?.id === seller.id;
           const city     = seller.location?.city;
           const country  = seller.location?.country;
 
           return (
             <Marker
-              key={seller._id}
+              key={seller.id}
               position={[lat, lng]}
               icon={makeIcon(isMe ? "#22c55e" : color)}
             >

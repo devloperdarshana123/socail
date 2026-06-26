@@ -14,20 +14,6 @@ export function encryptMessage(text) {
   return iv.toString("hex") + ":" + encrypted;
 }
 
-// export function decryptMessage(encryptedText) {
-//   const [ivHex, encrypted] = encryptedText.split(":");
-//   const iv = Buffer.from(ivHex, "hex");
-//   const key = crypto.scryptSync(SECRET_KEY, "salt", 32);
-
-//   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-//   let decrypted = decipher.update(encrypted, "hex", "utf8");
-//   decrypted += decipher.final("utf8");
-
-//   return decrypted;
-// }
-
-
-// encryption.js mein decryptMessage ko update karo
 export function decryptMessage(encryptedText) {
   // ✅ Safety check — plain text hai toh seedha return karo
   if (!encryptedText.includes(":")) {

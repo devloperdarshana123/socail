@@ -70,7 +70,10 @@ export default function GoogleAuthButton({
       if (err?.code === "auth/popup-closed-by-user" || err?.code === "auth/cancelled-popup-request") {
         return;
       }
-      toast.error(err?.message || "Google sign-in failed. Please try again.");
+   const errorMsg = typeof err === "string" 
+  ? err 
+  : err?.message || "Google sign-in failed. Please try again.";
+toast.error(errorMsg);
     } finally {
       // Always sign out from Firebase — we use our own JWT system
       await firebaseSignOut().catch(() => {});

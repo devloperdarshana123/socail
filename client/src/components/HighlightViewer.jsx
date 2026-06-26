@@ -145,7 +145,7 @@ if (!snap) return null;
       <div className="flex gap-1.5">
         <button
           onClick={() => {
-            onRemoveSnap?.(highlight._id, snap._id);
+            onRemoveSnap?.(highlight.id, snap.id);
             if (snapshots.length <= 1) {
               onClose();
             } else {
@@ -158,7 +158,7 @@ if (!snap) return null;
       This Story
         </button>
         <button
-          onClick={() => { onDelete?.(highlight._id); onClose(); }}
+          onClick={() => { onDelete?.(highlight.id); onClose(); }}
           className="text-xs bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded-full font-semibold">
           Full Highlight
         </button>
@@ -202,7 +202,7 @@ if (!snap) return null;
               </div>
             ) : snap.type === "video" ? (
               <video
-  key={snap._id}
+  key={snap.id}
   ref={videoRef}
   src={snap.url}
   autoPlay

@@ -1,11 +1,9 @@
 
 
-import asyncHandler    from "../../middlewares/asyncHandler.js";
-import AppError        from "../../utils/AppError.js";
-import Report          from "../../models/report.model.js";
-import User            from "../../models/user.model.js";
-import Post            from "../../models/post.model.js";
-import logger          from "../../config/logger.js";
+import asyncHandler from "../../middlewares/asyncHandler.js";
+import AppError     from "../../utils/AppError.js";
+import prisma       from "../../config/prisma.js";
+import logger       from "../../config/logger.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Constants
@@ -30,7 +28,6 @@ const ALLOWED_ACTIONS = [
 
 const ALLOWED_PRIORITIES = ["low", "medium", "high", "critical"];
 
-// Claim TTL — 30 minutes by default; super_admin can override
 const DEFAULT_CLAIM_TTL_MINUTES = 30;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,57 +43,91 @@ const paginationMeta = (total, page, limit) => ({
   hasPrevPage: page > 1,
 });
 
+// Common report include — reportedBy, post (target), reviewedBy, claimedBy, escalatedBy
+const reportInclude = {
+  reportedBy: {
+    select: { id: true, username: true, fullName: true, avatar: true },
+  },
+  post: {
+    select: {
+      id:            true,
+      caption:       true,
+      media:         true,
+      type:          true,
+      likesCount:    true,
+      commentsCount: true,
+      author: {
+        select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true },
+      },
+    },
+  },
+ reportedUser: { select: { id: true, username: true, fullName: true, avatar: true } },
+  claimedBy:   { select: { id: true, username: true, fullName: true, avatar: true } },
+  escalatedBy: { select: { id: true, username: true, fullName: true } },
+  reviewedBy:  { select: { id: true, username: true, fullName: true } },
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET /admin/reports/stats
-//  Dashboard stat card — status breakdown + priority breakdown + 7-day trend
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getReportStats = asyncHandler(async (req, res) => {
-  const [byStatus, byReason, byTarget, byPriority, recentTrend] = await Promise.all([
-    Report.aggregate([
-      { $group: { _id: "$status", count: { $sum: 1 } } },
-    ]),
-    Report.aggregate([
-      { $group: { _id: "$reason", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 5 },
-    ]),
-    Report.aggregate([
-      { $group: { _id: "$targetModel", count: { $sum: 1 } } },
-    ]),
-    // Priority breakdown — only open reports matter
-    Report.aggregate([
-      { $match: { status: { $in: ["pending", "under_review"] } } },
-      { $group: { _id: "$priority", count: { $sum: 1 } } },
-      { $sort:  { count: -1 } },
-    ]),
-    // Last 7 days daily incoming reports
-    Report.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        },
-      },
-      {
-        $group: {
-          _id:   { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]),
+  const since7days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [byStatusRaw, byReasonRaw, byTargetRaw, byPriorityRaw, recentTrendRaw] = await Promise.all([
+    // Status breakdown
+    prisma.report.groupBy({
+      by:     ["status"],
+      _count: { _all: true },
+    }),
+
+    // Top 5 reasons
+    prisma.report.groupBy({
+      by:      ["reason"],
+      _count:  { _all: true },
+      orderBy: { _count: { reason: "desc" } },
+      take:    5,
+    }),
+
+    // By target model
+    prisma.report.groupBy({
+      by:     ["targetModel"],
+      _count: { _all: true },
+    }),
+
+    // Priority breakdown — open reports only
+    prisma.report.groupBy({
+      by:      ["priority"],
+      where:   { status: { in: ["pending", "under_review"] } },
+      _count:  { _all: true },
+      orderBy: { _count: { priority: "desc" } },
+    }),
+
+    // Last 7 days daily trend — raw SQL for date grouping
+    prisma.$queryRaw`
+      SELECT
+        TO_CHAR("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS "_id",
+        COUNT(*)::int AS count
+      FROM "Report"
+      WHERE "createdAt" >= ${since7days}
+      GROUP BY "_id"
+      ORDER BY "_id" ASC
+    `,
   ]);
+
+  const byStatus   = byStatusRaw.map((r)  => ({ _id: r.status,      count: r._count._all }));
+  const byReason   = byReasonRaw.map((r)  => ({ _id: r.reason,      count: r._count._all }));
+  const byTarget   = byTargetRaw.map((r)  => ({ _id: r.targetModel, count: r._count._all }));
+  const byPriority = byPriorityRaw.map((r) => ({ _id: r.priority,   count: r._count._all }));
 
   return res.status(200).json({
     success: true,
-    data: { byStatus, byReason, byTarget, byPriority, recentTrend },
+    data: { byStatus, byReason, byTarget, byPriority, recentTrend: recentTrendRaw },
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET /admin/reports
-//  Full paginated list — filterable by status, targetModel, reason, priority,
-//  escalated, claimedByMe, unclaimedOnly
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getAllReports = asyncHandler(async (req, res, next) => {
@@ -115,52 +146,41 @@ export const getAllReports = asyncHandler(async (req, res, next) => {
     sortOrder = "desc",
   } = req.query;
 
-  // ── Build filter ──────────────────────────────────────────────────────────
-  const filter = {};
+  // ── Build where ──────────────────────────────────────────────────────────
+  const where = {};
 
-  if (status      && ALLOWED_STATUSES.includes(status))                         filter.status      = status;
-  if (targetModel && ["Post", "Comment", "User"].includes(targetModel))          filter.targetModel = targetModel;
-  if (reason)                                                                    filter.reason      = reason;
-  if (priority    && ALLOWED_PRIORITIES.includes(priority))                      filter.priority    = priority;
-  if (escalated   === "true")                                                    filter.escalated   = true;
-  if (claimedByMe === "true")                                                    filter.claimedBy   = req.user._id;
-  if (unclaimedOnly === "true")                                                  filter.claimedBy   = null;
+ if (status && ALLOWED_STATUSES.includes(status)) where.status = status;
+  if (targetModel && ["Post", "Comment", "User"].includes(targetModel)) where.targetModel  = targetModel;
+  if (reason)                                                           where.reason       = reason;
+  if (priority    && ALLOWED_PRIORITIES.includes(priority))             where.priority     = priority;
+  if (escalated   === "true")                                           where.escalated    = true;
+  if (claimedByMe === "true")                                           where.claimedById  = req.user.id;
+  if (unclaimedOnly === "true")                                         where.claimedById  = null;
 
-  // ── Sort ──────────────────────────────────────────────────────────────────
-  // Default queue sort: priority DESC, then createdAt per sortOrder
-  const sortDir = sortOrder === "asc" ? 1 : -1;
-  const sort    = { priority: -1, createdAt: sortDir };
+  // ── Parallel: reports + count + sidebar counts ───────────────────────────
+  const [reports, total, statusCountsRaw, priorityCountsRaw] = await Promise.all([
+    prisma.report.findMany({
+      where,
+      orderBy: [{ priority: "desc" }, { createdAt: sortOrder === "asc" ? "asc" : "desc" }],
+      skip,
+      take:    limit,
+      include: reportInclude,
+    }),
 
-  // ── Parallel: data + total + sidebar counts ───────────────────────────────
-  const [reports, total, statusCounts, priorityCounts] = await Promise.all([
-    Report.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-.populate("reportedBy",  "username fullName avatar")
-.populate({
-  path:    "targetId",
-  select:  "username fullName avatar caption media type author accountStatus likesCount commentsCount",
-  populate: { path: "author", select: "username fullName avatar isVerifiedBadge", strictPopulate: false },
-})
-.populate("reviewedBy",  "username fullName")
-.populate("claimedBy",   "username fullName avatar")
-.populate("escalatedBy", "username fullName")
-      .select("-moderatorNote")
-      .lean(),
+    prisma.report.count({ where }),
 
-    Report.countDocuments(filter),
+    // Full status counts (no filter)
+    prisma.report.groupBy({
+      by:     ["status"],
+      _count: { _all: true },
+    }),
 
-    // Status sidebar counts — always full (ignore current filter)
-    Report.aggregate([
-      { $group: { _id: "$status", count: { $sum: 1 } } },
-    ]),
-
-    // Priority counts for open reports — always full
-    Report.aggregate([
-      { $match: { status: { $in: ["pending", "under_review"] } } },
-      { $group: { _id: "$priority", count: { $sum: 1 } } },
-    ]),
+    // Open priority counts (no filter)
+    prisma.report.groupBy({
+      by:    ["priority"],
+      where: { status: { in: ["pending", "under_review"] } },
+      _count: { _all: true },
+    }),
   ]);
 
   // Shape status counts
@@ -168,26 +188,22 @@ export const getAllReports = asyncHandler(async (req, res, next) => {
     all: 0, pending: 0, under_review: 0,
     resolved_action_taken: 0, resolved_no_action: 0, dismissed: 0,
   };
-  statusCounts.forEach(({ _id, count }) => {
-    if (_id in counts) counts[_id] = count;
-    counts.all += count;
+  statusCountsRaw.forEach(({ status: s, _count }) => {
+    if (s in counts) counts[s] = _count._all;
+    counts.all += _count._all;
   });
 
   // Shape priority counts
   const priorities = { low: 0, medium: 0, high: 0, critical: 0 };
-  priorityCounts.forEach(({ _id, count }) => {
-    if (_id in priorities) priorities[_id] = count;
+  priorityCountsRaw.forEach(({ priority: p, _count }) => {
+    if (p in priorities) priorities[p] = _count._all;
   });
 
-  logger.info("Admin fetched reports", {
-    adminId: req.user._id,
-    filter,
-    total,
-  });
+  logger.info("Admin fetched reports", { adminId: req.user.id, total });
 
   return res.status(200).json({
     success: true,
-    data:       reports,
+    data: reports.map(r => ({ ...r, targetId: r.post ?? r.reportedUser ?? null })),
     pagination: paginationMeta(total, page, limit),
     counts,
     priorities,
@@ -196,37 +212,47 @@ export const getAllReports = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET /admin/reports/:id
-//  Single report detail — full target context + other reports count
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getReportById = asyncHandler(async (req, res, next) => {
-  const report = await Report.findById(req.params.id)
-    .populate("reportedBy",  "username fullName avatar accountStatus isVerifiedBadge createdAt")
-    .populate({
-      path:    "targetId",
-      select:  "username fullName avatar caption media type likesCount commentsCount createdAt author accountStatus",
-      populate: { path: "author", select: "username fullName avatar isVerifiedBadge", strictPopulate: false },
-    })
-    .populate("reviewedBy",  "username fullName avatar")
-    .populate("claimedBy",   "username fullName avatar")
-    .populate("escalatedBy", "username fullName avatar")
-    .select("+moderatorNote")
-    .lean();
+  const report = await prisma.report.findUnique({
+    where:   { id: req.params.id },
+    include: {
+      reportedBy: {
+        select: {
+          id: true, username: true, fullName: true, avatar: true,
+          accountStatus: true, isVerifiedBadge: true, createdAt: true,
+        },
+      },
+      post: {
+        select: {
+          id: true, caption: true, media: true, type: true,
+          likesCount: true, commentsCount: true, createdAt: true,
+          author: {
+            select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true },
+          },
+        },
+      },
+      reportedUser: { select: { id: true, username: true, fullName: true, avatar: true } },
+      reviewedBy:  { select: { id: true, username: true, fullName: true, avatar: true } },
+      claimedBy:   { select: { id: true, username: true, fullName: true, avatar: true } },
+      escalatedBy: { select: { id: true, username: true, fullName: true, avatar: true } },
+    },
+  });
 
   if (!report) return next(new AppError("Report not found", 404));
 
-  // Sibling reports on same target
+  // Sibling reports on same post
   const [otherReportsCount, openReportsCount] = await Promise.all([
-    Report.countDocuments({
-      targetId:    report.targetId,
-      targetModel: report.targetModel,
-      _id:         { $ne: report._id },
+    prisma.report.count({
+      where: { postId: report.postId, id: { not: report.id } },
     }),
-    Report.countDocuments({
-      targetId:    report.targetId,
-      targetModel: report.targetModel,
-      _id:         { $ne: report._id },
-      status:      { $in: ["pending", "under_review"] },
+    prisma.report.count({
+      where: {
+        postId: report.postId,
+        id:     { not: report.id },
+        status: { in: ["pending", "under_review"] },
+      },
     }),
   ]);
 
@@ -234,6 +260,7 @@ export const getReportById = asyncHandler(async (req, res, next) => {
     success: true,
     data: {
       ...report,
+     targetId: report.post ?? report.reportedUser ?? null,
       otherReportsOnTarget: otherReportsCount,
       openReportsOnTarget:  openReportsCount,
     },
@@ -242,57 +269,89 @@ export const getReportById = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET /admin/reports/:id/history
-//  All reports against the same target — for the "History" tab in detail panel
+//  All reports against the same post target
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getReportHistory = asyncHandler(async (req, res, next) => {
-  const report = await Report.findById(req.params.id).select("targetId targetModel").lean();
+  const report = await prisma.report.findUnique({
+    where:  { id: req.params.id },
+    select: { postId: true },
+  });
   if (!report) return next(new AppError("Report not found", 404));
 
-  const { beforeId, limit } = req.query;
+  const { beforeId, limit = 20 } = req.query;
+  const take = Math.min(50, Math.max(1, parseInt(limit)));
 
-  const history = await Report.getReportHistory(
-    report.targetId,
-    report.targetModel,
-    { beforeId, limit },
-  );
+  const where = {
+    postId: report.postId,
+    id:     { not: req.params.id },
+    ...(beforeId ? { id: { lt: beforeId } } : {}),
+  };
 
-  return res.status(200).json({
-    success: true,
-    data:    history,
+  const history = await prisma.report.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take,
+    include: {
+      reportedBy: { select: { id: true, username: true, fullName: true, avatar: true } },
+      reviewedBy: { select: { id: true, username: true, fullName: true } },
+    },
   });
+
+  return res.status(200).json({ success: true, data: history });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /admin/reports/:id/claim
-//  Claim a report for review — atomic, prevents double-moderation
+//  Atomic claim — prevents double-moderation
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const claimReport = asyncHandler(async (req, res, next) => {
   const reportId    = req.params.id;
-  const moderatorId = req.user._id;
+  const moderatorId = req.user.id;
   const ttl         = parseInt(req.body?.ttlMinutes) || DEFAULT_CLAIM_TTL_MINUTES;
+  const now         = new Date();
+  const expiresAt   = new Date(now.getTime() + ttl * 60 * 1000);
 
-  const { claimed, report } = await Report.claimReport(reportId, moderatorId, ttl);
+  // Check existing claim
+  const existing = await prisma.report.findUnique({
+    where:   { id: reportId },
+    include: { claimedBy: { select: { id: true, username: true } } },
+  });
 
-  if (!claimed) {
-    // Already claimed by someone else — return 409 with who has it
+  if (!existing) return next(new AppError("Report not found", 404));
+
+  // Already claimed by someone else and not expired
+  if (
+    existing.claimedById &&
+    existing.claimedById !== moderatorId &&
+    existing.claimExpiresAt &&
+    existing.claimExpiresAt > now
+  ) {
     return res.status(409).json({
       success: false,
-      message: `Report is currently claimed by ${report?.claimedBy?.username ?? "another moderator"}`,
+      message: `Report is currently claimed by ${existing.claimedBy?.username ?? "another moderator"}`,
       data: {
-        claimedBy:      report?.claimedBy ?? null,
-        claimedAt:      report?.claimedAt ?? null,
-        claimExpiresAt: report?.claimExpiresAt ?? null,
+        claimedBy:      existing.claimedBy      ?? null,
+        claimedAt:      existing.claimedAt      ?? null,
+        claimExpiresAt: existing.claimExpiresAt ?? null,
       },
     });
   }
 
-  logger.info("Admin claimed report", {
-    adminId:   moderatorId,
-    reportId,
-    expiresAt: report.claimExpiresAt,
+  // Claim it
+  const report = await prisma.report.update({
+    where: { id: reportId },
+    data: {
+      claimedById:    moderatorId,
+      claimedAt:      now,
+      claimExpiresAt: expiresAt,
+      status:         existing.status === "pending" ? "under_review" : existing.status,
+    },
+    include: reportInclude,
   });
+
+  logger.info("Admin claimed report", { adminId: moderatorId, reportId, expiresAt });
 
   return res.status(200).json({
     success: true,
@@ -308,36 +367,46 @@ export const claimReport = asyncHandler(async (req, res, next) => {
 
 export const releaseReport = asyncHandler(async (req, res, next) => {
   const reportId    = req.params.id;
-  const moderatorId = req.user._id;
-  const role        = req.user.role;
+  const moderatorId = req.user.id;
+  const isSuperAdmin = req.user.role === "super_admin";
 
-  const report = await Report.releaseReport(reportId, moderatorId, role);
+  const existing = await prisma.report.findUnique({
+    where:  { id: reportId },
+    select: { id: true, claimedById: true },
+  });
 
-  if (!report) {
+  if (!existing) return next(new AppError("Report not found", 404));
+
+  // Only claim owner or super_admin can release
+  if (!isSuperAdmin && existing.claimedById !== moderatorId) {
     return next(new AppError("Report not found or you don't own this claim", 403));
   }
 
+  const report = await prisma.report.update({
+    where: { id: reportId },
+    data:  { claimedById: null, claimedAt: null, claimExpiresAt: null },
+    include: reportInclude,
+  });
+
   logger.info("Admin released report claim", { adminId: moderatorId, reportId });
 
-  return res.status(200).json({
-    success: true,
-    message: "Claim released",
-    data:    report,
-  });
+  return res.status(200).json({ success: true, message: "Claim released", data: report });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /admin/reports/:id/escalate
-//  Escalate to senior admin
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const escalateReport = asyncHandler(async (req, res, next) => {
   const reportId    = req.params.id;
-  const moderatorId = req.user._id;
+  const moderatorId = req.user.id;
   const { reason }  = req.body;
 
-  // Check report exists
-  const existing = await Report.findById(reportId).select("_id escalated status").lean();
+  const existing = await prisma.report.findUnique({
+    where:  { id: reportId },
+    select: { id: true, escalated: true, status: true },
+  });
+
   if (!existing) return next(new AppError("Report not found", 404));
 
   if (existing.escalated) {
@@ -348,13 +417,19 @@ export const escalateReport = asyncHandler(async (req, res, next) => {
     return next(new AppError("Cannot escalate a resolved or dismissed report", 400));
   }
 
-  const report = await Report.escalateReport({ reportId, moderatorId, reason });
-
-  logger.info("Admin escalated report", {
-    adminId:   moderatorId,
-    reportId,
-    reason,
+  const report = await prisma.report.update({
+    where: { id: reportId },
+    data: {
+      escalated:      true,
+      escalationReason: reason || null,
+      escalatedAt:    new Date(),
+      escalatedById:  moderatorId,
+      priority:       "high", // bump priority on escalation
+    },
+    include: reportInclude,
   });
+
+  logger.info("Admin escalated report", { adminId: moderatorId, reportId, reason });
 
   return res.status(200).json({
     success: true,
@@ -365,7 +440,6 @@ export const escalateReport = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PATCH /admin/reports/:id/status
-//  Update report status + apply side-effects (suspend, remove content, etc.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const updateReportStatus = asyncHandler(async (req, res, next) => {
@@ -378,53 +452,72 @@ export const updateReportStatus = asyncHandler(async (req, res, next) => {
     return next(new AppError(`Invalid actionTaken. Allowed: ${ALLOWED_ACTIONS.join(", ")}`, 400));
   }
 
-  const report = await Report.findByIdAndUpdate(
-    req.params.id,
-    {
+  const report = await prisma.report.update({
+    where: { id: req.params.id },
+    data: {
       status,
       actionTaken,
       moderatorNote,
-      reviewedBy:     req.user._id,
+      reviewedById:   req.user.id,
       reviewedAt:     new Date(),
-      // Release claim on any status update
-      claimedBy:      null,
+      // Release claim on resolution
+      claimedById:    null,
       claimedAt:      null,
       claimExpiresAt: null,
     },
-    { new: true, runValidators: true },
-  )
-    .populate("reportedBy", "username fullName avatar")
-    .populate("reviewedBy", "username fullName avatar")
-    .lean();
+    include: {
+      reportedBy: { select: { id: true, username: true, fullName: true, avatar: true } },
+      reviewedBy: { select: { id: true, username: true, fullName: true, avatar: true } },
+      post:       { select: { id: true, authorId: true } },
+    },
+  });
 
   if (!report) return next(new AppError("Report not found", 404));
 
-  // ── Side-effects ──────────────────────────────────────────────────────────
+  // ── Side-effects ─────────────────────────────────────────────────────────
 
-  if (actionTaken === "content_removed" && report.targetModel === "Post") {
+  if (actionTaken === "content_removed" && report.postId) {
     await Promise.all([
-      Post.findByIdAndUpdate(report.targetId, {
-        isDeleted: true,
-        deletedAt: new Date(),
-        deletedBy: req.user._id,
+      // Soft-delete the post
+      prisma.post.update({
+        where: { id: report.postId },
+        data:  { isDeleted: true, deletedAt: new Date() },
       }),
       // Bulk resolve all other pending reports on same post
-      Report.bulkResolveForTarget(
-        report.targetId, "Post", req.user._id, "content_removed",
-        "Auto-resolved: content removed",
-      ),
+      prisma.report.updateMany({
+        where: {
+          postId: report.postId,
+          id:     { not: report.id },
+          status: { in: ["pending", "under_review"] },
+        },
+        data: {
+          status:        "resolved_action_taken",
+          actionTaken:   "content_removed",
+          moderatorNote: "Auto-resolved: content removed",
+          reviewedById:  req.user.id,
+          reviewedAt:    new Date(),
+          claimedById:   null,
+          claimedAt:     null,
+          claimExpiresAt: null,
+        },
+      }),
     ]);
   }
 
-  if (actionTaken === "user_suspended" && report.targetModel === "User") {
-    await User.findByIdAndUpdate(report.targetId, { accountStatus: "suspended" });
+  if (actionTaken === "user_suspended" && report.post?.authorId) {
+    await prisma.user.update({
+      where: { id: report.post.authorId },
+      data:  { accountStatus: "suspended" },
+    });
   }
 
-  if (actionTaken === "user_banned" && report.targetModel === "User") {
-    await User.findByIdAndUpdate(report.targetId, { accountStatus: "banned" });
+  if (actionTaken === "user_banned" && report.post?.authorId) {
+    await prisma.user.update({
+      where: { id: report.post.authorId },
+      data:  { accountStatus: "banned" },
+    });
   }
 
-  // Stash username in res.locals for audit middleware
   res.locals.auditMeta = {
     username:   report.reportedBy?.username ?? null,
     status,
@@ -432,7 +525,7 @@ export const updateReportStatus = asyncHandler(async (req, res, next) => {
   };
 
   logger.info("Admin updated report status", {
-    adminId:    req.user._id,
+    adminId:    req.user.id,
     reportId:   req.params.id,
     status,
     actionTaken,
@@ -447,7 +540,6 @@ export const updateReportStatus = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PATCH /admin/reports/bulk
-//  Bulk status update — body: { ids: [...], status, actionTaken }
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const bulkUpdateReports = asyncHandler(async (req, res, next) => {
@@ -463,49 +555,61 @@ export const bulkUpdateReports = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid status", 400));
   }
 
-  const result = await Report.updateMany(
-    { _id: { $in: ids } },
-    {
+  const result = await prisma.report.updateMany({
+    where: { id: { in: ids } },
+    data: {
       status,
       actionTaken,
-      reviewedBy:     req.user._id,
+      reviewedById:   req.user.id,
       reviewedAt:     new Date(),
-      claimedBy:      null,
+      claimedById:    null,
       claimedAt:      null,
       claimExpiresAt: null,
     },
-  );
+  });
 
   logger.info("Admin bulk-updated reports", {
-    adminId: req.user._id,
-    count:   result.modifiedCount,
+    adminId: req.user.id,
+    count:   result.count,
     status,
     actionTaken,
   });
 
   return res.status(200).json({
     success: true,
-    message: `${result.modifiedCount} report(s) updated`,
-    data:    { modifiedCount: result.modifiedCount },
+    message: `${result.count} report(s) updated`,
+    data:    { modifiedCount: result.count },
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /admin/reports/release-stale-claims
-//  Admin utility — release all expired claims (call from cron or manually)
+//  Release all expired claims — call from cron or manually
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const releaseStaleClams = asyncHandler(async (req, res) => {
-  const result = await Report.releaseStaleClams();
+  const now = new Date();
+
+  const result = await prisma.report.updateMany({
+    where: {
+      claimedById:    { not: null },
+      claimExpiresAt: { lte: now },
+    },
+    data: {
+      claimedById:    null,
+      claimedAt:      null,
+      claimExpiresAt: null,
+    },
+  });
 
   logger.info("Admin released stale claims", {
-    adminId:  req.user._id,
-    released: result.modifiedCount,
+    adminId:  req.user.id,
+    released: result.count,
   });
 
   return res.status(200).json({
     success: true,
-    message: `${result.modifiedCount} stale claim(s) released`,
-    data:    { released: result.modifiedCount },
+    message: `${result.count} stale claim(s) released`,
+    data:    { released: result.count },
   });
 });

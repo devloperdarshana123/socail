@@ -204,7 +204,7 @@ const CommentDetailModal = memo(function CommentDetailModal({
   isOpen, comment, onClose, onApprove, onFlag, onRemove, onDelete, actionLoading,
 }) {
   if (!isOpen || !comment) return null;
-  const isLoading = actionLoading === comment._id;
+  const isLoading = actionLoading === comment.id;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -253,10 +253,10 @@ const CommentDetailModal = memo(function CommentDetailModal({
             <div className="flex justify-center py-2"><Spinner size={5} /></div>
           ) : (
             <div className="flex gap-2">
-              {comment.status !== "active"  && <button onClick={() => onApprove(comment._id)} className="flex-1 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors">Approve</button>}
-              {comment.status !== "flagged" && <button onClick={() => onFlag(comment._id)}    className="flex-1 py-2 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white transition-colors">Flag</button>}
-              {comment.status !== "removed" && <button onClick={() => onRemove(comment._id)}  className="flex-1 py-2 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors">Remove</button>}
-              <button onClick={() => onDelete(comment._id)} className="px-3 py-2 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 transition-colors" title="Permanently delete">
+              {comment.status !== "active"  && <button onClick={() => onApprove(comment.id)} className="flex-1 py-2 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors">Approve</button>}
+              {comment.status !== "flagged" && <button onClick={() => onFlag(comment.id)}    className="flex-1 py-2 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white transition-colors">Flag</button>}
+              {comment.status !== "removed" && <button onClick={() => onRemove(comment.id)}  className="flex-1 py-2 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors">Remove</button>}
+              <button onClick={() => onDelete(comment.id)} className="px-3 py-2 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 transition-colors" title="Permanently delete">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               </button>
             </div>
@@ -314,16 +314,16 @@ const BulkActionModal = memo(function BulkActionModal({ isOpen, onClose, onConfi
 // ── Comment Card ──────────────────────────────────────────────────────────────
 
 const CommentCard = memo(function CommentCard({ comment, selected, onSelect, onView, onApprove, onFlag, onRemove, actionLoading }) {
-  const isLoading   = actionLoading === comment._id;
+  const isLoading   = actionLoading === comment.id;
   const postAuthor  = comment.post?.author;
   const postCaption = comment.post?.caption;
   const postType    = comment.post?.type;
 
   // ✅ OPTIMIZATION: stable click handlers per card
   const handleView    = useCallback(() => onView(comment),          [comment, onView]);
-  const handleApprove = useCallback(() => onApprove(comment._id),   [comment._id, onApprove]);
-  const handleFlag    = useCallback(() => onFlag(comment._id),      [comment._id, onFlag]);
-  const handleRemove  = useCallback(() => onRemove(comment._id),    [comment._id, onRemove]);
+  const handleApprove = useCallback(() => onApprove(comment.id),   [comment.id, onApprove]);
+  const handleFlag    = useCallback(() => onFlag(comment.id),      [comment.id, onFlag]);
+  const handleRemove  = useCallback(() => onRemove(comment.id),    [comment.id, onRemove]);
 
   return (
     <div className={`bg-white border rounded-2xl shadow-sm hover:shadow-md transition-all group overflow-hidden ${selected ? "border-violet-300 ring-1 ring-violet-200" : "border-slate-200 hover:border-slate-300"}`}>
@@ -487,7 +487,7 @@ const PostCommentGroup = memo(function PostCommentGroup({
         <div className="divide-y divide-slate-100">
           {groupComments.map((comment) => (
             <GroupCommentRow
-              key={comment._id}
+              key={comment.id}
               comment={comment}
               selected={selected}
               onSelect={onSelect}
@@ -508,16 +508,16 @@ const PostCommentGroup = memo(function PostCommentGroup({
 const GroupCommentRow = memo(function GroupCommentRow({
   comment, selected, onSelect, onView, onApprove, onFlag, onRemove, actionLoading,
 }) {
-  const handleSelect  = useCallback(() => onSelect(comment._id),  [comment._id, onSelect]);
+  const handleSelect  = useCallback(() => onSelect(comment.id),  [comment.id, onSelect]);
   const handleView    = useCallback(() => onView(comment),        [comment, onView]);
-  const handleApprove = useCallback(() => onApprove(comment._id), [comment._id, onApprove]);
-  const handleFlag    = useCallback(() => onFlag(comment._id),    [comment._id, onFlag]);
-  const handleRemove  = useCallback(() => onRemove(comment._id),  [comment._id, onRemove]);
+  const handleApprove = useCallback(() => onApprove(comment.id), [comment.id, onApprove]);
+  const handleFlag    = useCallback(() => onFlag(comment.id),    [comment.id, onFlag]);
+  const handleRemove  = useCallback(() => onRemove(comment.id),  [comment.id, onRemove]);
 
   return (
     <div className="px-4 py-3 hover:bg-slate-50 transition-colors group">
       <div className="flex items-start gap-3">
-        <input type="checkbox" checked={selected.has(comment._id)} onChange={handleSelect} className="mt-1 w-4 h-4 rounded accent-violet-600 cursor-pointer shrink-0" />
+        <input type="checkbox" checked={selected.has(comment.id)} onChange={handleSelect} className="mt-1 w-4 h-4 rounded accent-violet-600 cursor-pointer shrink-0" />
         <Avatar user={comment.author} size="sm" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -538,7 +538,7 @@ const GroupCommentRow = memo(function GroupCommentRow({
           </div>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          {actionLoading === comment._id ? (
+          {actionLoading === comment.id ? (
             <Spinner />
           ) : (
             <>
@@ -620,7 +620,7 @@ export default function CommentsPage() {
     if (viewMode === "flat") return null;
     const groups = new Map();
     comments.forEach((comment) => {
-      const postId = comment.post?._id ?? "unknown";
+      const postId = comment.post?.id ?? "unknown";
       if (!groups.has(postId)) groups.set(postId, { post: comment.post, comments: [] });
       groups.get(postId).comments.push(comment);
     });
@@ -725,7 +725,7 @@ useEffect(() => {
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    setSelected((prev) => prev.size === comments.length ? new Set() : new Set(comments.map((c) => c._id)));
+    setSelected((prev) => prev.size === comments.length ? new Set() : new Set(comments.map((c) => c.id)));
   }, [comments]);
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
@@ -736,7 +736,7 @@ useEffect(() => {
       const label = status === "active" ? "approved" : status === "flagged" ? "flagged" : "removed";
       showToast(`Comment ${label}`);
       setDetailModal((prev) =>
-        prev.open && prev.comment?._id === commentId
+        prev.open && prev.comment?.id === commentId
           ? { ...prev, comment: { ...prev.comment, status } }
           : prev
       );
@@ -957,7 +957,7 @@ showToast(failed > 0
             <div>
               {groupedComments.map(({ post, comments: groupComments }) => (
                 <PostCommentGroup
-                  key={post?._id ?? "unknown"}
+                  key={post?.id ?? "unknown"}
                   post={post}
                   comments={groupComments}
                   selected={selected}
@@ -975,10 +975,10 @@ showToast(failed > 0
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {comments.map((comment) => (
                 <CommentCard
-                  key={comment._id}
+                  key={comment.id}
                   comment={comment}
-                  selected={selected.has(comment._id)}
-                  onSelect={() => toggleSelect(comment._id)}
+                  selected={selected.has(comment.id)}
+                  onSelect={() => toggleSelect(comment.id)}
                   onView={handleViewDetail}
                   onApprove={handleApprove}
                   onFlag={handleFlag}

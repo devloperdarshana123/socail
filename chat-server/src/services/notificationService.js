@@ -1,6 +1,4 @@
-
-
-import Notification from "../../models/Notification.js";
+import prisma from "../config/prisma.js";
 import { fetchSender } from "./userService.js";
 import { getIO } from "../socket/index.js";
 import logger from "../utils/logger.js";
@@ -19,21 +17,28 @@ const labelMap = {
   admin_new_report:        "New report submitted",
 };
 
-// const MAIN_SERVER_URL      = process.env.MAIN_SERVER_URL;
-// const CHAT_INTERNAL_SECRET = process.env.CHAT_INTERNAL_SECRET;
-
 // ── User notifications ────────────────────────────────────────────────────────
 export const emitNotification = async ({ to, from, type, refId = null, refModel = null, meta = {} }) => {
   if (!to || !from || to.toString() === from.toString()) return;
 
   try {
-    const io    = getIO();
-    const saved = await Notification.createNotification({ receiver: to, sender: from, type, refId, refModel, meta });
-    if (!saved) return;
+    const io = getIO();
 
-    const sender  = await fetchSender(from);
+    const saved = await prisma.notification.create({
+      data: {
+        receiverId: to.toString(),
+        senderId:   from.toString(),
+        type,
+        refId,
+        refModel,
+        meta,
+      },
+    });
+
+    const sender = await fetchSender(from);
+
     const payload = {
-      _id:      saved._id,
+      _id:      saved.id,
       type,
       label:    labelMap[type] || type,
       sender,
@@ -54,8 +59,9 @@ export const emitNotification = async ({ to, from, type, refId = null, refModel 
 
 // ── Admin notifications ───────────────────────────────────────────────────────
 export const emitAdminNotification = async ({ type, meta = {} }) => {
-   const MAIN_SERVER_URL      = process.env.MAIN_SERVER_URL;
+  const MAIN_SERVER_URL      = process.env.MAIN_SERVER_URL;
   const CHAT_INTERNAL_SECRET = process.env.CHAT_INTERNAL_SECRET;
+
   try {
     const io = getIO();
 
@@ -67,11 +73,9 @@ export const emitAdminNotification = async ({ type, meta = {} }) => {
       createdAt: new Date(),
     };
 
-    // 1. Live admins ko emit karo
     io.of("/admin").to("admin_room").emit("admin:notification", payload);
     logger.info(`🔔 admin:notification emitted [${type}]`, { meta });
 
-    // 2. DB mein persist karo — main server ke through
     if (!MAIN_SERVER_URL || !CHAT_INTERNAL_SECRET) {
       logger.warn("emitAdminNotification: MAIN_SERVER_URL or CHAT_INTERNAL_SECRET not set — skipping persist");
       return;
@@ -90,12 +94,7 @@ export const emitAdminNotification = async ({ type, meta = {} }) => {
       const body = await res.text();
       logger.error("emitAdminNotification: persist failed", { status: res.status, body });
     }
-
   } catch (err) {
-    logger.error("❌ emitAdminNotification failed", {
-      type,
-      error: err.message,
-      stack: err.stack,
-    });
+    logger.error("❌ emitAdminNotification failed", { type, error: err.message });
   }
 };

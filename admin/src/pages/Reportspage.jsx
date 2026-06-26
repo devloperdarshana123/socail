@@ -235,6 +235,9 @@ function TargetPreview({ report }) {
   if (!targetId) return <span className="text-slate-400 text-xs">—</span>;
 
   if (targetModel === "Post") {
+    if (typeof targetId === 'string' || !targetId.media) {
+      return <span className="text-xs text-slate-500">Post</span>;
+    }
     const media      = targetId.media?.[0];
     const isVideo    = media?.resourceType === "video";
     const previewUrl = isVideo ? (media?.thumbnailUrl || media?.url) : media?.url;
@@ -389,7 +392,13 @@ function HistoryTab({ reportId, history, loading }) {
     );
   }
 
-  if (!history) return null;
+  if (!history || !history.items) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
+        <p className="text-sm text-slate-500">No history data available</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -413,7 +422,7 @@ function HistoryTab({ reportId, history, loading }) {
       {history.items.length === 0 ? (
         <p className="text-xs text-slate-400 text-center py-6">No other reports on this target</p>
       ) : history.items.map((r) => (
-        <div key={r._id} className="p-3 bg-white rounded-xl border border-slate-100 space-y-1.5 hover:border-slate-200 hover:shadow-sm transition-all duration-200">
+        <div key={r.id} className="p-3 bg-white rounded-xl border border-slate-100 space-y-1.5 hover:border-slate-200 hover:shadow-sm transition-all duration-200">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <Avatar user={r.reportedBy} size={22} />
@@ -457,7 +466,7 @@ function DetailPanel({
 
   console.log("reportedBy:", report?.reportedBy);
   console.log("targetId:", report?.targetId);
-  const reportId = report?._id;
+  const reportId = report?.id;
 
   // Reset form when report changes
   useEffect(() => {
@@ -476,11 +485,11 @@ function DetailPanel({
   const claimBusy = claimLoading  === reportId;
   const escalBusy = escalateLoading === reportId;
   const isClaimed    = !!report?.claimedBy;
-  const claimedByMe  = report?.claimedBy?._id === currentAdminId || report?.claimedBy === currentAdminId;
+  const claimedByMe  = report?.claimedBy?.id === currentAdminId || report?.claimedBy === currentAdminId;
 
   const handleSubmitClick = useCallback(() => {
     if (!status || !report) return;
-    const args = { id: report._id, status, actionTaken, moderatorNote };
+    const args = { id: report.id, status, actionTaken, moderatorNote };
     if (DESTRUCTIVE_ACTIONS.has(actionTaken)) {
       setPendingSubmit(args);
       setShowConfirm(true);
@@ -504,7 +513,7 @@ function DetailPanel({
 
   const handleEscalateConfirm = useCallback((reason) => {
     setShowEscalate(false);
-    onEscalate({ id: report._id, reason });
+    onEscalate({ id: report.id, reason });
   }, [report, onEscalate]);
 
   const destructiveLabel = useMemo(
@@ -540,7 +549,7 @@ function DetailPanel({
           <div className="flex items-center justify-between px-4 md:px-5 py-4 border-b border-slate-100 sticky top-0 bg-white/95 backdrop-blur-sm z-10">
             <div>
               <h2 className="text-sm font-bold text-slate-800">Report Detail</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-mono">#{report?._id?.slice(-8)}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-mono">#{report?.id?.slice(-8)}</p>
             </div>
             <div className="flex items-center gap-2">
               {report && !report.escalated && (
@@ -587,7 +596,7 @@ function DetailPanel({
                     </div>
                     {claimedByMe && (
                       <button
-                        onClick={() => onRelease(report._id)}
+                        onClick={() => onRelease(report.id)}
                         disabled={claimBusy}
                         className="text-[11px] font-semibold text-slate-500 hover:text-red-500 transition-colors duration-150 disabled:opacity-40 flex items-center gap-1">
                         {claimBusy ? <Spinner size={10} /> : null} Release
@@ -596,7 +605,7 @@ function DetailPanel({
                   </div>
                 ) : (
                   <button
-                    onClick={() => onClaim({ id: report._id })}
+                    onClick={() => onClaim({ id: report.id })}
                     disabled={claimBusy}
                     className="w-full py-2 rounded-xl border border-[#1e3a5f]/20 bg-white text-[#1e3a5f] text-xs font-semibold
                       hover:bg-[#1e3a5f]/5 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 flex items-center justify-center gap-2">
@@ -626,7 +635,7 @@ function DetailPanel({
 
               <div className="flex-1 p-4 md:p-5 space-y-5 overflow-y-auto">
                 {activeTab === "history" ? (
-                  <HistoryTab reportId={report._id} history={history} loading={historyLoading} />
+                  <HistoryTab reportId={report.id} history={history} loading={historyLoading} />
                 ) : (
                   <>
                     {/* Badges */}
@@ -672,10 +681,13 @@ function DetailPanel({
                         Reported {report.targetModel}
                       </p>
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        {report.targetModel === "Post" && report.targetId ? (
-                          <div className="space-y-2">
-                            {(() => {
-                              const m = report.targetId.media?.[0];
+                      {report.targetModel === "Post" && report.targetId ? (
+  <div className="space-y-2">
+    {(() => {
+      if (typeof report.targetId === 'string') {
+        return <p className="text-xs text-slate-400">Post no longer available</p>;
+      }
+      const m = report.targetId.media?.[0];
                               if (!m) return null;
                               const isVideo = m.resourceType === "video";
                               if (isVideo) {
@@ -1012,7 +1024,7 @@ export default function ReportsPage() {
 }, [loadReports, showToast]);
 
   const handleRowClick = useCallback((report) => {
-    dispatch(fetchReportById(report._id));
+    dispatch(fetchReportById(report.id));
   }, [dispatch]);
 
   const handleUpdate = useCallback(async (args) => {
@@ -1265,9 +1277,9 @@ export default function ReportsPage() {
           ) : reports.length === 0 ? (
             <EmptyState />
           ) : reports.map((report, idx) => {
-            const selected = selectedIds.includes(report._id);
+            const selected = selectedIds.includes(report.id);
             return (
-              <div key={report._id}
+              <div key={report.id}
                 style={{ animationDelay: `${idx * 30}ms` }}
                 className={`grid grid-cols-[28px_1fr_1fr_1fr_90px_120px_110px_32px] gap-3 px-4 py-3.5
                   border-b border-slate-50 items-center cursor-pointer group
@@ -1279,7 +1291,7 @@ export default function ReportsPage() {
 
                 <input type="checkbox" checked={selected}
                   onClick={(e) => e.stopPropagation()}
-                  onChange={() => dispatch(toggleSelectId(report._id))}
+                  onChange={() => dispatch(toggleSelectId(report.id))}
                   className="accent-[#1e3a5f]" />
 
                 <div className="flex items-center gap-2 min-w-0">
@@ -1339,13 +1351,13 @@ export default function ReportsPage() {
                 <span className="text-xs text-slate-500 font-medium">Select all</span>
               </div>
               {reports.map((report, idx) => (
-                <div key={report._id}
+                <div key={report.id}
                   style={{ animationDelay: `${idx * 40}ms` }}
                   className="animate-in fade-in slide-in-from-bottom-1">
                   <MobileReportCard
                     report={report}
-                    selected={selectedIds.includes(report._id)}
-                    onSelect={() => dispatch(toggleSelectId(report._id))}
+                    selected={selectedIds.includes(report.id)}
+                    onSelect={() => dispatch(toggleSelectId(report.id))}
                     onClick={() => handleRowClick(report)}
                   />
                 </div>
