@@ -393,8 +393,8 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
                       <div className="flex gap-2">
                         <button
                           onClick={() => { setShowDel(false); setReason(""); }}
-                          disabled={deleteLoading === post.id}
-                          className="flex-1 py-2 rounded-xl bg-white border border-slate-200
+                          disabled={!!deleteLoading}
+className="flex-1 py-2 rounded-xl bg-white border border-slate-200
                             text-slate-600 text-xs font-semibold hover:bg-slate-50
                             transition-colors disabled:opacity-40"
                         >
@@ -402,12 +402,12 @@ export default function PostDetailModal({ post, onClose, onDelete, deleteLoading
                         </button>
                         <button
                           onClick={handleDelete}
-                          disabled={deleteLoading === post.id}
-                          className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600
+                          disabled={!!deleteLoading}
+className="flex-1 py-2 rounded-xl bg-red-500 hover:bg-red-600
                             text-white text-xs font-bold transition-colors
                             disabled:opacity-40 flex items-center justify-center gap-1.5"
                         >
-                          {deleteLoading === post.id ? (
+                          {deleteLoading ? (
                             <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10"
                                 stroke="currentColor" strokeWidth="4" />

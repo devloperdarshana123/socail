@@ -1460,11 +1460,15 @@ const unread = typeof conv.unreadCount === "object"
   />
 )}
 {showCreateGroup && (
-        <CreateGroupModal
-          following={following}
-          onClose={() => setShowCreateGroup(false)}
-        />
-      )}
+  <CreateGroupModal
+    following={following}
+    onClose={() => setShowCreateGroup(false)}
+    onCreated={() => {
+      dispatch(fetchConversations());
+      setShowCreateGroup(false);
+    }}
+  />
+)}
       {showAddMember && (
         <AddMemberModal
           following={following}

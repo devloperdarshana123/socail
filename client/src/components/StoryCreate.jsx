@@ -62,11 +62,15 @@ export default function StoryCreate({ onClose, onCreated }) {
         if (e.lengthComputable)
           setProgress(Math.round((e.loaded / e.total) * 100));
       });
-      xhr.addEventListener("load", () => {
+     xhr.addEventListener("load", () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           const r = JSON.parse(xhr.responseText);
+          const isVid = r.resource_type === "video" || isVideo;
+          const optimizedUrl = isVid
+            ? r.secure_url.replace("/upload/", "/upload/q_auto,w_720,vc_auto/")
+            : r.secure_url.replace("/upload/", "/upload/q_auto:good,w_1080,f_auto/");
           resolve({
-            url: r.secure_url,
+            url: optimizedUrl,
             publicId: r.public_id,
             resourceType: r.resource_type || (isVideo ? "video" : "image"),
             width: r.width || null,
@@ -138,7 +142,7 @@ export default function StoryCreate({ onClose, onCreated }) {
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
         style={{ zIndex: 99999 }}
-        onClick={onClose}
+      
       >
         <motion.div
           initial={{ scale: 0.92, opacity: 0 }}

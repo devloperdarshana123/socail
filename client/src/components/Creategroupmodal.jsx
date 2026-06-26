@@ -33,7 +33,7 @@ function MiniAvatar({ name = "", userId = "", size = 36, src = null }) {
   );
 }
 
-export default function CreateGroupModal({ following = [], onClose }) {
+export default function CreateGroupModal({ following = [], onClose, onCreated }) {
   const dispatch = useDispatch();
   const creating = useSelector(selectCreatingGroup);
 
@@ -87,11 +87,11 @@ export default function CreateGroupModal({ following = [], onClose }) {
         // avatarUrl: selectedImage || undefined,  // ← REMOVE THIS LINE
       })
     );
-
-    if (action?.payload?.id) {
-      dispatch(setActiveConversation(action.payload.id));
-      onClose();
-    }
+if (action?.payload?.id) {
+  dispatch(setActiveConversation(action.payload.id));
+  onCreated?.();
+  onClose();
+}
   } catch (err) {
     setError("Failed to create group.");
   }

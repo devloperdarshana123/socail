@@ -285,16 +285,20 @@ const usersSlice = createSlice({
       .addCase(fetchUserPosts.rejected,  (s) => { s.postsLoading = false; })
 
       // ── adminDeletePost ─────────────────────────────────────────────────────
-      .addCase(adminDeletePost.fulfilled, (s, { payload }) => {
-        if (!s.detail) return;
-        const before = s.detail.posts?.length ?? 0;
-        s.detail.posts = s.detail.posts?.filter((p) => p._id !== payload.postId) ?? [];
-        const deleted  = before - s.detail.posts.length;
-        // ✅ decrement live count so header stays in sync without re-fetch
-        if (deleted > 0 && s.detail.user) {
-          s.detail.user.postsCount = Math.max(0, (s.detail.user.postsCount ?? 0) - deleted);
-        }
-      })
+      .addCase(adminDeletePost.pending, (s, { meta }) => { s.actionLoading = meta.arg.postId; })
+.addCase(adminDeletePost.fulfilled, (s, { payload }) => {
+  s.actionLoading = null;
+  if (!s.detail) return;
+  const before = s.detail.posts?.length ?? 0;
+  s.detail.posts = s.detail.posts?.filter((p) => p.id !== payload.postId) ?? [];
+  const deleted = before - s.detail.posts.length;
+  if (deleted > 0 && s.detail.user) {
+    s.detail.user.postsCount = Math.max(0, (s.detail.user.postsCount ?? 0) - deleted);
+  }
+})
+.addCase(adminDeletePost.rejected, (s, { payload }) => {
+  s.actionLoading = null; s.actionError = payload;
+})
 .addCase(bulkUpdateStatus.fulfilled, (s, { payload }) => {
   const successIds = new Set(payload.data?.success ?? []);
   s.users = s.users.map((u) =>

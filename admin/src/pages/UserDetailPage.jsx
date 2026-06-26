@@ -147,7 +147,7 @@ const StatBox = memo(function StatBox({ label, value, color = "text-slate-800" }
 
 // ─── Post thumbnail ────────────────────────────────────────────────────────────
 
-const PostTile = memo(function PostTile({ post, onDelete, onClick }) {
+const PostTile = memo(function PostTile({ post, onDelete, onClick, deleteLoading }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const reasonRef = useRef("");
   const isText = post.type === "text";
@@ -259,14 +259,21 @@ const PostTile = memo(function PostTile({ post, onDelete, onClick }) {
             >
               Cancel
             </button>
-            <button
-              type="button"
-              onClick={handleConfirmDelete}
-              className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600
-                text-white text-xs font-bold transition-colors"
-            >
-              Confirm
-            </button>
+           <button
+  type="button"
+  onClick={handleConfirmDelete}
+  disabled={deleteLoading}
+  className="flex-1 py-1.5 rounded-lg bg-red-500 hover:bg-red-600
+    text-white text-xs font-bold transition-colors disabled:opacity-40
+    flex items-center justify-center gap-1"
+>
+  {deleteLoading ? (
+    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+  ) : "Confirm"}
+</button>
           </div>
         </div>
       )}
@@ -485,10 +492,18 @@ const handleStatusConfirm = useCallback(async ({ status, reason, duration }) => 
   // FIX: stable close handler for PostDetailModal — avoids inline arrow on every render
   const handleClosePost = useCallback(() => setSelectedPost(null), []);
 
-  const handleModalDelete = useCallback(async (postId, reason) => {
-    await handleDeletePost(postId, reason);
-    setSelectedPost(null);
-  }, [handleDeletePost]);
+ const handleModalDelete = useCallback(async (postId, reason) => {
+  const res = await dispatch(adminDeletePost({
+    postId,
+    reason: reason || "Violation of community guidelines",
+  }));
+  if (res.meta?.requestStatus !== "rejected") {
+    showToast("Post deleted");
+  } else {
+    showToast("Failed to delete post", "error");
+  }
+  setSelectedPost(null);
+}, [dispatch, showToast]);
 
   // ── FIX: actionLoading is boolean — cast once, don't compare to id string ──
   const isActioning = Boolean(actionLoading);
@@ -519,14 +534,13 @@ const handleStatusConfirm = useCallback(async ({ status, reason, duration }) => 
           {toast.msg}
         </div>
       )}
-
-      <PostDetailModal
-        post={selectedPost}
-        onClose={handleClosePost}
-        onDelete={handleModalDelete}
-        deleteLoading={isActioning}
-        hideAuthorNav={true}
-      />
+<PostDetailModal
+  post={selectedPost}
+  onClose={handleClosePost}
+  onDelete={handleModalDelete}
+  deleteLoading={!!actionLoading}
+  hideAuthorNav={true}
+/>
 
       {statusModal && (
         <StatusModal
@@ -690,14 +704,15 @@ const handleStatusConfirm = useCallback(async ({ status, reason, duration }) => 
                             <div className="absolute inset-0 bg-slate-100 animate-pulse rounded-xl" />
                           </div>
                         ))
-                      : posts.map((post) => (
-                          <PostTile
-                            key={post.id}
-                            post={post}
-                            onDelete={handleDeletePost}
-                            onClick={() => setSelectedPost({ ...post, author: post.author ?? user })}
-                          />
-                        ))
+                    : posts.map((post) => (
+    <PostTile
+      key={post.id}
+      post={post}
+      onDelete={handleDeletePost}
+      onClick={() => setSelectedPost({ ...post, author: post.author ?? user })}
+      deleteLoading={actionLoading === post.id}
+    />
+  ))
                     }
                   </div>
 

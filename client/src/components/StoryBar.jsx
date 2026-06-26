@@ -17,10 +17,17 @@ export default function StoryBar() {
 
 useEffect(() => {
   dispatch(fetchStoriesFeed());
-  const interval = setInterval(() => dispatch(fetchStoriesFeed()), 30000);
-  return () => clearInterval(interval);
 }, [dispatch]);
 
+useEffect(() => {
+  const handleVisibility = () => {
+    if (document.visibilityState === "visible") {
+      dispatch(fetchStoriesFeed());
+    }
+  };
+  document.addEventListener("visibilitychange", handleVisibility);
+  return () => document.removeEventListener("visibilitychange", handleVisibility);
+}, [dispatch]);
   const myGroup = feed.find(
     (g) => g.author?.id === currentUser?.id || g.author === currentUser?.id
   );
@@ -29,7 +36,7 @@ useEffect(() => {
   );
   const sorted = myGroup ? [myGroup, ...others] : feed;
 
-  if (feedLoading) return (
+ if (feedLoading && feed.length === 0) return (
     <div className="flex gap-3 px-1 py-3 overflow-x-auto">
       {[...Array(5)].map((_, i) => (
         <div key={i} className="shrink-0 flex flex-col items-center gap-1.5 animate-pulse">
