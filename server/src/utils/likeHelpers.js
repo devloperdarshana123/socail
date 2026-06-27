@@ -12,74 +12,85 @@ export const toggleLike = async (userId, targetId, targetType, reaction = "❤�
     throw new Error("Invalid reaction type");
   }
 
-  // Check if already liked
-  const existing = await prisma.like.findFirst({
-    where: {
-      likedById: userId,
-      ...(targetType === "Post" ? { postId: targetId } : {}),
-      ...(targetType === "Comment" ? { commentId: targetId } : {}),
-    },
-  });
-
   let liked = false;
   let previousReaction = null;
 
-  if (existing) {
-    if (existing.reaction === reaction) {
-      // Same reaction — unlike
-      await prisma.like.delete({ where: { id: existing.id } });
-      liked = false;
-      previousReaction = reaction;
-
-      if (updateParentCount) {
-        if (targetType === "Post") {
-          await prisma.post.update({
-            where: { id: targetId },
-            data: { likesCount: { decrement: 1 } },
-          });
-        } else if (targetType === "Comment") {
-          await prisma.comment.update({
-            where: { id: targetId },
-            data: { likesCount: { decrement: 1 } },
-          });
-        }
-      }
-    } else {
-      // Different reaction — update
-      previousReaction = existing.reaction;
-      await prisma.like.update({
-        where: { id: existing.id },
-        data: { reaction },
-      });
-      liked = true;
-    }
-  } else {
-    // New like
-    await prisma.like.create({
-      data: {
+  await prisma.$transaction(async (tx) => {
+    // Check if already liked
+    const existing = await tx.like.findFirst({
+      where: {
         likedById: userId,
-        reaction,
-        targetModel: targetType,
         ...(targetType === "Post" ? { postId: targetId } : {}),
         ...(targetType === "Comment" ? { commentId: targetId } : {}),
       },
     });
-    liked = true;
 
-    if (updateParentCount) {
-      if (targetType === "Post") {
-        await prisma.post.update({
-          where: { id: targetId },
-          data: { likesCount: { increment: 1 } },
+    if (existing) {
+      if (existing.reaction === reaction) {
+        // Same reaction — unlike
+        await tx.like.delete({ where: { id: existing.id } });
+        liked = false;
+        previousReaction = reaction;
+
+        if (updateParentCount) {
+          if (targetType === "Post") {
+            await tx.post.update({
+              where: { id: targetId },
+              data: { likesCount: { decrement: 1 } },
+            });
+          } else if (targetType === "Comment") {
+            await tx.comment.update({
+              where: { id: targetId },
+              data: { likesCount: { decrement: 1 } },
+            });
+          }
+        }
+      } else {
+        // Different reaction — update
+        previousReaction = existing.reaction;
+        await tx.like.update({
+          where: { id: existing.id },
+          data: { reaction },
         });
-      } else if (targetType === "Comment") {
-        await prisma.comment.update({
-          where: { id: targetId },
-          data: { likesCount: { increment: 1 } },
+        liked = true;
+      }
+   } else {
+      // New like
+      try {
+        await tx.like.create({
+          data: {
+            likedById: userId,
+            reaction,
+            targetModel: targetType,
+            ...(targetType === "Post" ? { postId: targetId } : {}),
+            ...(targetType === "Comment" ? { commentId: targetId } : {}),
+          },
         });
+      } catch (err) {
+        if (err.code === "P2002") {
+          // Duplicate like — someone else's request won the race, treat as already liked
+          liked = true;
+          return;
+        }
+        throw err;
+      }
+      liked = true;
+
+      if (updateParentCount) {
+        if (targetType === "Post") {
+          await tx.post.update({
+            where: { id: targetId },
+            data: { likesCount: { increment: 1 } },
+          });
+        } else if (targetType === "Comment") {
+          await tx.comment.update({
+            where: { id: targetId },
+            data: { likesCount: { increment: 1 } },
+          });
+        }
       }
     }
-  }
+  });
 
   return { liked, previousReaction };
 };

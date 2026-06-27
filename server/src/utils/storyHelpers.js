@@ -113,20 +113,26 @@ export const viewStory = async (storyId, userId) => {
     return { selfView: true };
   }
 
-  const existing = await prisma.storyView.findUnique({
+ const existing = await prisma.storyView.findUnique({
     where: { storyId_viewerId: { storyId, viewerId: userId } },
   });
 
   if (!existing) {
-    await Promise.all([
-      prisma.storyView.create({
-        data: { viewerId: userId, storyId },
-      }),
-      prisma.story.update({
-        where: { id: storyId },
-        data:  { viewsCount: { increment: 1 } },
-      }),
-    ]);
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.storyView.create({
+          data: { viewerId: userId, storyId },
+        });
+        await tx.story.update({
+          where: { id: storyId },
+          data:  { viewsCount: { increment: 1 } },
+        });
+      });
+    } catch (err) {
+      if (err.code !== "P2002") throw err;
+      // Race lost — someone else's request already recorded the view
+      return { selfView: false, alreadyViewed: true };
+    }
   }
 
   return { selfView: false, alreadyViewed: !!existing };
@@ -154,15 +160,27 @@ export const reactToStory = async (storyId, userId, reaction) => {
   if (!hadReaction && hasReaction)  reactionDelta =  1;
   else if (hadReaction && !hasReaction) reactionDelta = -1;
 
-  if (existing) {
-    await prisma.storyView.update({
-      where: { id: existing.id },
-      data:  { reaction: reaction || null },
-    });
-  } else {
-    await prisma.storyView.create({
-      data: { viewerId: userId, storyId, reaction: reaction || null },
-    });
+try {
+    if (existing) {
+      await prisma.storyView.update({
+        where: { id: existing.id },
+        data:  { reaction: reaction || null },
+      });
+    } else {
+      await prisma.storyView.create({
+        data: { viewerId: userId, storyId, reaction: reaction || null },
+      });
+    }
+  } catch (err) {
+    if (err.code === "P2002") {
+      // Race lost — retry as update since the row now exists
+      await prisma.storyView.update({
+        where: { storyId_viewerId: { storyId, viewerId: userId } },
+        data:  { reaction: reaction || null },
+      });
+    } else {
+      throw err;
+    }
   }
 
   if (reactionDelta !== 0) {

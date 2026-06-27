@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser, clearLoginState, googleLogin  } from "../lib/redux/authSlice";
-import { setTokenExpiry } from "../lib/services/api";
+import api , { setTokenExpiry } from "../lib/services/api";
 import AnimatedCollage from "../components/AnimatedCollage";
 import Footer from "../components/Footer";
 import ero_logo from "../assets/seller_logo.png";
@@ -162,7 +162,7 @@ const Login = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const { loading, error, success } = useSelector((s) => s.auth.login);
+  const { loading, error, success, deactivated } = useSelector((s) => s.auth.login);
   const nextRoute = useSelector((s) => s.auth.nextRoute);
   const isAuthenticated = useSelector((s) => s.auth.isAuthenticated);
   const user = useSelector((s) => s.auth.user);
@@ -171,6 +171,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({});
+  const [reactivateLoading, setReactivateLoading] = useState(false);
 
   // ── Already logged in guard ───────────────────────────────────
   useEffect(() => {
@@ -214,13 +215,6 @@ if (
 
 
 
-//   useEffect(() => {
-//   if (success && nextRoute) {
-//     setTokenExpiry(null);
-//     navigate(nextRoute);
-//     dispatch(clearLoginState());
-//   }
-// }, [success, nextRoute, navigate, dispatch]);
 
 useEffect(() => {
   if (success && nextRoute) {
@@ -264,6 +258,29 @@ useEffect(() => {
       }),
     );
   };
+
+
+
+  const handleReactivate = async () => {
+  if (!deactivated?.userId || !form.password) {
+    toast.error("Password is required to reactivate.");
+    return;
+  }
+  try {
+    setReactivateLoading(true);
+    const res = await api.post("/settings/reactivate", {
+      userId: deactivated.userId,
+      password: form.password,
+    });
+    toast.success("Account reactivated! Welcome back 🎉");
+    dispatch(clearLoginState());
+    navigate(res.data?.nextRoute || "/feed", { replace: true });
+  } catch (err) {
+    toast.error(err?.response?.data?.message || "Reactivation failed.");
+  } finally {
+    setReactivateLoading(false);
+  }
+};
 const handleGoogleLogin = async () => {
   try {
     const { idToken } = await signInWithGoogle();
@@ -327,6 +344,35 @@ navigate(result.nextRoute || "/feed", { replace: true });
                 </Link>
               </p>
             </div>
+
+            {deactivated && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+    <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+      <h2 className="text-lg font-bold text-[#0f2557] mb-2">
+        Account Deactivated
+      </h2>
+      <p className="text-sm text-[#8494b4] mb-5">
+        Your account is deactivated. Would you like to reactivate it and restore all your posts?
+      </p>
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={handleReactivate}
+          disabled={reactivateLoading}
+          className="w-full h-11 rounded-xl bg-[#0f2557] text-white text-sm font-semibold hover:bg-[#1a3a7a] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {reactivateLoading ? <><Spinner /> Reactivating...</> : "Yes, Reactivate"}
+        </button>
+        <button
+          onClick={() => dispatch(clearLoginState())}
+          disabled={reactivateLoading}
+          className="w-full h-11 rounded-xl border-2 border-[#e2e6ef] text-[#0f2557] text-sm font-semibold hover:border-[#0f2557] transition-all disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>

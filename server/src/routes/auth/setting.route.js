@@ -4,10 +4,13 @@ import {
   updateProfile,
   updatePassword,
   deactivateAccount,
+   reactivateAccount,
 } from "../../controllers/auth/setting.controller.js";
 import { isAuthenticated, isActive } from "../../middlewares/auth.js";
 
 const router = express.Router();
+
+router.post("/reactivate", reactivateAccount);
 
 // Saare routes: login hona chahiye + account active hona chahiye
 router.use(isAuthenticated, isActive);

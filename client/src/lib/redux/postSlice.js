@@ -187,6 +187,29 @@ export const recordPostView = createAsyncThunk(
   }
 );
 
+export const pinComment = createAsyncThunk(
+  "posts/pinComment",
+  async ({ postId, commentId }, { rejectWithValue }) => {
+    try {
+      await api.patch(`/comments/${commentId}/pin`);
+      return { postId, commentId };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Pin failed");
+    }
+  }
+);
+
+export const unpinComment = createAsyncThunk(
+  "posts/unpinComment",
+  async ({ postId, commentId }, { rejectWithValue }) => {
+    try {
+      await api.patch(`/comments/${commentId}/unpin`);
+      return { postId };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Unpin failed");
+    }
+  }
+);
 export const deletePost = createAsyncThunk(
   "posts/deletePost",
   async (postId, { rejectWithValue }) => {
@@ -483,6 +506,27 @@ builder.addCase(recordPostView.rejected, (state, action) => {
       if (wasPublished && state.serverPostsCount !== null) {
         state.serverPostsCount = Math.max(0, state.serverPostsCount - 1);
       }
+    });
+
+    // ── pinComment ──
+    builder.addCase(pinComment.fulfilled, (state, action) => {
+      const { postId, commentId } = action.payload;
+      if (!state.interactions[postId]) return;
+      state.interactions[postId].comments = state.interactions[postId].comments.map((c) =>
+        c.id === commentId
+          ? { ...c, isPinned: true }
+          : { ...c, isPinned: false }
+      );
+    });
+
+    // ── unpinComment ──
+    builder.addCase(unpinComment.fulfilled, (state, action) => {
+      const { postId } = action.payload;
+      if (!state.interactions[postId]) return;
+      state.interactions[postId].comments = state.interactions[postId].comments.map((c) => ({
+        ...c,
+        isPinned: false,
+      }));
     });
 
     // ── fetchDraftPosts ──

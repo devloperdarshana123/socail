@@ -65,29 +65,40 @@ export const createPost = async (userId, postData) => {
     } catch {}
   }
 
-  const post = await prisma.post.create({
-    data: {
-      authorId: userId,
-      type,
-      caption: caption.trim().slice(0, 2200),
-      media: sanitized,
-      visibility,
-      commentsDisabled: Boolean(commentsDisabled),
-      likesHidden: Boolean(likesHidden),
-      isDraft: Boolean(isDraft),
-      ...(locationData && { location: locationData }),
-    },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
+  const post = await prisma.$transaction(async (tx) => {
+    const newPost = await tx.post.create({
+      data: {
+        authorId: userId,
+        type,
+        caption: caption.trim().slice(0, 2200),
+        media: sanitized,
+        visibility,
+        commentsDisabled: Boolean(commentsDisabled),
+        likesHidden: Boolean(likesHidden),
+        isDraft: Boolean(isDraft),
+        ...(locationData && { location: locationData }),
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatar: true,
+            isVerifiedBadge: true,
+          },
         },
       },
-    },
+    });
+
+    if (!newPost.isDraft) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { postsCount: { increment: 1 } },
+      });
+    }
+
+    return newPost;
   });
 
   return post;
@@ -430,21 +441,23 @@ export async function recordPostView(postId, userId, options = {}) {
       };
     }
 
-    try {
-      await prisma.postView.create({
-        data: {
-          postId,
-          userId,
-          source: options.source || "modal",
-          duration: options.duration || 0,
-          device: options.device || "desktop",
-        },
-      });
+   try {
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.postView.create({
+          data: {
+            postId,
+            userId,
+            source: options.source || "modal",
+            duration: options.duration || 0,
+            device: options.device || "desktop",
+          },
+        });
 
-      const updated = await prisma.post.update({
-        where: { id: postId },
-        data: { viewsCount: { increment: 1 } },
-        select: { viewsCount: true },
+        return tx.post.update({
+          where: { id: postId },
+          data: { viewsCount: { increment: 1 } },
+          select: { viewsCount: true },
+        });
       });
 
       return {

@@ -6,6 +6,7 @@ import logger from "../../config/logger.js";
 import { notifyChat } from "../../helper/notifyChat.js";
 import * as CommentHelper from "../../utils/commentHelpers.js";
 import prisma from "../../config/prisma.js";
+import DOMPurify from "isomorphic-dompurify";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -27,9 +28,16 @@ export const addComment = asyncHandler(async (req, res, next) => {
   if (!content?.trim()) {
     return next(new AppError("Comment content is required", 400));
   }
+  if (content.length > 5000) {
+    return next(new AppError("Comment too long (max 5000 characters)", 400));
+  }
   if (!Array.isArray(mentions) || mentions.length > 10) {
     return next(new AppError("Mentions must be an array of max 10 users", 400));
   }
+  const sanitizedContent = DOMPurify.sanitize(content.trim(), {
+    ALLOWED_TAGS: ["b", "i", "em", "strong"],
+    ALLOWED_ATTR: [],
+  });
 
   // Post guard
   const post = await prisma.post.findUnique({
@@ -45,15 +53,29 @@ export const addComment = asyncHandler(async (req, res, next) => {
   }
 
   // Create comment
-  let comment;
+  let comment, updatedPost;
+
   try {
-    comment = await CommentHelper.createComment({
-      postId,
-      authorId: userId,
-      content: content.trim(),
-      mentions,
-      parentCommentId: parentCommentId || null,
+    const transactionResult = await prisma.$transaction(async (tx) => {
+      const newComment = await CommentHelper.createComment({
+        postId,
+        authorId: userId,
+        content: sanitizedContent,
+        mentions,
+        parentCommentId: parentCommentId || null,
+      });
+
+      const updated = await tx.post.update({
+        where: { id: postId },
+        data: { commentsCount: { increment: 1 } },
+        select: { commentsCount: true },
+      });
+
+      return { comment: newComment, updatedPost: updated };
     });
+
+    comment = transactionResult.comment;
+    updatedPost = transactionResult.updatedPost;
   } catch (err) {
     if (err.message?.includes("depth")) {
       return next(new AppError("Maximum comment nesting depth reached", 400));
@@ -61,14 +83,8 @@ export const addComment = asyncHandler(async (req, res, next) => {
     if (err.message?.includes("Parent comment not found")) {
       return next(new AppError("Parent comment not found or has been deleted", 404));
     }
-    throw err;
+    return next(new AppError("Failed to create comment", 500));
   }
-
-  // Increment post commentsCount
-  await prisma.post.update({
-    where: { id: postId },
-    data: { commentsCount: { increment: 1 } },
-  });
 
   // Admin notification
   notifyChat("/notify/admin-notify", {
@@ -80,11 +96,12 @@ export const addComment = asyncHandler(async (req, res, next) => {
     },
   }).catch((err) => logger.error("Admin comment notification failed", { error: err.message }));
 
-  logger.info("Comment added", {
-    userId,
+logger.info("Comment added", {
+    userId: userId.substring(0, 8) + "...",
     postId,
-    commentId: comment.id,
+    commentId: comment.id.substring(0, 8) + "...",
     isReply: !!parentCommentId,
+    contentLength: sanitizedContent.length,
   });
 
   // Notification (skip if own post)
@@ -99,14 +116,9 @@ export const addComment = asyncHandler(async (req, res, next) => {
       },
       type: parentCommentId ? "reply" : "comment",
       postId,
-      text: content.trim().slice(0, 100),
+   text: sanitizedContent.slice(0, 100),
     }).catch((err) => logger.error("Comment notification failed", { error: err.message }));
   }
-
-  const updatedPost = await prisma.post.findUnique({
-  where: { id: postId },
-  select: { commentsCount: true },
-});
 
 return res.status(201).json({
   success: true,
@@ -206,6 +218,14 @@ export const getDirectReplies = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid comment ID.", 400));
   }
 
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: { id: true, isDeleted: true },
+  });
+
+  if (!comment || comment.isDeleted) {
+    return next(new AppError("Comment not found", 404));
+  }
   const { replies, nextCursor } = await CommentHelper.getDirectReplies(commentId, {
     afterId,
     afterDate,
@@ -235,47 +255,70 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
   }
 
   if (isAdmin) {
-    // Hard delete
-    const { deletedCount, postId } = await CommentHelper.hardDeleteComment(
-      commentId,
-      userId,
-      true
-    );
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const { deletedCount, postId } = await CommentHelper.hardDeleteComment(
+          commentId,
+          userId,
+          true
+        );
 
-    if (!deletedCount) {
-      return next(new AppError("Comment not found", 404));
-    }
+        if (!deletedCount) {
+          throw new Error("Comment not found");
+        }
 
-    if (postId) {
-      await prisma.post.update({
-        where: { id: postId },
-        data: { commentsCount: { decrement: deletedCount } },
+        if (postId) {
+          await tx.post.update({
+            where: { id: postId },
+            data: { commentsCount: { decrement: deletedCount } },
+          });
+        }
+
+        return { deletedCount, postId };
       });
+
+      logger.info("Admin hard-deleted comment", {
+        adminId: userId.substring(0, 8) + "...",
+        commentId: commentId.substring(0, 8) + "...",
+        deletedCount: result.deletedCount,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Comment and ${result.deletedCount - 1} replies deleted`,
+      });
+    } catch (err) {
+      logger.error("Hard delete failed", { error: err.message });
+      return next(new AppError("Failed to delete comment", 500));
     }
-
-    logger.info("Admin hard-deleted comment", { adminId: userId, commentId, deletedCount });
-
-    return res.status(200).json({
-      success: true,
-      message: `Comment and ${deletedCount - 1} replies deleted`,
-    });
   }
 
   // Regular user: soft delete
-  const comment = await CommentHelper.softDeleteComment(commentId, userId);
-  if (!comment) {
+ // Regular user: soft delete
+  try {
+    await prisma.$transaction(async (tx) => {
+      const comment = await CommentHelper.softDeleteComment(commentId, userId);
+
+      if (!comment) {
+        throw new Error("Comment not found or unauthorized");
+      }
+
+      await tx.post.update({
+        where: { id: comment.postId },
+        data: { commentsCount: { decrement: 1 } },
+      });
+    });
+
+    logger.info("Comment soft-deleted", {
+      userId: userId.substring(0, 8) + "...",
+      commentId: commentId.substring(0, 8) + "...",
+    });
+
+    return res.status(200).json({ success: true, message: "Comment deleted" });
+  } catch (err) {
+    logger.error("Soft delete failed", { error: err.message });
     return next(new AppError("Comment not found or unauthorized", 404));
   }
-
-  // Decrement post commentsCount
-  await prisma.post.update({
-    where: { id: comment.post },
-    data: { commentsCount: { decrement: 1 } },
-  });
-
-  logger.info("Comment soft-deleted", { userId, commentId });
-
-  return res.status(200).json({ success: true, message: "Comment deleted" });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -315,8 +358,11 @@ export const pinComment = asyncHandler(async (req, res, next) => {
   }
 
   await CommentHelper.pinComment(commentId, comment.postId);
-
-  logger.info("Comment pinned", { userId, commentId, postId: comment.postId });
+logger.info("Comment pinned", {
+    userId: userId.substring(0, 8) + "...",
+    commentId: commentId.substring(0, 8) + "...",
+    postId: comment.postId.substring(0, 8) + "...",
+  });
 
   return res.status(200).json({ success: true, message: "Comment pinned" });
 });
@@ -358,7 +404,10 @@ export const unpinComment = asyncHandler(async (req, res, next) => {
 
   await CommentHelper.unpinComment(comment.postId);
 
-  logger.info("Comment unpinned", { userId, postId: comment.postId });
+  logger.info("Comment unpinned", {
+    userId: userId.substring(0, 8) + "...",
+    postId: comment.postId.substring(0, 8) + "...",
+  });
 
   return res.status(200).json({ success: true, message: "Comment unpinned" });
 });

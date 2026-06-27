@@ -228,7 +228,14 @@ if (user.role === "super_admin" || user.role === "admin") {
   }
   if (user.accountStatus === "banned") return next(new AppError("Your account has been permanently banned.", 403));
   if (user.accountStatus === "suspended") return next(new AppError("Your account is temporarily suspended.", 403));
-  if (user.accountStatus === "deactivated") return next(new AppError("Your account has been deactivated.", 403));
+  if (user.accountStatus === "deactivated") {
+  return res.status(403).json({
+    success: false,
+    code: "ACCOUNT_DEACTIVATED",
+    message: "Your account is deactivated. Would you like to reactivate it?",
+    data: { userId: user.id },
+  });
+}
 
   let nextRoute = "/feed";
   if (!user.isOnboardingComplete) {
@@ -303,11 +310,18 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
     return next(new AppError("Session invalid. Please log in again.", 401));
   }
 
-  if (user.accountStatus === "banned" || user.accountStatus === "suspended") {
-    await UserHelper.removeRefreshToken(user.id, incomingRefreshToken);
-    return next(new AppError("Your account has been suspended or banned.", 403));
-  }
-
+  // if (user.accountStatus === "banned" || user.accountStatus === "suspended") {
+  //   await UserHelper.removeRefreshToken(user.id, incomingRefreshToken);
+  //   return next(new AppError("Your account has been suspended or banned.", 403));
+  // }
+if (
+  user.accountStatus === "banned" ||
+  user.accountStatus === "suspended" ||
+  user.accountStatus === "deactivated"
+) {
+  await UserHelper.removeRefreshToken(user.id, incomingRefreshToken);
+  return next(new AppError("Your account has been deactivated, suspended or banned.", 403));
+}
   // Step 4 — rotate: remove old, issue new (atomic consume check)
   const consumed = await UserHelper.consumeRefreshTokenByHash(user.id, incomingRefreshToken);
   if (!consumed) {
@@ -587,10 +601,14 @@ if (user.role === "super_admin" || user.role === "admin") {
   if (user.accountStatus === "suspended") {
     return next(new AppError("Your account is temporarily suspended.", 403));
   }
-  if (user.accountStatus === "deactivated") {
-    return next(new AppError("Your account has been deactivated.", 403));
-  }
-
+ if (user.accountStatus === "deactivated") {
+  return res.status(403).json({
+    success: false,
+    code: "ACCOUNT_DEACTIVATED",
+    message: "Your account is deactivated. Would you like to reactivate it?",
+    data: { userId: user.id },
+  });
+}
   let nextRoute = "/feed";
   if (!user.isOnboardingComplete) {
     if (user.onboardingStep === 2) nextRoute = "/onboarding/username";

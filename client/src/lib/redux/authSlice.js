@@ -87,6 +87,14 @@ export const loginUser = createAsyncThunk(
       const res = await api.post("/auth/login", formData);
       return res.data;
     } catch (err) {
+      const data = err.response?.data;
+      if (data?.code === "ACCOUNT_DEACTIVATED") {
+        return rejectWithValue({
+          code: "ACCOUNT_DEACTIVATED",
+          message: data.message,
+          userId: data.data?.userId,
+        });
+      }
       return rejectWithValue(err.response?.data?.message || "Login failed");
     }
   },
@@ -205,7 +213,7 @@ const initialState = {
   nextRoute: null,
 
   register: { loading: false, error: null, success: false },
-  login: { loading: false, error: null, success: false },
+  login: { loading: false, error: null, success: false, deactivated: null },
   otp: { loading: false, error: null, success: false, remainingAttempts: null },
   fetchMe: { loading: false, error: null },
   resend: { loading: false, error: null, success: false },
@@ -236,7 +244,7 @@ const authSlice = createSlice({
       state.register = { loading: false, error: null, success: false };
     },
     clearLoginState: (state) => {
-      state.login = { loading: false, error: null, success: false };
+      state.login = { loading: false, error: null, success: false, deactivated: null };
     },
     clearOtpState: (state) => {
       state.otp = {
@@ -368,7 +376,14 @@ const authSlice = createSlice({
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.login.loading = false;
-        state.login.error = action.payload;
+        if (action.payload?.code === "ACCOUNT_DEACTIVATED") {
+          state.login.deactivated = {
+            userId: action.payload.userId,
+            message: action.payload.message,
+          };
+        } else {
+          state.login.error = action.payload?.message || action.payload;
+        }
       });
 
     // ── Resend OTP ──

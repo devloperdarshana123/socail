@@ -181,48 +181,104 @@ export const deactivateAccount = async (userId) => {
   }
 
   // Soft delete — anonymize
-  await prisma.user.update({
+ await prisma.$transaction(async (tx) => {
+  // Soft delete — anonymize
+ await tx.user.update({
     where: { id: userId },
     data: {
       accountStatus: "deactivated",
-      fullName: "Deleted User",
-      username: `deleted_${userId.slice(0, 8)}`,
-      email: `deleted_${userId.slice(0, 8)}@removed.com`,
       bio: "",
       designation: "",
       avatar: null,
     },
   });
 
-  // Remove all sessions
-  await prisma.refreshToken.deleteMany({ where: { userId } });
+  // Posts hide karo
+  await tx.post.updateMany({
+    where: { authorId: userId },
+    data: { isDeleted: true },
+  });
 
-  return { message: "Account deactivated successfully." };
+  // Stories hide karo
+  await tx.story.updateMany({
+    where: { authorId: userId },
+    data: { isDeleted: true },
+  });
+
+  // Sessions remove karo
+  await tx.refreshToken.deleteMany({ where: { userId } });
+});
+
+return { message: "Account deactivated successfully." };
 };
 
 // ── Delete all user data (hard delete) ───────────────────────────────────
-export const hardDeleteAccount = async (userId) => {
-  // Delete user and cascade delete all related data
-  await Promise.all([
-    prisma.post.deleteMany({ where: { authorId: userId } }),
-    prisma.comment.deleteMany({ where: { authorId: userId } }),
-    prisma.like.deleteMany({ where: { userId } }),
-    prisma.saved.deleteMany({ where: { userId } }),
-    prisma.follow.deleteMany({
-      where: { OR: [{ followerId: userId }, { followingId: userId }] },
-    }),
-    prisma.story.deleteMany({ where: { authorId: userId } }),
-    prisma.storyView.deleteMany({ where: { viewerId: userId } }),
-    prisma.conversation.updateMany({
-      where: { participants: { some: { id: userId } } },
-      data: { participants: { disconnect: { id: userId } } },
-    }),
-    prisma.refreshToken.deleteMany({ where: { userId } }),
-    prisma.oTP.deleteMany({ where: { userId } }),
-  ]);
+// export const hardDeleteAccount = async (userId) => {
+//   // Delete user and cascade delete all related data
+//   await Promise.all([
+//     prisma.post.deleteMany({ where: { authorId: userId } }),
+//     prisma.comment.deleteMany({ where: { authorId: userId } }),
+//     prisma.like.deleteMany({ where: { userId } }),
+//     prisma.saved.deleteMany({ where: { userId } }),
+//     prisma.follow.deleteMany({
+//       where: { OR: [{ followerId: userId }, { followingId: userId }] },
+//     }),
+//     prisma.story.deleteMany({ where: { authorId: userId } }),
+//     prisma.storyView.deleteMany({ where: { viewerId: userId } }),
+//     prisma.conversation.updateMany({
+//       where: { participants: { some: { id: userId } } },
+//       data: { participants: { disconnect: { id: userId } } },
+//     }),
+//     prisma.refreshToken.deleteMany({ where: { userId } }),
+//     prisma.oTP.deleteMany({ where: { userId } }),
+//   ]);
 
-  // Finally delete user
+//   // Finally delete user
+//   await prisma.user.delete({ where: { id: userId } });
+
+//   return { message: "Account permanently deleted." };
+// };
+
+
+// ── Delete all user data (hard delete) ───────────────────────────────────
+export const hardDeleteAccount = async (userId) => {
+  // Schema mein onDelete: Cascade already set hai most relations pe,
+  // isliye sirf user delete karna kaafi hai — DB khud sab cascade kar dega
   await prisma.user.delete({ where: { id: userId } });
 
   return { message: "Account permanently deleted." };
+};
+
+
+// ── Reactivate account ──────────────────────────────────────────────────
+export const reactivateAccount = async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, accountStatus: true },
+  });
+
+  if (!user) throw new Error("User not found");
+  if (user.accountStatus !== "deactivated") throw new Error("Account is not deactivated");
+
+  await prisma.$transaction(async (tx) => {
+    // Account wapas active karo
+    await tx.user.update({
+      where: { id: userId },
+      data: { accountStatus: "active" },
+    });
+
+    // Posts wapas visible karo
+    await tx.post.updateMany({
+      where: { authorId: userId, isDeleted: true },
+      data: { isDeleted: false },
+    });
+
+    // Stories wapas visible karo
+    await tx.story.updateMany({
+      where: { authorId: userId, isDeleted: true },
+      data: { isDeleted: false },
+    });
+  });
+
+  return { message: "Account reactivated successfully." };
 };

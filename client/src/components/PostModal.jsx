@@ -23,6 +23,8 @@ import {
   initInteraction,
   deletePost,
   recordPostView,
+   pinComment,
+  unpinComment,
 } from "../lib/redux/postSlice";
 
 const T = {
@@ -167,7 +169,14 @@ function MediaCarousel({ media, type }) {
   );
 }
 
-function CommentItem({ comment, onReply, onAvatarClick }) {
+
+// function CommentItem({ comment, onReply, onAvatarClick, onPin, isPostOwner }) {
+//   const [menuOpen, setMenuOpen] = useState(false);
+
+function CommentItem({ comment, onReply, onAvatarClick, onPin, onReport, isPostOwner, currentUserId }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const isOwnComment = comment.author?.id === currentUserId;
+  const showMenuBtn = isPostOwner || !isOwnComment;
   return (
     <div style={{ display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
       <div onClick={() => onAvatarClick(comment.author)} style={{ cursor: "pointer" }}>
@@ -180,10 +189,67 @@ function CommentItem({ comment, onReply, onAvatarClick }) {
             {comment.author?.fullName || "User"}
           </span>
           <span style={{ fontSize: 11, color: T.textLt }}>@{comment.author?.username}</span>
+          {comment.isPinned && (
+            <span style={{ fontSize: 10, color: T.accent, fontWeight: 700 }}>📌 Pinned</span>
+          )}
           <span style={{ fontSize: 11, color: T.textLt, marginLeft: "auto" }}>
             {timeAgo(comment.createdAt)}
           </span>
+
+         {showMenuBtn && (
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: T.textLt, padding: "0 4px" }}
+              >
+                ···
+              </button>
+              {menuOpen && (
+                <>
+                  <div
+                    onClick={() => setMenuOpen(false)}
+                    style={{ position: "fixed", inset: 0, zIndex: 10 }}
+                  />
+                  <div style={{
+                    position: "absolute", right: 0, top: "100%", zIndex: 20,
+                    background: "#fff", borderRadius: 10, overflow: "hidden",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                    border: `1px solid ${T.border}`,
+                    minWidth: 130,
+                  }}>
+                    {isPostOwner && (
+                      <button
+                        onClick={() => { setMenuOpen(false); onPin(comment.id, comment.isPinned); }}
+                        style={{
+                          width: "100%", padding: "10px 14px",
+                          display: "flex", alignItems: "center", gap: 8,
+                          background: "none", border: "none", cursor: "pointer",
+                          color: T.brown, fontSize: 12, fontWeight: 600, textAlign: "left",
+                        }}
+                      >
+                        {comment.isPinned ? "📌 Unpin" : "📌 Pin"}
+                      </button>
+                    )}
+                    {!isOwnComment && (
+                      <button
+                        onClick={() => { setMenuOpen(false); onReport(comment.id); }}
+                        style={{
+                          width: "100%", padding: "10px 14px",
+                          display: "flex", alignItems: "center", gap: 8,
+                          background: "none", border: "none", cursor: "pointer",
+                          color: "#ef4444", fontSize: 12, fontWeight: 600, textAlign: "left",
+                        }}
+                      >
+                        🚩 Report
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
+
         <p style={{ fontSize: 13, color: T.text, marginTop: 3, lineHeight: 1.5, wordBreak: "break-word" }}>
           {comment.content}
         </p>
@@ -197,7 +263,6 @@ function CommentItem({ comment, onReply, onAvatarClick }) {
     </div>
   );
 }
-
 export default function PostModal({ post, onClose }) {
   const dispatch = useDispatch();
   const navigate = useNavigate(); 
@@ -224,6 +289,7 @@ export default function PostModal({ post, onClose }) {
   const [replyingTo,  setReplyingTo]  = useState(null);
   const [likeAnim,    setLikeAnim]    = useState(false);
   const [showReport,  setShowReport]  = useState(false);
+  const [reportingCommentId, setReportingCommentId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showCommentEmoji, setShowCommentEmoji] = useState(false);
   const inputRef        = useRef(null);
@@ -313,10 +379,22 @@ useEffect(() => {
     inputRef.current?.focus(); // ✅ message page jaisa — sirf focus
   }, [dispatch, postId, commentText, commentAdding, replyingTo, post?.author?.id]);
 
+const handlePinComment = (commentId, isPinned) => {
+    if (isPinned) {
+      dispatch(unpinComment({ postId, commentId }));
+    } else {
+      dispatch(pinComment({ postId, commentId }));
+    }
+  };
+
+
   const handleReply = (comment) => {
     setReplyingTo(comment);
     setCommentText(`@${comment.author?.username} `);
     inputRef.current?.focus();
+  };
+  const handleReportComment = (commentId) => {
+    setReportingCommentId(commentId);
   };
 
   if (!post) return null;
@@ -618,20 +696,24 @@ useEffect(() => {
               ) : (
                 <>
                   {comments.map((c) => (
-                    <CommentItem
-                      key={c.id}
-                      comment={c}
-                      onReply={handleReply}
-                      onAvatarClick={(author) => {
-                        if (!author?.username) return;
-                        onClose();
-                        if (author.username === me?.username) {
-                          navigate("/profile");
-                        } else {
-                          navigate(`/profile/${author.username}`);
-                        }
-                      }}
-                    />
+                   <CommentItem
+  key={c.id}
+  comment={c}
+  onReply={handleReply}
+  onAvatarClick={(author) => {
+    if (!author?.username) return;
+    onClose();
+    if (author.username === me?.username) {
+      navigate("/profile");
+    } else {
+      navigate(`/profile/${author.username}`);
+    }
+  }}
+onPin={handlePinComment}
+  onReport={handleReportComment}
+  isPostOwner={isOwner}
+  currentUserId={me?.id}
+/>
                   ))}
                   {commentsLoadingMore && (
                     <div style={{ display: "flex", justifyContent: "center", padding: "14px 0" }}>
@@ -782,7 +864,7 @@ useEffect(() => {
           </div>
         </div>
 
-        {showReport && (
+     {showReport && (
           <ReportModal
             targetModel="Post"
             onClose={() => setShowReport(false)}
@@ -803,6 +885,36 @@ useEffect(() => {
                 }, 100);
               } catch (err) {
                 setShowReport(false);
+                setTimeout(() => {
+                  toast.error(err?.response?.data?.message || "Failed to submit report.");
+                }, 100);
+              }
+            }}
+          />
+        )}
+
+        {reportingCommentId && (
+          <ReportModal
+            targetModel="Comment"
+            onClose={() => setReportingCommentId(null)}
+            onSubmit={async (reason) => {
+              const commentId = reportingCommentId;
+              try {
+                const { data } = await api.post("/user/report", {
+                  targetId:    commentId,
+                  targetModel: "Comment",
+                  reason,
+                });
+                setReportingCommentId(null);
+                setTimeout(() => {
+                  if (data.alreadyReported) {
+                    toast("You have already reported this comment.");
+                  } else {
+                    toast.success("Report submitted. Our team will review it within 24 hours.");
+                  }
+                }, 100);
+              } catch (err) {
+                setReportingCommentId(null);
                 setTimeout(() => {
                   toast.error(err?.response?.data?.message || "Failed to submit report.");
                 }, 100);

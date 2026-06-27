@@ -11,12 +11,9 @@ export const startAutoActivateJob = () => {
       const now = new Date();
 
       // Find expired suspensions
-      const expiredUsers = await prisma.user.findMany({
+     const allSuspended = await prisma.user.findMany({
         where: {
           accountStatus: "suspended",
-          activeSuspension: {
-            expiresAt: { lte: now },
-          },
         },
         select: {
           id: true,
@@ -24,6 +21,11 @@ export const startAutoActivateJob = () => {
           fullName: true,
           activeSuspension: true,
         },
+      });
+
+      const expiredUsers = allSuspended.filter((u) => {
+        const s = u.activeSuspension;
+        return s?.expiresAt && new Date(s.expiresAt) <= now;
       });
 
       if (expiredUsers.length === 0) return;

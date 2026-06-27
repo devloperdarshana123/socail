@@ -68,10 +68,11 @@ export const submitReport = async (reportData) => {
   }
 
   // Check if already reported (duplicate protection)
+ // Check if already reported (duplicate protection)
   const existing = await prisma.report.findFirst({
     where: {
       reportedById: reportedBy,
-      postId: targetModel === "Post" ? targetId : null,
+      targetId,
       targetModel,
     },
   });

@@ -204,7 +204,11 @@ export const toggleStoryLike = asyncHandler(async (req, res, next) => {
     select: { authorId: true },
   });
 
-  if (liked && story?.authorId !== req.user.id) {
+  if (!story) {
+    return next(new AppError("Story not found.", 404));
+  }
+
+  if (liked && story.authorId !== req.user.id) {
     notifyChat("/notify/story-reaction", {
       to: story.authorId,
       from: req.user.id,

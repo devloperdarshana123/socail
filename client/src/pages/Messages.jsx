@@ -386,6 +386,7 @@ const otherParticipant = useMemo(
 );
 
 const isGroup = activeConv?.isGroup ?? false;
+const isDeactivated = !isGroup && otherParticipant?.accountStatus === "deactivated";
 const displayName = isGroup
   ? (activeConv?.groupName || "Group")
   : (otherParticipant?.fullName || otherParticipant?.username);
@@ -841,9 +842,9 @@ const unread = typeof conv.unreadCount === "object"
                           </span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <p style={{ fontSize: 12, color: unread > 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontWeight: unread > 0 ? 600 : 400 }}>
-                            {preview}
-                          </p>
+                          <p style={{ fontSize: 12, color: other?.accountStatus === "deactivated" ? "#D85A30" : unread > 0 ? "var(--color-text-primary)" : "var(--color-text-secondary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, fontWeight: unread > 0 ? 600 : 400 }}>
+  {other?.accountStatus === "deactivated" ? "⚠️ Account deactivated" : preview}
+</p>
                           {unread > 0 && (
   <span style={{ background: "#534AB7", color: "#fff", borderRadius: 10, fontSize: 10, padding: "2px 7px", fontWeight: 600, flexShrink: 0, marginLeft: 6 }}>
     {unread}
@@ -1032,7 +1033,7 @@ const unread = typeof conv.unreadCount === "object"
                         const extra = (activeConv?.participants?.length || 1) - 1 - 3;
                         return names + (extra > 0 ? ` +${extra}` : "");
                       })()
-                    : blockStatus.blocked ? "Blocked" : otherOnline ? "● Online" : "Offline"}
+                    : isDeactivated ? "⚠️ Deactivated" : blockStatus.blocked ? "Blocked" : otherOnline ? "● Online" : "Offline"}
                 </p>
               </div>
               {/* 3-dot menu */}
@@ -1261,9 +1262,22 @@ const unread = typeof conv.unreadCount === "object"
             </div>
 
             {/* ── Blocked banner OR input ── */}
-            {blockStatus.blocked ? (
-              <BlockedBanner iBlockedThem={blockStatus.iBlockedThem} onUnblock={handleUnblock} />
-            ) : (
+            {isDeactivated ? (
+  <div style={{
+    textAlign: "center", padding: "14px 16px",
+    background: "#fff5f3",
+    borderTop: "0.5px solid var(--color-border-tertiary)",
+    fontSize: 13, color: "#D85A30",
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+  }}>
+    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    This account has been deactivated. You cannot send messages.
+  </div>
+) : blockStatus.blocked ? (
+  <BlockedBanner iBlockedThem={blockStatus.iBlockedThem} onUnblock={handleUnblock} />
+) : (
               <div style={{
                 borderTop: "0.5px solid var(--color-border-tertiary)",
                 padding: isMobile ? "8px 10px" : "10px 14px",

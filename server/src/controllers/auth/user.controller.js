@@ -266,33 +266,33 @@ export const getBlockStatus = asyncHandler(async (req, res, next) => {
 
 // ── Report — abhi sirf Post report support karta hai (schema limitation) ──
 
-export const submitReport = asyncHandler(async (req, res, next) => {
-  const { targetId, targetModel, reason, description } = req.body;
-  const reporterId = req.user.id;
+// export const submitReport = asyncHandler(async (req, res, next) => {
+//   const { targetId, targetModel, reason, description } = req.body;
+//   const reporterId = req.user.id;
 
-  if (targetModel !== "Post") {
-    return next(new AppError("Currently only Post reports are supported.", 400));
-  }
-  if (!targetId) return next(new AppError("targetId is required.", 400));
-  if (!reason?.trim()) return next(new AppError("Reason is required.", 400));
+//   if (targetModel !== "Post") {
+//     return next(new AppError("Currently only Post reports are supported.", 400));
+//   }
+//   if (!targetId) return next(new AppError("targetId is required.", 400));
+//   if (!reason?.trim()) return next(new AppError("Reason is required.", 400));
 
-  const post = await prisma.post.findUnique({ where: { id: targetId } });
-  if (!post) return next(new AppError("Post not found.", 404));
+//   const post = await prisma.post.findUnique({ where: { id: targetId } });
+//   if (!post) return next(new AppError("Post not found.", 404));
 
-  const existing = await prisma.report.findUnique({
-    where: { reportedById_postId: { reportedById: reporterId, postId: targetId } },
-  });
-  if (existing) return next(new AppError("You have already reported this post.", 409));
+//   const existing = await prisma.report.findUnique({
+//     where: { reportedById_postId: { reportedById: reporterId, postId: targetId } },
+//   });
+//   if (existing) return next(new AppError("You have already reported this post.", 409));
 
-  await prisma.report.create({
-    data: {
-      reportedById: reporterId,
-      postId: targetId,
-      targetModel,
-      reason,
-      description: description?.trim() || "",
-    },
-  });
+//   await prisma.report.create({
+//     data: {
+//       reportedById: reporterId,
+//       postId: targetId,
+//       targetModel,
+//       reason,
+//       description: description?.trim() || "",
+//     },
+//   });
 
-  res.status(201).json({ success: true, message: "Report submitted. Our team will review it." });
-});
+//   res.status(201).json({ success: true, message: "Report submitted. Our team will review it." });
+// });

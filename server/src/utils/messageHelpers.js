@@ -69,78 +69,137 @@ export const getConversationsList = async (userId, page = 1, limit = 20) => {
 };
 
 // ── Get or create DM ────────────────────────────────────────────────────
-export const getOrCreateDM = async (userId, participantId) => {
-  const existing = await prisma.conversation.findFirst({
-    where: {
-      isGroup: false,
-      isActive: true,
-      AND: [
-        { members: { some: { userId, isDeleted: false } } },
-        { members: { some: { userId: participantId, isDeleted: false } } },
-      ],
-    },
+// export const getOrCreateDM = async (userId, participantId) => {
+//   const existing = await prisma.conversation.findFirst({
+//     where: {
+//       isGroup: false,
+//       isActive: true,
+//       AND: [
+//         { members: { some: { userId, isDeleted: false } } },
+//         { members: { some: { userId: participantId, isDeleted: false } } },
+//       ],
+//     },
+//     include: {
+//       members: {
+//         where: { isDeleted: false },
+//         include: {
+//           user: {
+//             select: {
+//               id: true,
+//               username: true,
+//               fullName: true,
+//               avatar: true,
+//               isVerifiedBadge: true,
+//               accountStatus: true,
+//             },
+//           },
+//         },
+//       },
+//     },
+//   });
+
+//   if (existing) {
+//     return {
+//       ...existing,
+//       participants: existing.members.map((m) => m.user),
+//     };
+//   }
+
+//   // Create new DM
+//   const conversation = await prisma.conversation.create({
+//     data: {
+//       isGroup: false,
+//       members: {
+//         create: [
+//           { userId },
+//           { userId: participantId },
+//         ],
+//       },
+//     },
+//     include: {
+//       members: {
+//         where: { isDeleted: false },
+//         include: {
+//           user: {
+//             select: {
+//               id: true,
+//               username: true,
+//               fullName: true,
+//               avatar: true,
+//               isVerifiedBadge: true,
+//               accountStatus: true,
+//             },
+//           },
+//         },
+//       },
+//     },
+//   });
+
+//   return {
+//     ...conversation,
+//     participants: conversation.members.map((m) => m.user),
+//   };
+// };
+// ── Get or create DM ────────────────────────────────────────────────────
+const includeMembers = {
+  members: {
+    where: { isDeleted: false },
     include: {
-      members: {
-        where: { isDeleted: false },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              fullName: true,
-              avatar: true,
-              isVerifiedBadge: true,
-              accountStatus: true,
-            },
-          },
+      user: {
+        select: {
+          id: true,
+          username: true,
+          fullName: true,
+          avatar: true,
+          isVerifiedBadge: true,
+          accountStatus: true,
         },
       },
     },
-  });
-
-  if (existing) {
-    return {
-      ...existing,
-      participants: existing.members.map((m) => m.user),
-    };
-  }
-
-  // Create new DM
-  const conversation = await prisma.conversation.create({
-    data: {
-      isGroup: false,
-      members: {
-        create: [
-          { userId },
-          { userId: participantId },
-        ],
-      },
-    },
-    include: {
-      members: {
-        where: { isDeleted: false },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              fullName: true,
-              avatar: true,
-              isVerifiedBadge: true,
-              accountStatus: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  return {
-    ...conversation,
-    participants: conversation.members.map((m) => m.user),
-  };
+  },
 };
 
+export const getOrCreateDM = async (userId, participantId) => {
+  // Consistent key regardless of who initiates
+  const key = [userId, participantId].sort().join(":");
+
+  try {
+    const conversation = await prisma.conversation.create({
+      data: {
+        isGroup: false,
+        participantsKey: key,
+        members: {
+          create: [
+            { userId },
+            { userId: participantId },
+          ],
+        },
+      },
+      include: includeMembers,
+    });
+
+    return {
+      ...conversation,
+      participants: conversation.members.map((m) => m.user),
+    };
+  } catch (err) {
+    if (err.code === "P2002") {
+      // Already exists — someone else's request won the race, fetch it
+      const existing = await prisma.conversation.findUnique({
+        where: { participantsKey: key },
+        include: includeMembers,
+      });
+
+      if (existing) {
+        return {
+          ...existing,
+          participants: existing.members.map((m) => m.user),
+        };
+      }
+    }
+    throw err;
+  }
+};
 // ── Get total unread count ──────────────────────────────────────────────
 export const getTotalUnread = async (userId) => {
   const result = await prisma.conversationParticipant.aggregate({
@@ -360,29 +419,70 @@ export const softDeleteMessage = async (messageId, userId) => {
 };
 
 // ── React to message ────────────────────────────────────────────────────
+// export const reactToMessage = async (messageId, userId, emoji) => {
+//   const msg = await prisma.message.findUnique({
+//     where: { id: messageId },
+//     select: { id: true, isDeleted: true, reactions: true, conversationId: true },
+//   });
+
+//   if (!msg) throw new Error("Message not found");
+//   if (msg.isDeleted) throw new Error("Cannot react to a deleted message");
+
+//   const filtered = (msg.reactions || []).filter((r) => r.userId !== userId);
+
+//   if (emoji?.trim()) {
+//     filtered.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
+//   }
+
+//   const updated = await prisma.message.update({
+//     where: { id: messageId },
+//     data: { reactions: filtered },
+//   });
+
+//   return updated;
+// };
+
+
+// ── React to message ────────────────────────────────────────────────────
 export const reactToMessage = async (messageId, userId, emoji) => {
-  const msg = await prisma.message.findUnique({
-    where: { id: messageId },
-    select: { id: true, isDeleted: true, reactions: true, conversationId: true },
-  });
+  const MAX_RETRIES = 3;
 
-  if (!msg) throw new Error("Message not found");
-  if (msg.isDeleted) throw new Error("Cannot react to a deleted message");
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const msg = await tx.$queryRaw`
+          SELECT id, "isDeleted", reactions FROM "Message"
+          WHERE id = ${messageId}
+          FOR UPDATE
+        `;
 
-  const filtered = (msg.reactions || []).filter((r) => r.userId !== userId);
+        if (!msg || msg.length === 0) throw new Error("Message not found");
+        if (msg[0].isDeleted) throw new Error("Cannot react to a deleted message");
 
-  if (emoji?.trim()) {
-    filtered.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
+        const currentReactions = msg[0].reactions || [];
+        const filtered = currentReactions.filter((r) => r.userId !== userId);
+
+        if (emoji?.trim()) {
+          filtered.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
+        }
+
+        const updated = await tx.message.update({
+          where: { id: messageId },
+          data: { reactions: filtered },
+        });
+
+        return updated;
+      });
+    } catch (err) {
+      if (attempt === MAX_RETRIES - 1) throw err;
+      if (err.message === "Message not found" || err.message === "Cannot react to a deleted message") {
+        throw err;
+      }
+      // Retry on transaction conflict
+      await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+    }
   }
-
-  const updated = await prisma.message.update({
-    where: { id: messageId },
-    data: { reactions: filtered },
-  });
-
-  return updated;
 };
-
 // ── Clear chat for user ─────────────────────────────────────────────────
 export const clearChatForUser = async (conversationId, userId) => {
   await prisma.conversationParticipant.updateMany({

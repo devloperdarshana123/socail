@@ -383,12 +383,24 @@ updateConversation(state, { payload: { conversation } }) {
         state.loadingMessages[meta.arg.conversationId] = false;
       });
 
-    // openOrCreateConversation
-    builder.addCase(openOrCreateConversation.fulfilled, (state, { payload }) => {
-      if (!payload?.id) return;
-      const exists = state.conversations.some((c) => c.id === payload.id);
-      if (!exists) state.conversations.unshift(payload);
-    });
+    // openOrCreateConversation// openOrCreateConversation
+builder.addCase(openOrCreateConversation.fulfilled, (state, { payload }) => {
+  if (!payload?.id) return;
+  const idx = state.conversations.findIndex((c) => c.id === payload.id);
+  if (idx !== -1) {
+    // Already hai — fresh data se update karo (participants sahi ho jayenge)
+    state.conversations[idx] = {
+      ...state.conversations[idx],
+      ...payload,
+    };
+    // Top pe le aao
+    const updated = state.conversations.splice(idx, 1)[0];
+    state.conversations.unshift(updated);
+  } else {
+    // Naya — top pe add karo
+    state.conversations.unshift(payload);
+  }
+});
 
     // ✅ NAYA — createGroupConversation
     builder

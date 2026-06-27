@@ -1,29 +1,13 @@
 import { motion } from "framer-motion";
-import img1 from "../assets/1.svg";
-import img2 from "../assets/2.svg";
-import img3 from "../assets/3.svg";
-import img4 from "../assets/4.svg";
-import img5 from "../assets/5.svg";
-
-
-const preloadImages = () => {
-  [img1, img2, img3, img4, img5].forEach((src) => {
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = src;
-    document.head.appendChild(link);
-  });
-};
-preloadImages();
-// We define the final properties for Framer Motion to animate to
 const collageItems = [
-  { src: img1, className: "w-40 md:w-48 lg:w-56 aspect-[3/4] z-10", rotate: -12, x: -100, y: -60 },
-  { src: img2, className: "w-40 md:w-48 lg:w-56 aspect-[3/4] z-20", rotate: 8, x: 100, y: -80 },
-  { src: img5, className: "w-44 md:w-52 lg:w-60 aspect-[3/4] z-30", rotate: -6, x: -120, y: 80 },
-  { src: img4, className: "w-40 md:w-48 lg:w-56 aspect-[3/4] z-40", rotate: 12, x: 110, y: 90 },
-  { src: img3, className: "w-52 md:w-64 lg:w-72 aspect-[3/4] z-50 shadow-2xl", rotate: 0, x: 0, y: 0 }
+  { src: "https://res.cloudinary.com/dl1zz15t1/image/upload/v1782477854/1_ejyneb.svg", className: "w-40 md:w-48 lg:w-56 aspect-[3/4] z-10", rotate: -12, x: -100, y: -60 },
+  { src: "https://res.cloudinary.com/dl1zz15t1/image/upload/v1782477808/2_hr3zul.svg", className: "w-40 md:w-48 lg:w-56 aspect-[3/4] z-20", rotate: 8, x: 100, y: -80 },
+  { src: "https://res.cloudinary.com/dl1zz15t1/image/upload/v1782477804/5_lm1hsq.svg", className: "w-44 md:w-52 lg:w-60 aspect-[3/4] z-30", rotate: -6, x: -120, y: 80 },
+  { src: "https://res.cloudinary.com/dl1zz15t1/image/upload/v1782477801/4_h8cgvp.svg", className: "w-40 md:w-48 lg:w-56 aspect-[3/4] z-40", rotate: 12, x: 110, y: 90 },
+  { src: "https://res.cloudinary.com/dl1zz15t1/image/upload/v1782477798/3_qbjpu8.svg", className: "w-52 md:w-64 lg:w-72 aspect-[3/4] z-50 shadow-2xl", rotate: 0, x: 0, y: 0 }
 ];
+
+
 
 export default function AnimatedCollage() {
   return (

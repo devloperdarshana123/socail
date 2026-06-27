@@ -504,18 +504,24 @@ export const updateReportStatus = asyncHandler(async (req, res, next) => {
     ]);
   }
 
-  if (actionTaken === "user_suspended" && report.post?.authorId) {
-    await prisma.user.update({
-      where: { id: report.post.authorId },
-      data:  { accountStatus: "suspended" },
-    });
+  if (actionTaken === "user_suspended") {
+    const targetUserId = report.post?.authorId ?? report.reportedUser?.id;
+    if (targetUserId) {
+      await prisma.user.update({
+        where: { id: targetUserId },
+        data:  { accountStatus: "suspended" },
+      });
+    }
   }
 
-  if (actionTaken === "user_banned" && report.post?.authorId) {
-    await prisma.user.update({
-      where: { id: report.post.authorId },
-      data:  { accountStatus: "banned" },
-    });
+  if (actionTaken === "user_banned") {
+    const targetUserId = report.post?.authorId ?? report.reportedUser?.id;
+    if (targetUserId) {
+      await prisma.user.update({
+        where: { id: targetUserId },
+        data:  { accountStatus: "banned" },
+      });
+    }
   }
 
   res.locals.auditMeta = {

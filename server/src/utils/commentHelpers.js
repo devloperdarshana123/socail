@@ -73,6 +73,7 @@ export const getPinnedComment = async (postId) => {
       id: true,
       content: true,
       mentions: true,
+      isPinned: true,
       createdAt: true,
       updatedAt: true,
       repliesCount: true,
@@ -182,7 +183,7 @@ export const getReplies = async (commentId, { afterId = null, afterDate = null, 
 
   const replies = await prisma.comment.findMany({
     where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+   orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     select: {
       id: true,

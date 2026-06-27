@@ -3,38 +3,81 @@ import prisma from "../config/prisma.js";
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 // ── Toggle save ─────────────────────────────────────────────────────────
-export const toggleSave = async (userId, postId) => {
-  const existing = await prisma.saved.findUnique({
-    where: { savedById_postId: { savedById: userId, postId } },
-  });
+// export const toggleSave = async (userId, postId) => {
+//   const existing = await prisma.saved.findUnique({
+//     where: { savedById_postId: { savedById: userId, postId } },
+//   });
 
+//   let saved = false;
+
+//   if (existing) {
+//     // Unsave
+//     await prisma.saved.delete({ where: { id: existing.id } });
+//     saved = false;
+
+//     await prisma.post.update({
+//       where: { id: postId },
+//       data: { savedCount: { decrement: 1 } },
+//     });
+//   } else {
+//     // Save
+//     await prisma.saved.create({
+//       data: { savedById: userId, postId },
+//     });
+//     saved = true;
+
+//     await prisma.post.update({
+//       where: { id: postId },
+//       data: { savedCount: { increment: 1 } },
+//     });
+//   }
+
+//   return { saved };
+// };
+
+// ── Toggle save ─────────────────────────────────────────────────────────
+export const toggleSave = async (userId, postId) => {
   let saved = false;
 
-  if (existing) {
-    // Unsave
-    await prisma.saved.delete({ where: { id: existing.id } });
-    saved = false;
+  try {
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.saved.findUnique({
+        where: { savedById_postId: { savedById: userId, postId } },
+      });
 
-    await prisma.post.update({
-      where: { id: postId },
-      data: { savedCount: { decrement: 1 } },
-    });
-  } else {
-    // Save
-    await prisma.saved.create({
-      data: { savedById: userId, postId },
-    });
-    saved = true;
+      if (existing) {
+        // Unsave
+        await tx.saved.delete({ where: { id: existing.id } });
+        saved = false;
 
-    await prisma.post.update({
-      where: { id: postId },
-      data: { savedCount: { increment: 1 } },
+        await tx.post.update({
+          where: { id: postId },
+          data: { savedCount: { decrement: 1 } },
+        });
+      } else {
+        // Save
+        await tx.saved.create({
+          data: { savedById: userId, postId },
+        });
+        saved = true;
+
+        await tx.post.update({
+          where: { id: postId },
+          data: { savedCount: { increment: 1 } },
+        });
+      }
     });
+  } catch (err) {
+    if (err.code === "P2002") {
+      // Race condition — someone else's request already saved it
+      saved = true;
+      return { saved };
+    }
+    throw err;
   }
 
   return { saved };
 };
-
 // ── Get saved posts (cursor-paginated) ──────────────────────────────────
 export const getSavedPosts = async (userId, { beforeId = null, limit = 12 } = {}) => {
 const where = { 
