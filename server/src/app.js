@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import compression from "compression";
 import morgan from "morgan";
+import logger from "./config/logger.js";
 
 import {
   authRouteLimiter,
@@ -78,8 +79,10 @@ app.use(
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
 app.get("/keep-alive", (req, res) => {
-  res.status(200).json({ status: "alive" });
+  logger.info("Keep-alive ping received");
+  res.status(200).send("OK");
 });
 
 if (process.env.NODE_ENV !== "test") {
