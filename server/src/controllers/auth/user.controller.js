@@ -3,6 +3,7 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import prisma from "../../config/prisma.js";
+import { Prisma } from "@prisma/client";
 import * as UserHelper from "../../utils/userHelpers.js";
 import {
   uploadToCloudinary,
@@ -114,7 +115,9 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
 
   if (location?.city || location?.state) {
     try {
-      const query = [location.city, location.state, location.country || "India"].filter(Boolean).join(", ");
+      const query = location.city
+  ? [location.city, location.state, location.country || "India"].filter(Boolean).join(", ")
+  : [location.state, location.country || "India"].filter(Boolean).join(", ");
       const geoRes = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
         { headers: { "User-Agent": "Erovians/1.0" } }
@@ -153,17 +156,24 @@ export const getMapSellers = asyncHandler(async (req, res) => {
 
   const currentUserId = req.user?.id;
 
-  const baseConditions = [
-    { accountStatus: "active" },
-    { role: { not: "super_admin" } },
-    {
-      OR: [
-        { location: { path: ["coordinates", "coordinates"], not: null } },
-        { location: { path: ["city"], not: null } },
-      ],
-    },
-  ];
+  // const baseConditions = [
+  //   { accountStatus: "active" },
+  //   { role: { not: "super_admin" } },
+  //   {
+  //     OR: [
+  //       { location: { path: ["coordinates", "coordinates"], not: null } },
+  //       { location: { path: ["city"], not: null } },
+  //     ],
+  //   },
+  // ];
 
+  const baseConditions = [
+  { accountStatus: "active" },
+  { role: { not: "super_admin" } },
+  {
+    NOT: { location: { equals: Prisma.JsonNull } },
+  },
+];
   if (category && category !== "all") baseConditions.push({ businessCategory: category });
 
   if (q) {

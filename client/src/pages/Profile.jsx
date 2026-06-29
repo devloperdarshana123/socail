@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { motion , AnimatePresence} from "framer-motion";
 import EditDraftModal from "../components/EditDraftModal";
+import { toast } from "react-hot-toast";
 import { createPortal } from "react-dom";
 import { resolvePostThumb , isVideoMedia } from "../utils/mediaUtils";
 import {
@@ -243,21 +244,47 @@ useEffect(() => {
   if (el) observer.observe(el);
   return () => { if (el) observer.unobserve(el); };
 }, [activeTab, myPostsHasMore, myPostsLoadingMore, myPostsNextCursor, user?.id]);
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-     if (localAvatarPreview) URL.revokeObjectURL(localAvatarPreview);
-    setLocalAvatarPreview(URL.createObjectURL(file));
-    dispatch(uploadAvatar(file));
-  };
+ const handleAvatarChange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-  const handleCoverChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (localCoverPreview) URL.revokeObjectURL(localCoverPreview); 
-    setLocalCoverPreview(URL.createObjectURL(file));
-    dispatch(uploadCoverPhoto(file));
-  };
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error("Avatar image cannot exceed 5MB.");
+    e.target.value = "";
+    return;
+  }
+
+  if (localAvatarPreview) URL.revokeObjectURL(localAvatarPreview);
+  setLocalAvatarPreview(URL.createObjectURL(file));
+
+  const result = await dispatch(uploadAvatar(file));
+  if (uploadAvatar.rejected.match(result)) {
+    toast.error(result.payload || "Avatar upload failed.");
+    setLocalAvatarPreview(null);
+    e.target.value = "";
+  }
+};
+
+ const handleCoverChange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error("Cover photo cannot exceed 5MB.");
+    e.target.value = "";
+    return;
+  }
+
+  if (localCoverPreview) URL.revokeObjectURL(localCoverPreview);
+  setLocalCoverPreview(URL.createObjectURL(file));
+
+  const result = await dispatch(uploadCoverPhoto(file));
+  if (uploadCoverPhoto.rejected.match(result)) {
+    toast.error(result.payload || "Cover upload failed.");
+    setLocalCoverPreview(null);
+    e.target.value = "";
+  }
+};
 
   const handleRemoveAvatar = () => {
     setLocalAvatarPreview(null);

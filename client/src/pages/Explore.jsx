@@ -409,10 +409,9 @@ export default function Explore() {
           </div>
         )}
       </div>
-
-      {selectedPost && (
+{selectedPost && (
   <PostModal
-    post={posts.find((p) => (p.id ?? p._id) === (selectedPost.id ?? selectedPost._id)) ?? selectedPost}
+    post={selectedPost}
     onClose={() => {
       setSelectedPost(null);
       window.history.pushState({}, "", `?tab=${activeType}`);

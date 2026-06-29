@@ -234,7 +234,16 @@ export const getReportById = asyncHandler(async (req, res, next) => {
         },
       },
       reportedUser: { select: { id: true, username: true, fullName: true, avatar: true } },
-      reviewedBy:  { select: { id: true, username: true, fullName: true, avatar: true } },
+comment: {
+  select: {
+    id: true,
+    content: true,
+    author: {
+      select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true },
+    },
+  },
+},
+reviewedBy:  { select: { id: true, username: true, fullName: true, avatar: true } },
       claimedBy:   { select: { id: true, username: true, fullName: true, avatar: true } },
       escalatedBy: { select: { id: true, username: true, fullName: true, avatar: true } },
     },
@@ -259,9 +268,10 @@ export const getReportById = asyncHandler(async (req, res, next) => {
   return res.status(200).json({
     success: true,
     data: {
-      ...report,
-     targetId: report.post ?? report.reportedUser ?? null,
-      otherReportsOnTarget: otherReportsCount,
+  ...report,
+  targetId: report.post ?? report.reportedUser ?? null,
+  comment: report.comment ?? null,
+  otherReportsOnTarget: otherReportsCount,
       openReportsOnTarget:  openReportsCount,
     },
   });

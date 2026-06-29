@@ -5,7 +5,29 @@ import MapView from "../components/MapView";
 import ChatBot from "../components/Chatbot";
 import StoryBar from "../components/StoryBar";
 
-const CATEGORIES = ["All", "Marble", "Granite", "Limestone", "CNC", "Quarry", "Supplier", "Designer", "Other"];
+const CATEGORIES = [
+  { label: "All",                    value: "all" },
+  { label: "Natural Stone Supplier", value: "natural_stone_supplier" },
+  { label: "Quarry Owner",           value: "quarry_owner" },
+  { label: "Stone Processor",        value: "stone_processor" },
+  { label: "CNC & Fabrication",      value: "cnc_fabrication" },
+  { label: "Tiles & Surfaces",       value: "tiles_surfaces" },
+  { label: "Interior Designer",      value: "interior_designer" },
+  { label: "Architect",              value: "architect" },
+  { label: "Contractor & Builder",   value: "contractor_builder" },
+  { label: "Importer / Exporter",    value: "importer_exporter" },
+  { label: "Distributor / Wholesaler", value: "distributor_wholesaler" },
+  { label: "Retailer",               value: "retailer" },
+  { label: "Equipment Supplier",     value: "equipment_supplier" },
+  { label: "Other",                  value: "other" },
+  // Purane values bhi support karo
+  { label: "Marble",    value: "marble" },
+  { label: "Granite",   value: "granite" },
+  { label: "Limestone", value: "limestone" },
+  { label: "Quarry",    value: "quarry" },
+  { label: "Supplier",  value: "supplier" },
+  { label: "Designer",  value: "designer" },
+];
 
 export default function FeedPage() {
   const [activeCategory, setActiveCategory] = useState("all");
@@ -66,20 +88,19 @@ export default function FeedPage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 {CATEGORIES.map((cat) => {
-                  const val = cat.toLowerCase();
-                  const active = activeCategory === val;
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => setActiveCategory(val)}
+  const active = activeCategory === cat.value;
+  return (
+    <button
+      key={cat.value}
+      onClick={() => setActiveCategory(cat.value)}
                       className="px-4 py-1.5 rounded-full text-sm font-medium border transition"
                       style={{
                         background: active ? "#1e3a5f" : "#fff",
                         color: active ? "#fff" : "#374151",
                         borderColor: active ? "#1e3a5f" : "#d1d5db",
                       }}
-                    >
-                      {cat}
+                   >
+                      {cat.label}
                     </button>
                   );
                 })}

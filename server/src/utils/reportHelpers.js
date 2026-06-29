@@ -86,12 +86,13 @@ export const submitReport = async (reportData) => {
   const priority = await calculateReportPriority(targetId, targetModel);
 
   const report = await prisma.report.create({
-    data: {
-      reportedById: reportedBy,
-      targetId: targetId,
-      postId: targetModel === "Post" ? targetId : null,
-      reportedUserId: targetModel === "User" ? targetId : null,
-      targetModel,
+  data: {
+    reportedById: reportedBy,
+    targetId: targetId,
+    postId: targetModel === "Post" ? targetId : null,
+    commentId: targetModel === "Comment" ? targetId : null,
+    reportedUserId: targetModel === "User" ? targetId : null,
+    targetModel,
       reason,
       description: description.trim().slice(0, 500),
       status: "pending",
@@ -126,31 +127,24 @@ export const getReports = async ({ status = "pending", limit = 20, offset = 0 } 
     orderBy: { createdAt: "desc" },
     take: limit,
     skip: offset,
-    include: {
-      reportedBy: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-        },
-      },
-      post: {
-        select: {
-          id: true,
-          caption: true,
-          media: true,
-          author: {
-            select: {
-              id: true,
-              username: true,
-              fullName: true,
-              avatar: true,
-            },
-          },
-        },
-      },
+   include: {
+  reportedBy: {
+    select: { id: true, username: true, fullName: true, avatar: true },
+  },
+  post: {
+    select: {
+      id: true, caption: true, media: true,
+      author: { select: { id: true, username: true, fullName: true, avatar: true } },
     },
+  },
+  comment: {
+    select: {
+      id: true,
+      content: true,
+      author: { select: { id: true, username: true, fullName: true, avatar: true } },
+    },
+  },
+},
   });
 
   const total = await prisma.report.count({ where });
@@ -205,7 +199,22 @@ export const getReportDetails = async (reportId) => {
           },
         },
       },
-      reportedUser: {
+      comment: {
+        select: {
+          id: true,
+          content: true,
+          author: {
+            select: {
+              id: true,
+              username: true,
+              fullName: true,
+              avatar: true,
+              isVerifiedBadge: true,
+            },
+          },
+        },
+      },
+     reportedUser: {
         select: {
           id: true,
           username: true,
@@ -220,12 +229,26 @@ export const getReportDetails = async (reportId) => {
 
   if (!report) return null;
 
-  // ✅ Handle deleted/removed post or user
+  // ✅ Handle deleted/removed post, comment, or user
   if (report.targetModel === "Post" && !report.post) {
     report.post = {
       id: report.targetId,
       caption: "Post no longer available",
       media: null,
+      author: {
+        id: null,
+        username: "Unknown",
+        fullName: "Unknown",
+        avatar: null,
+        isVerifiedBadge: false,
+      },
+    };
+  }
+
+  if (report.targetModel === "Comment" && !report.comment) {
+    report.comment = {
+      id: report.targetId,
+      content: "Comment no longer available",
       author: {
         id: null,
         username: "Unknown",
@@ -249,6 +272,8 @@ export const getReportDetails = async (reportId) => {
 
   return report;
 };
+
+
 
 // ── Dismiss report (admin) ──────────────────────────────────────────────
 export const dismissReport = async (reportId) => {

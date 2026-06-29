@@ -1,7 +1,7 @@
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import chatApi from "../services/chatApi";
-
+import { loginUser, googleLogin, logoutUser } from "./authSlice";
 // ── Thunks ────────────────────────────────────────────────────────────────────
 
 export const fetchConversations = createAsyncThunk(
@@ -246,9 +246,24 @@ const chatSlice = createSlice({
       );
     },
 
-    clearMessages(state, { payload: conversationId }) {
+   clearMessages(state, { payload: conversationId }) {
       delete state.messages[conversationId];
       delete state.pagination[conversationId];
+    },
+
+    resetChatState(state) {
+      sessionStorage.removeItem("activeConvId");
+      state.conversations     = [];
+      state.messages          = {};
+      state.pagination        = {};
+      state.activeConvId      = null;
+      state.onlineUsers       = [];
+      state.typingUsers       = {};
+      state.totalUnread       = 0;
+      state.realtimeUnreadMap = {};
+      state.loadingConvs      = false;
+      state.loadingMessages   = {};
+      state.error             = null;
     },
 addNewConversation(state, { payload: { conversation } }) {
   if (!conversation?.id) return;
@@ -414,9 +429,28 @@ builder.addCase(openOrCreateConversation.fulfilled, (state, { payload }) => {
         const exists = state.conversations.some((c) => c.id === payload.id);
         if (!exists) state.conversations.unshift(payload);
       })
-      .addCase(createGroupConversation.rejected, (state, { payload }) => {
+  .addCase(createGroupConversation.rejected, (state, { payload }) => {
         state.creatingGroup = false;
         state.error         = payload;
+      });
+
+    // ── Reset chat state on login/logout (naya user switch hone par) ──────
+    builder
+      .addCase(loginUser.fulfilled, (state) => {
+        sessionStorage.removeItem("activeConvId");
+        Object.assign(state, { ...initialState, activeConvId: null });
+      })
+      .addCase(googleLogin.fulfilled, (state) => {
+        sessionStorage.removeItem("activeConvId");
+        Object.assign(state, { ...initialState, activeConvId: null });
+      })
+      .addCase(logoutUser.fulfilled, (state) => {
+        sessionStorage.removeItem("activeConvId");
+        Object.assign(state, { ...initialState, activeConvId: null });
+      })
+      .addCase(logoutUser.rejected, (state) => {
+        sessionStorage.removeItem("activeConvId");
+        Object.assign(state, { ...initialState, activeConvId: null });
       });
   },
 });
@@ -426,7 +460,7 @@ export const {
   applyMessageEdit, applyMessageDelete, applySeenReceipt, applyReaction,
   setOnlineUsers, userCameOnline, userWentOffline,
   setTyping, clearTyping, clearMessages, addNewConversation,
-  updateConversation,
+  updateConversation, resetChatState,
 } = chatSlice.actions;
 
 export const selectConversations = (s) => s.chat.conversations;

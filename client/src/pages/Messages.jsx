@@ -378,12 +378,22 @@ const activeConv = useMemo(
 
 
 
-const otherParticipant = useMemo(
-  () => activeConv?.participants?.find(
-    (p) => (p.id || p).toString() !== myId
-  ) ?? null,
-  [activeConv, myId]
-);
+// const otherParticipant = useMemo(
+//   () => activeConv?.participants?.find(
+//     (p) => (p.id || p).toString() !== myId
+//   ) ?? null,
+//   [activeConv, myId]
+// );
+
+
+
+const otherParticipant = useMemo(() => {
+  if (!activeConv?.participants || !myId) return null;
+  return activeConv.participants.find((p) => {
+    const pid = (p?.id || p?._id || p)?.toString();
+    return pid && pid !== myId;
+  }) ?? null;
+}, [activeConv, myId]);
 
 const isGroup = activeConv?.isGroup ?? false;
 const isDeactivated = !isGroup && otherParticipant?.accountStatus === "deactivated";
@@ -602,14 +612,40 @@ useEffect(() => {
   };
 
  
+  // const handleOpenWithUser = (userId) => {
+  //   if (!userId || userId === myId) return;
+  //   dispatch(openOrCreateConversation(userId)).then((action) => {
+  //     console.log("RESULT:", action);
+  //     if (action?.payload?.id) { dispatch(setActiveConversation(action.payload.id)); setTab("chats"); }
+  //     else { console.log("FAILED — payload was:", action?.payload, "error:", action?.error); }
+  //   });
+  // };
+
+
   const handleOpenWithUser = (userId) => {
-    if (!userId || userId === myId) return;
-    dispatch(openOrCreateConversation(userId)).then((action) => {
-      console.log("RESULT:", action);
-      if (action?.payload?.id) { dispatch(setActiveConversation(action.payload.id)); setTab("chats"); }
-      else { console.log("FAILED — payload was:", action?.payload, "error:", action?.error); }
-    });
-  };
+  if (!userId || userId === myId) return;
+
+  const existing = conversations.find((c) =>
+    !c.isGroup &&
+    c.participants?.some((p) => {
+      const pid = (p?.id || p?._id || p)?.toString();
+      return pid === userId;
+    })
+  );
+
+  if (existing) {
+    dispatch(setActiveConversation(existing.id));
+    setTab("chats");
+    return;
+  }
+
+  dispatch(openOrCreateConversation(userId)).then((action) => {
+    if (action?.payload?.id) {
+      dispatch(setActiveConversation(action.payload.id));
+      setTab("chats");
+    }
+  });
+};
 
   const handleBack = () => dispatch(setActiveConversation(null));
 
@@ -694,7 +730,11 @@ const handleReportSubmit = async (reason) => {
   }
 };
   const filteredConvs = conversations.filter((c) => {
-    const other = c.participants?.find((p) => (p.id || p).toString() !== myId);
+    // const other = c.participants?.find((p) => (p.id || p).toString() !== myId);
+    const other = c.participants?.find((p) => {
+  const pid = (p?.id || p?._id || p)?.toString();
+  return pid && pid !== myId;
+});
     return (other?.fullName || other?.username || "").toLowerCase().includes(search.toLowerCase());
   });
 
@@ -785,7 +825,10 @@ const handleReportSubmit = async (reason) => {
                   </div>
                 )}
                 {filteredConvs.map((conv) => {
-              const other    = conv.participants?.find((p) => (p.id || p).toString() !== myId);
+              const other = conv.participants?.find((p) => {
+  const pid = (p?.id || p?._id || p)?.toString();
+  return pid && pid !== myId;
+});
 const cOtherId = (other?.id || other)?.toString();
 const isOnline = onlineUsers.includes(cOtherId);
 const isActive = conv.id === activeConvId;

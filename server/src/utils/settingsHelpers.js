@@ -183,10 +183,11 @@ export const deactivateAccount = async (userId) => {
   // Soft delete — anonymize
  await prisma.$transaction(async (tx) => {
   // Soft delete — anonymize
- await tx.user.update({
+await tx.user.update({
     where: { id: userId },
     data: {
       accountStatus: "deactivated",
+      deactivatedAt: new Date(),
       bio: "",
       designation: "",
       avatar: null,
@@ -254,11 +255,19 @@ export const hardDeleteAccount = async (userId) => {
 export const reactivateAccount = async (userId) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, accountStatus: true },
+    select: { id: true, accountStatus: true, deactivatedAt: true },
   });
 
   if (!user) throw new Error("User not found");
   if (user.accountStatus !== "deactivated") throw new Error("Account is not deactivated");
+
+  // 30 din check
+  if (user.deactivatedAt) {
+    const daysDiff = (Date.now() - new Date(user.deactivatedAt).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDiff > 30) {
+      throw new Error("Reactivation period has expired. Account cannot be restored after 30 days.");
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
     // Account wapas active karo

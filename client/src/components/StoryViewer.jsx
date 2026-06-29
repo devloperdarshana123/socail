@@ -87,31 +87,43 @@ const durationRef = useRef(STORY_DURATION);
     setLikesCount(story?.reactionsCount ?? 0);
     setShowViewers(false);
 
-    if (!isVideo) {
-      durationRef.current = STORY_DURATION;
-      startTimer(0);
-    }
+    // if (!isVideo) {
+    //   durationRef.current = STORY_DURATION;
+    //   startTimer(0);
+    // }
+
+    if (!isVideo && story.type === "text") {
+  durationRef.current = STORY_DURATION;
+  startTimer(0);
+}
 
     if (story?.id) dispatch(viewStory(story.id));
     return () => clearInterval(timerRef.current);
   }, [userIdx, storyIdx]);
 
- useEffect(() => {
+useEffect(() => {
   if (paused) {
     stopTimer();
-    
     if (isVideo && videoRef.current) videoRef.current.pause();
   } else {
-    
     if (isVideo && videoRef.current) {
       videoRef.current.play();
-    
       startTimer(elapsedRef.current);
-    } else {
+    } else if (story?.type === "text") {
       startTimer(elapsedRef.current);
     }
+    
   }
 }, [paused]);
+
+useEffect(() => {
+  const nextStory = group?.stories[storyIdx + 1] 
+    || feed[userIdx + 1]?.stories[0];
+  if (nextStory?.media?.url && nextStory.type !== "text") {
+    const img = new Image();
+    img.src = nextStory.media.url;
+  }
+}, [userIdx, storyIdx]);
 
   // ── Navigation ────────────────────────────────────────────
   const goNext = () => {
@@ -385,7 +397,11 @@ const createNewHighlight = async () => {
 />
   ) : (
     <img key={story.id} src={story.media.url}
-      alt="" className="w-full h-full object-cover" />
+      alt="" className="w-full h-full object-cover"
+      loading="eager"
+      fetchPriority="high"
+      onLoad={() => { if (!paused) startTimer(0); }}
+    />
   )}
 </div>
 

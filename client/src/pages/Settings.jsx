@@ -114,11 +114,23 @@ function AvatarBlock({ user, size = "lg" }) {
   const { avatarLoading } = useSelector((s) => s.userProfile);
   const sz = size === "lg" ? "w-20 h-20 text-3xl" : "w-14 h-14 text-2xl";
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    dispatch(uploadAvatar(file));
-  };
+  const handleAvatarChange = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  // ✅ Client-side check
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error("Avatar image cannot exceed 5MB.");
+    e.target.value = "";
+    return;
+  }
+
+  const result = await dispatch(uploadAvatar(file));
+  if (uploadAvatar.rejected.match(result)) {
+    toast.error(result.payload || "Avatar upload failed.");
+    e.target.value = "";
+  }
+};
 
   const handleRemoveAvatar = () => {
     dispatch(removeAvatar());
@@ -340,19 +352,31 @@ function ProfileTab({ user }) {
           <label className="block text-xs font-semibold mb-1.5" style={{ color: T.brownMid }}>
             Business Category
           </label>
-          <select value={businessCategory} onChange={(e) => setBusinessCategory(e.target.value)}
+         <select value={businessCategory} onChange={(e) => setBusinessCategory(e.target.value)}
             className="w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-all duration-200"
             style={{ border: `1.5px solid ${T.border}`, background: T.brownXlt, color: T.text }}
             onFocus={(e) => (e.target.style.borderColor = T.accent)}
             onBlur={(e)  => (e.target.style.borderColor = T.border)}>
             <option value="">Select category</option>
-            <option value="marble">Marble</option>
-            <option value="granite">Granite</option>
-            <option value="limestone">Limestone</option>
-            <option value="cnc">CNC</option>
-            <option value="quarry">Quarry</option>
-            <option value="supplier">Supplier</option>
-            <option value="designer">Designer</option>
+            <option value="natural_stone_supplier">Natural Stone Supplier</option>
+            <option value="quarry_owner">Quarry Owner</option>
+            <option value="stone_processor">Stone Processor</option>
+            <option value="cnc_fabrication">CNC & Fabrication</option>
+            <option value="tiles_surfaces">Tiles & Surfaces</option>
+            <option value="interior_designer">Interior Designer</option>
+            <option value="architect">Architect</option>
+            <option value="contractor_builder">Contractor & Builder</option>
+            <option value="importer_exporter">Importer / Exporter</option>
+            <option value="distributor_wholesaler">Distributor / Wholesaler</option>
+            <option value="retailer">Retailer</option>
+            <option value="equipment_supplier">Equipment Supplier</option>
+            <option value="marble" style={{display:"none"}}>Marble</option>
+<option value="granite" style={{display:"none"}}>Granite</option>
+<option value="limestone" style={{display:"none"}}>Limestone</option>
+<option value="cnc" style={{display:"none"}}>CNC</option>
+<option value="quarry" style={{display:"none"}}>Quarry</option>
+<option value="supplier" style={{display:"none"}}>Supplier</option>
+<option value="designer" style={{display:"none"}}>Designer</option>
             <option value="other">Other</option>
           </select>
         </div>

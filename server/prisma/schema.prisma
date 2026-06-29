@@ -54,6 +54,7 @@ model User {
 
   // Suspension
   activeSuspension Json?
+  deactivatedAt DateTime?
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -201,6 +202,7 @@ model Comment {
   rootReplies   Comment[] @relation("RootReplies")
 
   likes Like[]
+  reports Report[] 
 }
 
 model Like {
@@ -269,6 +271,8 @@ model Report {
 
   postId String?
   post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  commentId String?
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade) 
 
    reportedUserId String?
   reportedUser   User?   @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)

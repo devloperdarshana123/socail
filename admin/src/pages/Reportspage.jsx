@@ -231,7 +231,7 @@ function Spinner({ size = 20, className = "text-[#1e3a5f]" }) {
 }
 
 function TargetPreview({ report }) {
-  const { targetModel, targetId } = report;
+  const { targetModel, targetId, comment } = report;
   if (!targetId) return <span className="text-slate-400 text-xs">—</span>;
 
   if (targetModel === "Post") {
@@ -282,6 +282,22 @@ function TargetPreview({ report }) {
     );
   }
 
+  if (targetModel === "Comment") {
+    if (!comment) {
+      return <span className="text-xs text-slate-400">Comment no longer available</span>;
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <Avatar user={comment.author} size={28} />
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-slate-700 truncate max-w-[120px]">
+            {comment.content?.slice(0, 40) || "(no text)"}
+          </p>
+          <p className="text-[10px] text-slate-400">@{comment.author?.username}</p>
+        </div>
+      </div>
+    );
+  }
   return <span className="text-xs text-slate-500">{targetModel}</span>;
 }
 
@@ -466,6 +482,7 @@ function DetailPanel({
 
   console.log("reportedBy:", report?.reportedBy);
   console.log("targetId:", report?.targetId);
+  console.log("comment:", report?.comment);
   const reportId = report?.id;
 
   // Reset form when report changes
@@ -717,9 +734,32 @@ function DetailPanel({
                               <p className="text-xs text-slate-400">@{report.targetId.username}</p>
                             </div>
                           </div>
-                        ) : (
-                          <p className="text-xs text-slate-400">Target no longer available</p>
-                        )}
+     ) : report.targetModel === "Comment" ? (
+          <div className="space-y-2">
+            {!report.comment ? (
+              <p className="text-xs text-slate-400">Comment no longer available</p>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-100">
+                  <Avatar user={report.comment.author} size={32} />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-700">
+                      {report.comment.author?.fullName ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      @{report.comment.author?.username}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-700 bg-slate-50 rounded-xl p-3 border border-slate-100 leading-relaxed">
+                  "{report.comment.content}"
+                </p>
+              </>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400">Target no longer available</p>
+        )}
                       </div>
                       {report.openReportsOnTarget > 0 && (
                         <button
