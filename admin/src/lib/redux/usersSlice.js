@@ -27,6 +27,19 @@ const normalizeUser = (u) => ({
 
 // ── Thunks ────────────────────────────────────────────────────────────────────
 
+
+export const fetchDashboardStats = createAsyncThunk(
+  "users/fetchDashboardStats",
+  async (_, { rejectWithValue }) => {
+    try {
+      const { data: body } = await adminApi.get("/admin/stats");
+      return body.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message ?? "Failed to fetch stats");
+    }
+  }
+);
+
 export const fetchUsers = createAsyncThunk(
   "users/fetchAll",
   async (params, { rejectWithValue }) => {
@@ -163,6 +176,8 @@ const initialState = {
   detailError:   null,
   postsLoading:  false,
   pagination: { totalUsers: 0, totalPages: 1, currentPage: 1 },
+  stats: { total: 0, active: 0, suspended: 0, banned: 0, verified: 0 },
+  statsLoading: false,
   filters: {
     search: "", role: "", status: "", verified: "",
     sortBy: "createdAt", sortOrder: "desc", page: 1, limit: 12,
@@ -193,6 +208,12 @@ const usersSlice = createSlice({
       })
       .addCase(fetchUsers.rejected,  (s, { payload }) => { s.loading = false; s.error = payload; })
 
+      .addCase(fetchDashboardStats.pending,   (s) => { s.statsLoading = true; })
+      .addCase(fetchDashboardStats.fulfilled, (s, { payload }) => {
+        s.statsLoading = false;
+        s.stats = payload.users;
+      })
+      .addCase(fetchDashboardStats.rejected,  (s) => { s.statsLoading = false; })
       // ── updateUserStatus ────────────────────────────────────────────────────
       .addCase(updateUserStatus.pending,   (s, { meta })    => { s.actionLoading = meta.arg.userId; })
 
@@ -325,3 +346,5 @@ export const selectUsersFilters    = (s) => s.users.filters;
 export const selectUserDetail      = (s) => s.users.detail;
 export const selectDetailLoading   = (s) => s.users.detailLoading;
 export const selectPostsLoading    = (s) => s.users.postsLoading;
+export const selectDashboardStats  = (s) => s.users.stats;
+export const selectStatsLoading    = (s) => s.users.statsLoading;

@@ -265,11 +265,7 @@ export const getUserPosts = asyncHandler(async (req, res, next) => {
   });
 });
 
-// ─────────────────────────────────────────────
-//  DELETE POST
-//  DELETE /api/v2/posts/:postId
-// ─────────────────────────────────────────────
-
+ 
 export const deletePost = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
   const userId = req.user.id;
@@ -300,10 +296,7 @@ export const deletePost = asyncHandler(async (req, res, next) => {
   return res.status(200).json({ success: true, message: "Post deleted successfully" });
 });
 
-// ─────────────────────────────────────────────
-//  GET DRAFT POSTS
-//  GET /api/v2/posts/drafts
-// ─────────────────────────────────────────────
+
 
 export const getDraftPosts = asyncHandler(async (req, res) => {
   const userId = req.user.id;
@@ -324,10 +317,7 @@ export const getDraftPosts = asyncHandler(async (req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────
-//  PUBLISH DRAFT
-//  PATCH /api/v2/posts/:postId/publish
-// ─────────────────────────────────────────────
+
 
 export const publishDraft = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
@@ -357,10 +347,7 @@ export const publishDraft = asyncHandler(async (req, res, next) => {
   }
 });
 
-// ─────────────────────────────────────────────
-//  UPDATE POST
-//  PATCH /api/v2/posts/:postId
-// ─────────────────────────────────────────────
+
 
 export const updatePost = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
@@ -412,10 +399,7 @@ export const updatePost = asyncHandler(async (req, res, next) => {
   }
 });
 
-// ─────────────────────────────────────────────
-//  RECORD VIEW
-//  POST /api/v2/posts/:postId/view
-// ─────────────────────────────────────────────
+
 
 export const recordView = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
@@ -459,4 +443,49 @@ return res.status(200).json({
   selfView: result.selfView,
   viewsCount: updatedPost?.viewsCount ?? 0,
 });
+});
+
+
+
+export const deleteUnusedMedia = asyncHandler(async (req, res, next) => {
+  const { publicId, resourceType = "image" } = req.body;
+
+  if (!publicId) {
+    return next(new AppError("publicId is required.", 400));
+  }
+
+  try {
+    await deleteFromCloudinary(publicId, resourceType);
+    logger.info("Orphan media deleted", { publicId, resourceType, userId: req.user.id });
+    return res.status(200).json({ success: true, message: "Media deleted." });
+  } catch (err) {
+    logger.warn("Orphan media delete failed", { publicId, error: err.message });
+    return res.status(200).json({ success: false, message: "Delete failed, cron will clean it later." });
+  }
+});
+
+
+
+export const bulkDeleteUnusedMedia = asyncHandler(async (req, res, next) => {
+  const { items = [] } = req.body;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return next(new AppError("items array is required.", 400));
+  }
+  if (items.length > 10) {
+    return next(new AppError("Maximum 10 items per request.", 400));
+  }
+
+  const results = await Promise.allSettled(
+    items.map((m) => deleteFromCloudinary(m.publicId, m.resourceType || "image"))
+  );
+
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      logger.warn("Bulk orphan delete failed", { publicId: items[i].publicId, error: r.reason?.message });
+    }
+  });
+
+  logger.info("Bulk orphan media cleanup done", { count: items.length, userId: req.user.id });
+  return res.status(200).json({ success: true, message: "Cleanup processed." });
 });

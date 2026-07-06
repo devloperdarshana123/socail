@@ -7,9 +7,11 @@ import CustomSelect from "../components/CustomSelect";
 import {
   fetchUsers, updateUserStatus, toggleVerifiedBadge, deleteUser,
   setFilters, setPage, clearErrors, resetFilters, bulkUpdateStatus,
+  fetchDashboardStats,
   selectUsers, selectUsersLoading, selectUsersError,
   selectActionLoading, selectActionError,
   selectUsersPagination, selectUsersFilters,
+  selectDashboardStats, selectStatsLoading,
 } from "../lib/redux/usersSlice";
 import { UsersTableSkeleton } from "../components/skeletons";
 
@@ -602,6 +604,9 @@ export default function UsersPage() {
   const { totalUsers, totalPages, currentPage } = useSelector(selectUsersPagination);
   const filters = useSelector(selectUsersFilters);
 
+  const stats        = useSelector(selectDashboardStats);
+  const statsLoading = useSelector(selectStatsLoading);
+
   const [searchInput,  setSearchInput]  = useState(filters.search);
   const [statusModal,  setStatusModal]  = useState({ open: false, user: null });
   const [deleteModal,  setDeleteModal]  = useState({ open: false, user: null });
@@ -626,6 +631,9 @@ export default function UsersPage() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
   }, []);
 
+   useEffect(() => {
+    dispatch(fetchDashboardStats());
+  }, [dispatch]);
   // ── Fetch on filter change ────────────────────────────────────
   useEffect(() => {
     dispatch(fetchUsers({
@@ -750,7 +758,7 @@ export default function UsersPage() {
   const handleToggleVerify = useCallback(async (userId) => {
     const res = await dispatch(toggleVerifiedBadge(userId));
     if (res.meta?.requestStatus !== "rejected") {
-      const u = users.find((x) => x._id === userId);
+      const u = users.find((x) => x.id === userId);
       showToast(`@${u?.username} ${u?.isVerified ? "unverified" : "verified"}`);
     } else {
       showToast("Failed to update badge", "error");
@@ -759,15 +767,15 @@ export default function UsersPage() {
 
   // ── Derived stats (useMemo — only recalc when users changes) ─
   // FIX: was three separate .filter() passes on every render
-  const { activeCount, verifiedCount, suspendedCount } = useMemo(() => {
-    let active = 0, verified = 0, suspended = 0;
-    for (const u of users) {
-      if (u.status === "active")                               active++;
-      if (u.isVerified)                                        verified++;
-      if (u.status === "suspended" || u.status === "banned")  suspended++;
-    }
-    return { activeCount: active, verifiedCount: verified, suspendedCount: suspended };
-  }, [users]);
+  // const { activeCount, verifiedCount, suspendedCount } = useMemo(() => {
+  //   let active = 0, verified = 0, suspended = 0;
+  //   for (const u of users) {
+  //     if (u.status === "active")                               active++;
+  //     if (u.isVerified)                                        verified++;
+  //     if (u.status === "suspended" || u.status === "banned")  suspended++;
+  //   }
+  //   return { activeCount: active, verifiedCount: verified, suspendedCount: suspended };
+  // }, [users]);
 
   // ── Pagination page list (memoized) ──────────────────────────
   const pageNumbers = useMemo(
@@ -844,19 +852,19 @@ export default function UsersPage() {
             />
             <StatCard
               label="Active"
-              value={loading ? "—" : activeCount}
+              value={statsLoading ? "—" : stats.active}
               accent="emerald"
               icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
             />
             <StatCard
               label="Verified"
-              value={loading ? "—" : verifiedCount}
+            value={statsLoading ? "—" : stats.verified}
               accent="violet"
               icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138z"/></svg>}
             />
             <StatCard
               label="Restricted"
-              value={loading ? "—" : suspendedCount}
+              value={statsLoading ? "—" : stats.suspended}
               accent="amber"
               icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>}
             />

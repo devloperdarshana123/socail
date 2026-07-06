@@ -1,6 +1,7 @@
 import prisma from "../config/prisma.js";
 import cloudinary from "../config/cloudinaryConfig.js";
 import logger from "../config/logger.js";
+import { finalizeMedia } from "../helper/cloudinaryUpload.js";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -22,8 +23,9 @@ export const sanitizeMediaItem = (item, index) => ({
 export const createPost = async (userId, postData) => {
   const { caption = "", visibility = "public", type, commentsDisabled = false, likesHidden = false, location, isDraft = false, media = [] } = postData;
 
-  const sanitized = media.map(sanitizeMediaItem);
+  let sanitized = media.map(sanitizeMediaItem);
 
+  sanitized = await finalizeMedia(sanitized);
   // Thumbnail generation for reels
   if (type === "reel" && sanitized[0]?.resourceType === "video" && !sanitized[0]?.thumbnailUrl) {
     try {
@@ -394,7 +396,10 @@ export const updatePost = async (postId, userId, updateData) => {
       throw new Error("Text post cannot have media.");
     }
 
-    updateObj.media = media.map(sanitizeMediaItem);
+    // updateObj.media = media.map(sanitizeMediaItem);
+
+    const sanitized = media.map(sanitizeMediaItem);
+    updateObj.media = await finalizeMedia(sanitized);
   }
 
   const updated = await prisma.post.update({

@@ -13,6 +13,8 @@ import {
   getDraftPosts,
   publishDraft,
   updatePost,
+  deleteUnusedMedia,      // ✅ naya import
+  bulkDeleteUnusedMedia,
 } from "../../controllers/auth/post.controller.js";
 
 const router = express.Router();
@@ -24,6 +26,9 @@ router.post("/", createPostLimiter,createPost);
 router.get("/feed", getFeedPosts);
 router.get("/drafts", getDraftPosts);
 router.get("/user/:userId", getUserPosts);
+
+router.delete("/media/unused", uploadRateLimiter, deleteUnusedMedia);
+router.post("/media/bulk-delete", uploadRateLimiter, bulkDeleteUnusedMedia);
 
 // ── Param routes — specific pehle, generic baad mein ──
 router.post("/:postId/view",generalLimiter, recordView);

@@ -164,6 +164,7 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   const visRef = useRef(null);
+  const uploaderRef = useRef(null);
   const accent = "#1e3a5f";
   const brand  = "#bd8d5e";
 
@@ -179,6 +180,13 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  useEffect(() => {
+  return () => {
+    if (uploaderRef.current) {
+      uploaderRef.current.cleanupAll();
+    }
+  };
+}, []);
 
   const reset = useCallback(() => {
   setTab("image");
@@ -193,8 +201,15 @@ export default function PostCreatorModal({ isOpen, onClose, currentUser, onSubmi
   setError("");
 }, []);
 
-const handleClose = useCallback(() => { reset(); onClose(); }, [reset, onClose]);
 
+const handleClose = useCallback(() => {
+  if (uploaderRef.current) {
+    uploaderRef.current.cleanupAll();   
+    uploaderRef.current.resetLocal();
+  }
+  reset();
+  onClose();
+}, [reset, onClose]);
 useEffect(() => {
   const h = (e) => { if (e.key === "Escape") handleClose(); };
   document.addEventListener("keydown", h);
@@ -216,47 +231,90 @@ useEffect(() => {
   const postType = resolveType();
   const charLeft = MAX_CAPTION - caption.length;
 
+  // const handleSubmit = async (isDraft = false) => {
+  // setError("");
+  // const type = resolveType();
+
+  // if (isDraft) {
+  //   // Draft: just needs something — image OR caption
+  //   if (mediaItems.length === 0 && !caption.trim()) {
+  //     return setError("Add a caption or upload media before saving a draft.");
+  //   }
+  // } else {
+  //   // Published post: strict validation
+  //   if (type === "reel"  && mediaItems.length !== 1) return setError("Reel needs exactly 1 video.");
+  //   if (type === "image" && mediaItems.length < 1)   return setError("Image post needs at least 1 image.");
+  //   if (type === "text"  && !caption.trim())          return setError("Text post needs a caption.");
+  // }
+
+  //   const { hashtags, mentions } = parseCaption(caption);
+
+  //   try {
+  //     setSub(true);
+  //     await onSubmit({
+  //       type,
+  //       caption:          caption.trim(),
+  //       visibility,
+  //       commentsDisabled: commentsOff,
+  //       likesHidden:      likesHide,
+  //       isDraft,
+  //       // location:         location.trim() ? JSON.stringify({ name: location.trim() }) : null,
+  //       location: location ? JSON.stringify({ name: location.value }) : null,
+  //       hashtags,
+  //       mentions,
+  //       media:            mediaItems,  // ← Cloudinary objects, already uploaded
+  //     });
+  //     reset();
+  //     onClose();
+  //   } catch (err) {
+  //     setError(err?.message || "Post could not be shared. Please try again.");
+  //   } finally {
+  //     setSub(false);
+  //   }
+  // };
+
+
   const handleSubmit = async (isDraft = false) => {
   setError("");
   const type = resolveType();
 
   if (isDraft) {
-    // Draft: just needs something — image OR caption
     if (mediaItems.length === 0 && !caption.trim()) {
       return setError("Add a caption or upload media before saving a draft.");
     }
   } else {
-    // Published post: strict validation
     if (type === "reel"  && mediaItems.length !== 1) return setError("Reel needs exactly 1 video.");
     if (type === "image" && mediaItems.length < 1)   return setError("Image post needs at least 1 image.");
     if (type === "text"  && !caption.trim())          return setError("Text post needs a caption.");
   }
 
-    const { hashtags, mentions } = parseCaption(caption);
+  const { hashtags, mentions } = parseCaption(caption);
 
-    try {
-      setSub(true);
-      await onSubmit({
-        type,
-        caption:          caption.trim(),
-        visibility,
-        commentsDisabled: commentsOff,
-        likesHidden:      likesHide,
-        isDraft,
-        // location:         location.trim() ? JSON.stringify({ name: location.trim() }) : null,
-        location: location ? JSON.stringify({ name: location.value }) : null,
-        hashtags,
-        mentions,
-        media:            mediaItems,  // ← Cloudinary objects, already uploaded
-      });
-      reset();
-      onClose();
-    } catch (err) {
-      setError(err?.message || "Post could not be shared. Please try again.");
-    } finally {
-      setSub(false);
-    }
-  };
+  try {
+    setSub(true);
+    if (uploaderRef.current) uploaderRef.current.markSubmitted(); // ✅ cleanup ab skip ho jaayega
+    await onSubmit({
+      type,
+      caption:          caption.trim(),
+      visibility,
+      commentsDisabled: commentsOff,
+      likesHidden:      likesHide,
+      isDraft,
+      location: location ? JSON.stringify({ name: location.value }) : null,
+      hashtags,
+      mentions,
+      media:            mediaItems,
+    });
+    if (uploaderRef.current) uploaderRef.current.resetLocal();
+    reset();
+    onClose();
+  } catch (err) {
+    if (uploaderRef.current) uploaderRef.current.unmarkSubmitted(); // ✅ fail hua, delete allow karo wapas
+    setError(err?.message || "Post could not be shared. Please try again.");
+  } finally {
+    setSub(false);
+  }
+};
 
   if (!isOpen) return null;
 
@@ -349,7 +407,11 @@ useEffect(() => {
                 {tabList.map(({ id, label, Icon }) => (
                   <button
                     key={id}
-                    onClick={() => { setTab(id); setMediaItems([]); }}
+                    onClick={() => {
+  if (uploaderRef.current) uploaderRef.current.cleanupAll();
+  setTab(id);
+  setMediaItems([]);
+}}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-semibold cursor-pointer transition-all duration-200 border"
                     style={{
                       background:   tab === id ? accent : "transparent",
@@ -365,10 +427,11 @@ useEffect(() => {
 
               {/* ✅ Uploader — shown for image & reel tabs */}
               {tab !== "text" && (
-                <ImageVideoUploader
-                  onUploadComplete={setMediaItems}
-                  isDark={isDark}
-                />
+               <ImageVideoUploader
+  ref={uploaderRef}
+  onUploadComplete={setMediaItems}
+  isDark={isDark}
+/>
               )}
 
               {/* Text tab — inline textarea */}
@@ -457,7 +520,11 @@ onPaste={(e) => {
                   {tabList.map(({ id, label, Icon }) => (
                     <button
                       key={id}
-                      onClick={() => { setTab(id); setMediaItems([]); }}
+                     onClick={() => {
+  if (uploaderRef.current) uploaderRef.current.cleanupAll();
+  setTab(id);
+  setMediaItems([]);
+}}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold border"
                       style={{
                         background:  tab === id ? accent : "transparent",
@@ -472,7 +539,7 @@ onPaste={(e) => {
                 </div>
                 {tab !== "text" && (
                   <div className="mb-4">
-                    <ImageVideoUploader onUploadComplete={setMediaItems} isDark={isDark} />
+                    <ImageVideoUploader ref={uploaderRef} onUploadComplete={setMediaItems} isDark={isDark} />
                   </div>
                 )}
               </>

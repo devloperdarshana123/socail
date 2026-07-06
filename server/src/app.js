@@ -37,7 +37,7 @@ import notificationRoutes from "./routes/auth/notification.route.js";
 import transcribeRoute from "./routes/auth/transcribe.route.js";
 import reportRouter from "./routes/auth/report.route.js";
 import "./cron/suspensionCron.js";
-
+import "./cron/cleanupOrphanMedia.js";
 // admin
 import adminAuthRoute from "./routes/admin/admin.auth.route.js";
 import adminSettingsRoute from "./routes/admin/admin.settings.route.js";

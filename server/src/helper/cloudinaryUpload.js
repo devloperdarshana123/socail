@@ -76,3 +76,30 @@ export const copyToCloudinary = async (sourceUrl, options = {}) => {
     throw error;
   }
 };
+
+
+// existing imports ke saath, file ke end mein add karo
+
+export const finalizeMedia = async (mediaArr = []) => {
+  return Promise.all(
+    mediaArr.map(async (m) => {
+      if (!m.publicId?.startsWith("temp_uploads/")) return m; // already finalized ya purana media
+
+      const newPublicId = m.publicId.replace("temp_uploads/", "erovians/posts/");
+
+      try {
+        const result = await cloudinary.uploader.rename(m.publicId, newPublicId, {
+          resource_type: m.resourceType || "image",
+        });
+        return {
+          ...m,
+          publicId: result.public_id,
+          url: result.secure_url,
+        };
+      } catch (error) {
+        console.warn("Media finalize (rename) failed:", error.message);
+        return m; // fallback — cron isay baad mein handle kar lega
+      }
+    })
+  );
+};

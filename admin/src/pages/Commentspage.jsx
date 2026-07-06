@@ -658,12 +658,9 @@ const filtersRef = useRef(filters);
 useEffect(() => { filtersRef.current = filters; }, [filters]);
 
 // socket useEffect — sirf ek baar register hoga
-// useEffect(() => {
-//   const s = getAdminSocket();
-//   console.log("Socket instance:", s); // ← add karo
-//   console.log("Socket connected:", s?.connected); // ← add karo
-//   if (!s) return;
 
+
+// useEffect(() => {
 //   const handler = (payload) => {
 //     if (payload.type !== "admin_new_comment") return;
 //     const f = filtersRef.current;
@@ -678,13 +675,29 @@ useEffect(() => { filtersRef.current = filters; }, [filters]);
 //     dispatch(fetchCommentStats());
 //   };
 
-//   s.on("admin:notification", handler);
-//   return () => s.off("admin:notification", handler);
-// }, [dispatch]); // ← sirf dispatch, filters nahi
+//   const s = getAdminSocket();
+//   if (s?.connected) {
+//     s.on("admin:notification", handler);
+//     return () => s.off("admin:notification", handler);
+//   }
+
+//   const unsubscribe = onAdminSocketReady((readySocket) => {
+//     readySocket.on("admin:notification", handler);
+//   });
+
+//   return () => {
+//     unsubscribe();
+//     const current = getAdminSocket();
+//     current?.off("admin:notification", handler);
+//   };
+// }, [dispatch]);
+
+
+// ✅ Throttle ref — pending refetch timer track karta hai
+const refetchTimerRef = useRef(null);
 
 useEffect(() => {
-  const handler = (payload) => {
-    if (payload.type !== "admin_new_comment") return;
+  const doRefetch = () => {
     const f = filtersRef.current;
     dispatch(fetchComments({
       search:    f.search    || undefined,
@@ -697,10 +710,23 @@ useEffect(() => {
     dispatch(fetchCommentStats());
   };
 
+  const handler = (payload) => {
+    if (payload.type !== "admin_new_comment") return;
+    // ✅ Agar pehle se ek refetch schedule hai, toh naya schedule mat karo — wait karne do
+    if (refetchTimerRef.current) return;
+    refetchTimerRef.current = setTimeout(() => {
+      doRefetch();
+      refetchTimerRef.current = null;
+    }, 3000); // 3 second mein max ek refresh
+  };
+
   const s = getAdminSocket();
   if (s?.connected) {
     s.on("admin:notification", handler);
-    return () => s.off("admin:notification", handler);
+    return () => {
+      s.off("admin:notification", handler);
+      clearTimeout(refetchTimerRef.current);
+    };
   }
 
   const unsubscribe = onAdminSocketReady((readySocket) => {
@@ -711,6 +737,7 @@ useEffect(() => {
     unsubscribe();
     const current = getAdminSocket();
     current?.off("admin:notification", handler);
+    clearTimeout(refetchTimerRef.current);
   };
 }, [dispatch]);
 

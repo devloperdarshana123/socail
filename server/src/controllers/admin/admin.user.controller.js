@@ -601,19 +601,20 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
 
   const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
 
-  const [totalUsers, activeUsers, suspendedUsers, bannedUsers, totalPosts, pendingReports, newUsersToday] =
+const [totalUsers, activeUsers, suspendedUsers, bannedUsers, verifiedUsers, totalPosts, pendingReports, newUsersToday] =
     await Promise.all([
       prisma.user.count({ where: { role: { not: "super_admin" } } }),
       prisma.user.count({ where: { role: { not: "super_admin" }, accountStatus: "active"    } }),
       prisma.user.count({ where: { role: { not: "super_admin" }, accountStatus: "suspended" } }),
       prisma.user.count({ where: { role: { not: "super_admin" }, accountStatus: "banned"    } }),
+      prisma.user.count({ where: { role: { not: "super_admin" }, isVerifiedBadge: true      } }),
       prisma.post.count({ where: { isDeleted: false } }),
       prisma.report.count({ where: { status: "pending" } }),
       prisma.user.count({ where: { role: { not: "super_admin" }, createdAt: { gte: startOfToday } } }),
     ]);
 
   const statsData = {
-    users:   { total: totalUsers, active: activeUsers, suspended: suspendedUsers, banned: bannedUsers },
+    users:   { total: totalUsers, active: activeUsers, suspended: suspendedUsers, banned: bannedUsers, verified: verifiedUsers },
     posts:   { total: totalPosts },
     reports: { pending: pendingReports },
     today:   { newUsers: newUsersToday },
