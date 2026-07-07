@@ -139,6 +139,7 @@ import { useState } from "react";
 import MapView from "../components/MapView";
 import ChatBot from "../components/Chatbot";
 import StoryBar from "../components/StoryBar";
+import WavyBackground from "../components/WavyBackground";
 
 const CATEGORIES = [
   { label: "All",                    value: "all" },
@@ -170,12 +171,13 @@ export default function FeedPage() {
   const [mapSearch, setMapSearch] = useState("");
 
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        background: "linear-gradient(180deg, #F8F6F0 0%, #F1ECE1 55%, #EDE6D8 100%)",
-      }}
-    >
+    <WavyBackground>
+      <div
+        className="min-h-screen"
+        style={{
+          background: "transparent",
+        }}
+      >
       {/* Signature styles — medallion ring, fade-in, focus states */}
       <style>{`
         @keyframes feedFadeUp {
@@ -342,6 +344,7 @@ export default function FeedPage() {
 
       {/* ── CHATBOT (floating, bottom) ── */}
       <ChatBot />
-    </div>
+      </div>
+    </WavyBackground>
   );
 }
