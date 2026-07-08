@@ -1,11 +1,12 @@
 
-import { useEffect, useState, useCallback , useRef} from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import api from "../lib/services/api";
 import { useNavigate } from "react-router-dom";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer";
+import ThreeGlobe from "three-globe";
+import api from "../lib/services/api";
 
 // ─────────────────────────────────────────────
 //  Constants
@@ -21,6 +22,73 @@ const CATEGORIES = [
   { value: "designer",  label: "Designer",  color: "#be185d" },
   { value: "other",     label: "Other",     color: "#374151" },
 ];
+
+const VELOCITY = 1;
+const dayNightShader = {
+  vertexShader: `
+    varying vec3 vNormal;
+    varying vec2 vUv;
+    void main() {
+      vNormal = normalize(normalMatrix * normal);
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    #define PI 3.141592653589793
+    uniform sampler2D dayTexture;
+    uniform sampler2D nightTexture;
+    uniform vec2 sunPosition;
+    uniform vec2 globeRotation;
+    varying vec3 vNormal;
+    varying vec2 vUv;
+
+    float toRad(float a) {
+      return a * PI / 180.0;
+    }
+
+    vec3 polarToCartesian(vec2 c) {
+      float theta = toRad(90.0 - c.x);
+      float phi = toRad(90.0 - c.y);
+      return vec3(
+        sin(phi) * cos(theta),
+        cos(phi),
+        sin(phi) * sin(theta)
+      );
+    }
+
+    void main() {
+      float invLon = toRad(globeRotation.x);
+      float invLat = -toRad(globeRotation.y);
+      mat3 rotX = mat3(
+        1.0, 0.0, 0.0,
+        0.0, cos(invLat), -sin(invLat),
+        0.0, sin(invLat), cos(invLat)
+      );
+      mat3 rotY = mat3(
+        cos(invLon), 0.0, sin(invLon),
+        0.0, 1.0, 0.0,
+        -sin(invLon), 0.0, cos(invLon)
+      );
+      vec3 rotatedSunDirection = rotX * rotY * polarToCartesian(sunPosition);
+      float intensity = dot(normalize(vNormal), normalize(rotatedSunDirection));
+      vec4 dayColor = texture2D(dayTexture, vUv);
+      vec4 nightColor = texture2D(nightTexture, vUv);
+      float blendFactor = smoothstep(-0.1, 0.1, intensity);
+      gl_FragColor = mix(nightColor, dayColor, blendFactor);
+    }
+  `,
+};
+
+const sunPosAt = (dt) => {
+  const date = new Date(dt);
+  const dayOfYear = Math.floor((date - new Date(Date.UTC(date.getUTCFullYear(), 0, 0))) / 86400000);
+  const declination = 23.44 * Math.sin(((2 * Math.PI) / 365) * (dayOfYear - 80));
+  const hourAngle = ((date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600 - 12) * 15) * (Math.PI / 180);
+  const longitude = hourAngle * (180 / Math.PI);
+  const latitude = declination * (180 / Math.PI);
+  return [longitude, latitude];
+};
 
 const categoryColor = (cat) =>
   CATEGORIES.find((c) => c.value === cat?.toLowerCase())?.color || "#1e3a5f";
@@ -57,22 +125,6 @@ const jitterCoords = (sellers) => {
   });
 };
 
-const makeIcon = (color) =>
-  L.divIcon({
-    className: "",
-    html: `<div style="
-      width:14px;height:14px;border-radius:50%;
-      background:${color};
-      border:2px solid #fff;
-      box-shadow:0 2px 8px rgba(0,0,0,0.25);
-    "></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
-
-// ─────────────────────────────────────────────
-//  Avatar
-// ─────────────────────────────────────────────
 const SellerAvatar = ({ seller }) => {
   if (seller.avatar?.url) {
     return (
@@ -87,6 +139,7 @@ const SellerAvatar = ({ seller }) => {
       />
     );
   }
+
   return (
     <div style={{
       width: 40, height: 40, borderRadius: "50%",
@@ -99,65 +152,145 @@ const SellerAvatar = ({ seller }) => {
   );
 };
 
-// ─────────────────────────────────────────────
-//  Main Component
-// ─────────────────────────────────────────────
+const createHtmlElement = (seller, onSelect) => {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.style.pointerEvents = "auto";
+  element.style.cursor = "pointer";
+  element.style.display = "inline-flex";
+  element.style.alignItems = "center";
+  element.style.justifyContent = "center";
+  element.style.padding = "0";
+  element.style.border = "none";
+  element.style.background = "transparent";
+  element.style.boxShadow = "none";
+  element.style.width = "12px";
+  element.style.height = "12px";
+
+  const dot = document.createElement("span");
+  dot.style.width = "12px";
+  dot.style.height = "12px";
+  dot.style.borderRadius = "50%";
+  dot.style.background = categoryColor(seller.businessCategory);
+  dot.style.display = "block";
+  dot.style.boxShadow = "0 0 0 2px rgba(255,255,255,0.85)";
+  element.appendChild(dot);
+
+  element.addEventListener("click", (event) => {
+    event.stopPropagation();
+    onSelect(seller, event);
+  });
+
+  return element;
+};
+
 export default function MapView({ searchQuery = "", selectedCategory = "all" }) {
-  const navigate   = useNavigate();
- 
+  const navigate = useNavigate();
   const currentUser = useSelector((s) => s.auth.user);
-const mapRef = useRef(null);
-  const [sellers,  setSellers]  = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
 
-  // ── Fetch sellers from DB ──────────────────────────────────
+  const globeContainer = useRef(null);
+  const sceneRef = useRef(null);
+  const cameraRef = useRef(null);
+  const rendererRef = useRef(null);
+  const labelRendererRef = useRef(null);
+  const controlsRef = useRef(null);
+  const globeRef = useRef(null);
+  const frameRef = useRef(null);
+  const globeMaterialRef = useRef(null);
+
+  const [sellers, setSellers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedSeller, setSelectedSeller] = useState(null);
+  const [popupPosition, setPopupPosition] = useState({ x: 24, y: 24 });
+  const [globeReady, setGlobeReady] = useState(false);
+
   const fetchSellers = useCallback(async () => {
-  setLoading(true);
-  setError(null);
-  try {
-    const params = new URLSearchParams();
-    if (selectedCategory !== "all") params.append("category", selectedCategory);
-    if (searchQuery.trim())         params.append("q", searchQuery.trim());
+    setLoading(true);
+    setError(null);
 
-    const { data } = await api.get(`/user/map-sellers?${params}`);
-    // if (data.success) setSellers(data.users || []);
-    if (data.success) setSellers(jitterCoords(data.users || []));
-    else throw new Error(data.message || "Failed to load sellers");
-  } catch (err) {
-    console.error("Map fetch failed:", err);
-    setError("Could not load sellers. Please try again.");
-  } finally {
-    setLoading(false);
-  }
-}, [searchQuery, selectedCategory]);
+    try {
+      const params = new URLSearchParams();
+      if (selectedCategory !== "all") params.append("category", selectedCategory);
+      if (searchQuery.trim()) params.append("q", searchQuery.trim());
 
-  // useEffect(() => {
-  //   // Debounce search queries
-  //   const timer = setTimeout(fetchSellers, searchQuery ? 400 : 0);
-  //   return () => clearTimeout(timer);
-  // }, [fetchSellers, searchQuery]);
+      const { data } = await api.get(`/user/map-sellers?${params}`);
+      if (data.success) setSellers(jitterCoords(data.users || []));
+      else throw new Error(data.message || "Failed to load sellers");
+    } catch (err) {
+      console.error("Globe fetch failed:", err);
+      setError("Could not load sellers. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, selectedCategory]);
+
+  const selectSeller = useCallback((seller, event) => {
+    const rect = globeContainer.current?.getBoundingClientRect();
+    if (rect && event?.clientX != null && event?.clientY != null) {
+      const rawX = event.clientX - rect.left;
+      const rawY = event.clientY - rect.top;
+      const x = Math.min(Math.max(rawX + 12, 24), Math.max(24, rect.width - 260));
+      const y = Math.min(Math.max(rawY + 12, 24), Math.max(24, rect.height - 220));
+      setPopupPosition({ x, y });
+    } else {
+      setPopupPosition({ x: 24, y: 24 });
+    }
+    setSelectedSeller(seller);
+  }, []);
+
+  const handleFollow = useCallback(async (seller, e) => {
+    e?.stopPropagation?.();
+    const { id, isFollowing } = seller;
+
+    setSellers((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        return isFollowing
+          ? { ...s, isFollowing: false, followersCount: Math.max(0, (s.followersCount || 0) - 1) }
+          : { ...s, isFollowing: true, followersCount: (s.followersCount || 0) + 1 };
+      })
+    );
+
+    try {
+      if (isFollowing) await api.delete(`/follow/${id}`);
+      else await api.post(`/follow/${id}`);
+    } catch {
+      setSellers((prev) => prev.map((s) => (s.id === id ? { ...s, isFollowing } : s)));
+    }
+  }, []);
+
+  const handleMessage = useCallback((seller, e) => {
+    e?.stopPropagation?.();
+    navigate(`/messages?with=${seller.id}`);
+  }, [navigate]);
+
+  const handleViewProfile = useCallback((seller, e) => {
+    e?.stopPropagation?.();
+    if (seller.username) navigate(`/profile/${seller.username}`);
+  }, [navigate]);
 
   const flyToSearch = useCallback(async (query) => {
-    if (!query?.trim() || !mapRef.current) return;
+    if (!query?.trim() || !globeRef.current || !cameraRef.current || !controlsRef.current) return;
+
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
         { headers: { "User-Agent": "Erovians/1.0" } }
       );
       const data = await res.json();
-      if (data?.[0]) {
-       const zoom = 
-          data[0].type === "country" ? 5 :
-          data[0].type === "state" ? 7 :
-          data[0].type === "city" ? 10 : 8;
+      if (!data?.[0]) return;
 
-        mapRef.current.setView(
-          [parseFloat(data[0].lat), parseFloat(data[0].lon)],
-          zoom
-        );
-      }
-    } catch {}
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      const coords = globeRef.current.getCoords(lat, lng, 220);
+      cameraRef.current.position.set(coords.x, coords.y, coords.z);
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.update();
+      globeRef.current.setPointOfView(cameraRef.current);
+    } catch {
+      // silent fallback
+    }
   }, []);
 
   useEffect(() => {
@@ -168,235 +301,378 @@ const mapRef = useRef(null);
     return () => clearTimeout(timer);
   }, [fetchSellers, flyToSearch, searchQuery]);
 
-  // ── Follow / Unfollow ─────────────────────────────────────
- const handleFollow = async (seller, e) => {
-  e.stopPropagation();
-  const { id, isFollowing } = seller;
+  useEffect(() => {
+    const container = globeContainer.current;
+    if (!container) return;
 
-  // Optimistic update
-  setSellers((prev) =>
-    prev.map((s) => {
-      if (s.id !== id) return s;
-      return isFollowing
-        ? { ...s, isFollowing: false, followersCount: Math.max(0, (s.followersCount || 0) - 1) }
-        : { ...s, isFollowing: true,  followersCount: (s.followersCount || 0) + 1 };
-    })
-  );
+    try {
+      container.replaceChildren();
 
-  try {
-    if (isFollowing) {
-      await api.delete(`/follow/${id}`);
-    } else {
-      await api.post(`/follow/${id}`);
+      const scene = new THREE.Scene();
+      scene.background = null;
+      const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 2000);
+      camera.position.set(0, 0, 270);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setClearColor(0x000000, 0);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.domElement.style.width = "100%";
+      renderer.domElement.style.height = "100%";
+      container.appendChild(renderer.domElement);
+
+      const labelRenderer = new CSS2DRenderer();
+      labelRenderer.setSize(container.clientWidth, container.clientHeight);
+      labelRenderer.domElement.style.position = "absolute";
+      labelRenderer.domElement.style.top = "0";
+      labelRenderer.domElement.style.left = "0";
+      labelRenderer.domElement.style.pointerEvents = "none";
+      container.appendChild(labelRenderer.domElement);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(150, 100, 100);
+      scene.add(ambientLight, directionalLight);
+
+      const globe = new ThreeGlobe({ waitForGlobeReady: false })
+        .showAtmosphere(false)
+        .pointsData([])
+        .pointLat("lat")
+        .pointLng("lng")
+        .pointColor(() => "#fdbf5a")
+        .pointAltitude(0.015)
+        .pointRadius(0.3)
+        .pointsTransitionDuration(0)
+        .htmlElementsData([])
+        .htmlLat("lat")
+        .htmlLng("lng")
+        .htmlAltitude(0.01)
+        .htmlElement((seller) => createHtmlElement(seller, selectSeller));
+
+      scene.add(globe);
+
+      const textureLoader = new THREE.TextureLoader();
+      Promise.all([
+        textureLoader.loadAsync("https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-day.jpg"),
+        textureLoader.loadAsync("https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg"),
+      ])
+        .then(([dayTexture, nightTexture]) => {
+          const material = new THREE.ShaderMaterial({
+            uniforms: {
+              dayTexture: { value: dayTexture },
+              nightTexture: { value: nightTexture },
+              sunPosition: { value: new THREE.Vector2() },
+              globeRotation: { value: new THREE.Vector2() },
+            },
+            vertexShader: dayNightShader.vertexShader,
+            fragmentShader: dayNightShader.fragmentShader,
+          });
+          globe.globeMaterial(material);
+          globeMaterialRef.current = material;
+        })
+        .catch((err) => {
+          console.warn("Unable to load globe textures", err);
+        });
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.rotateSpeed = 0.45;
+      controls.zoomSpeed = 0.7;
+      controls.minDistance = 100 / Math.tan((camera.fov * Math.PI / 180) / 2) + 24;
+      controls.maxDistance = 500;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.25;
+      controls.addEventListener("change", () => {
+        globe.setPointOfView(camera);
+        const { lng, lat } = globe.toGeoCoords(camera.position);
+        if (globeMaterialRef.current) {
+          globeMaterialRef.current.uniforms.globeRotation.value.set(lng, lat);
+        }
+      });
+
+      const animate = () => {
+        controls.update();
+        globe.setPointOfView(camera);
+        if (globeMaterialRef.current) {
+          globeMaterialRef.current.uniforms.sunPosition.value.set(...sunPosAt(Date.now()));
+        }
+        renderer.render(scene, camera);
+        labelRenderer.render(scene, camera);
+        frameRef.current = requestAnimationFrame(animate);
+      };
+      animate();
+
+      const handleResize = () => {
+        if (!container) return;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        controls.minDistance = 100 / Math.tan((camera.fov * Math.PI / 180) / 2) + 24;
+        renderer.setSize(width, height);
+        labelRenderer.setSize(width, height);
+      };
+      window.addEventListener("resize", handleResize);
+
+      sceneRef.current = scene;
+      cameraRef.current = camera;
+      rendererRef.current = renderer;
+      labelRendererRef.current = labelRenderer;
+      controlsRef.current = controls;
+      globeRef.current = globe;
+      setGlobeReady(true);
+      setError(null);
+
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        cancelAnimationFrame(frameRef.current);
+        controls.dispose();
+        renderer.dispose();
+        labelRenderer.domElement.remove();
+        renderer.domElement.remove();
+        container.replaceChildren();
+      };
+    } catch (err) {
+      console.error("Unable to initialize globe", err);
+      setGlobeReady(false);
+      setError("The globe view is unavailable right now.");
     }
-  } catch {
-    // Rollback on failure
-    setSellers((prev) =>
-      prev.map((s) => s.id === id ? { ...s, isFollowing } : s)
-    );
-  }
-};
+  }, [selectSeller]);
 
-  // ── Message ───────────────────────────────────────────────
-const handleMessage = (seller, e) => {
-  e.stopPropagation();
-  navigate(`/messages?with=${seller.id}`);
-};
+  useEffect(() => {
+    if (!globeRef.current) return;
 
-  // ── View Profile ──────────────────────────────────────────
-  const handleViewProfile = (seller, e) => {
-    e.stopPropagation();
-    if (seller.username) navigate(`/profile/${seller.username}`);
-  };
+    const points = jitterCoords(sellers)
+      .map((seller) => {
+        const coords = seller.location?.coordinates?.coordinates;
+        if (!coords || coords.length < 2) return null;
+        return {
+          ...seller,
+          lat: coords[1],
+          lng: coords[0],
+        };
+      })
+      .filter(Boolean);
+
+    globeRef.current
+      .pointsData(points)
+      .htmlElementsData(points)
+      .pointColor((seller) =>
+        seller.id === currentUser?.id ? "#22c55e" : categoryColor(seller.businessCategory)
+      );
+  }, [sellers, currentUser]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-
-      {/* Loading indicator */}
       {loading && (
         <div style={{
           position: "absolute", top: 12, left: "50%",
-          transform: "translateX(-50%)", zIndex: 1000,
+          transform: "translateX(-50%)",
+          zIndex: 10,
           background: "rgba(255,255,255,0.95)",
-          padding: "6px 16px", borderRadius: 20,
-          fontSize: 12, fontWeight: 600, color: "#1e3a5f",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
-          display: "flex", alignItems: "center", gap: 6,
+          padding: "8px 16px",
+          borderRadius: 24,
+          fontSize: 13,
+          fontWeight: 600,
+          color: "#1e3a5f",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
         }}>
-          <span style={{
-            width: 10, height: 10, borderRadius: "50%",
-            border: "2px solid #1e3a5f",
-            borderTopColor: "transparent",
-            display: "inline-block",
-            animation: "spin 0.7s linear infinite",
-          }} />
-          Searching...
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          Searching sellers...
         </div>
       )}
 
-      {/* Error indicator */}
       {error && !loading && (
         <div style={{
           position: "absolute", top: 12, left: "50%",
-          transform: "translateX(-50%)", zIndex: 1000,
-          background: "#fee2e2", padding: "6px 16px",
-          borderRadius: 20, fontSize: 12, fontWeight: 600,
-          color: "#991b1b", boxShadow: "0 2px 12px rgba(0,0,0,0.1)",
+          transform: "translateX(-50%)",
+          zIndex: 10,
+          background: "#fee2e2",
+          padding: "8px 16px",
+          borderRadius: 24,
+          fontSize: 13,
+          fontWeight: 600,
+          color: "#991b1b",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
           cursor: "pointer",
         }} onClick={fetchSellers}>
-          ⚠️ {error} — Click to retry
+          ⚠️ {error} — click to retry
         </div>
       )}
 
-      {/* No results */}
-      {!loading && !error && sellers.length === 0 && (
+      {error && !globeReady && !loading && (
         <div style={{
-          position: "absolute", top: 12, left: "50%",
-          transform: "translateX(-50%)", zIndex: 1000,
-          background: "rgba(255,255,255,0.95)",
-          padding: "6px 16px", borderRadius: 20,
-          fontSize: 12, fontWeight: 600, color: "#6b7280",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.1)",
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 5,
+          background: "rgba(255,255,255,0.86)",
+          color: "#4b4a45",
+          textAlign: "center",
+          padding: 24,
+          fontSize: 14,
+          fontWeight: 600,
         }}>
-          No sellers found in this area yet
+          {error}
         </div>
       )}
 
-      <MapContainer
-         ref={mapRef}
-        center={[22, 78]}
-        zoom={4}
-        minZoom={2}
-        maxZoom={18}
-        scrollWheelZoom={true}
-        dragging={true}
-        maxBounds={[[-90, -180], [90, 180]]}
-        maxBoundsViscosity={1.0}
-        style={{ width: "100%", height: "100%" }}
-        zoomControl={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+      <div
+        ref={globeContainer}
+        style={{
+          width: "100%",
+          height: "100%",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          bottom: "8%",
+          transform: "translateX(-50%)",
+          width: "58%",
+          height: "16%",
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(15, 23, 42, 0.28) 0%, rgba(15, 23, 42, 0.02) 70%, transparent 100%)",
+          filter: "blur(6px)",
+          pointerEvents: "none",
+          zIndex: 1,
+        }}
+      />
 
-        {sellers.map((seller) => {
-          const coords = seller.location?.coordinates?.coordinates;
-          if (!coords || coords.length < 2) return null;
-
-          const [lng, lat] = coords;
-          if (!lat || !lng) return null;
-
-          const color    = categoryColor(seller.businessCategory);
-          const isMe     = currentUser?.id === seller.id;
-          const city     = seller.location?.city;
-          const country  = seller.location?.country;
-
-          return (
-            <Marker
-              key={seller.id}
-              position={[lat, lng]}
-              icon={makeIcon(isMe ? "#22c55e" : color)}
-            >
-              <Popup minWidth={240} maxWidth={280}>
-                <div style={{ fontFamily: "sans-serif" }}>
-
-                  {/* Header */}
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-                    <SellerAvatar seller={seller} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontWeight: 700, fontSize: 13,
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                      }}>
-                        {seller.fullName}
-                        {seller.isVerifiedBadge && (
-                          <span style={{ marginLeft: 4, color: "#3b82f6", fontSize: 12 }}>✓</span>
-                        )}
-                        {isMe && (
-                          <span style={{ marginLeft: 4, fontSize: 10, color: "#22c55e", fontWeight: 600 }}>You</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#6b7280" }}>
-                        {seller.designation || "Erovians Member"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Category + Location */}
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                    {seller.businessCategory && (
-                      <span style={{
-                        fontSize: 11, padding: "2px 10px", borderRadius: 999,
-                        background: color + "18", color, fontWeight: 600,
-                        textTransform: "capitalize",
-                      }}>
-                        {seller.businessCategory}
-                      </span>
-                    )}
-                    {(city || country) && (
-                      <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                        📍 {[city, country].filter(Boolean).join(", ")}
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 10 }}>
-                    {seller.followersCount ?? 0} followers
-                  </div>
-
-                  {/* Action Buttons */}
-                  {!isMe && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button
-                          onClick={(e) => handleFollow(seller, e)}
-                          style={{
-                            flex: 1, padding: "7px 0", borderRadius: 8,
-                            fontSize: 12, fontWeight: 600, border: "none",
-                            cursor: "pointer",
-                            background: seller.isFollowing ? "#f3f4f6" : "#1e3a5f",
-color: seller.isFollowing ? "#374151" : "#fff",
-                            transition: "opacity 0.2s",
-                          }}
-                        >
-                        {seller.isFollowing ? "Following" : "Follow"}
-                        </button>
-
-                      <button
-  onClick={(e) => handleMessage(seller, e)}
-  style={{
-    flex: 1, padding: "7px 0", borderRadius: 8,
-    fontSize: 12, fontWeight: 600,
-    border: "1.5px solid #1e3a5f",
-    background: "#fff", color: "#1e3a5f", cursor: "pointer",
-  }}
->
-  Message
-</button>
-                      </div>
-
-                      <button
-                        onClick={(e) => handleViewProfile(seller, e)}
-                        style={{
-                          width: "100%", padding: "7px 0", borderRadius: 8,
-                          fontSize: 12, fontWeight: 600,
-                          border: "1.5px solid #e5e7eb",
-                          background: "#fff", color: "#374151", cursor: "pointer",
-                        }}
-                      >
-                        View Profile
-                      </button>
-                    </div>
-                  )}
-
+      {selectedSeller && (
+        <div style={{
+          position: "absolute",
+          left: popupPosition.x,
+          top: popupPosition.y,
+          zIndex: 20,
+          width: "min(360px, calc(100% - 32px))",
+          background: "rgba(255,255,255,0.98)",
+          borderRadius: 24,
+          border: "1px solid rgba(229,231,235,0.9)",
+          boxShadow: "0 20px 60px rgba(15,23,42,0.12)",
+          padding: "18px",
+          transform: "translate(-50%, -110%)",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <SellerAvatar seller={selectedSeller} />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: "#111827" }}>
+                  {selectedSeller.fullName}
                 </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </MapContainer>
+                <div style={{ fontSize: 13, color: "#6b7280" }}>
+                  {selectedSeller.designation || "Erovians member"}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedSeller(null)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#6b7280",
+                cursor: "pointer",
+                fontSize: 20,
+                lineHeight: 1,
+              }}
+            >
+              x
+            </button>
+          </div>
+
+          <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {selectedSeller.businessCategory && (
+              <span style={{
+                display: "inline-flex",
+                alignItems: "center",
+                fontSize: 12,
+                fontWeight: 600,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: categoryColor(selectedSeller.businessCategory) + "18",
+                color: categoryColor(selectedSeller.businessCategory),
+              }}>
+                {selectedSeller.businessCategory}
+              </span>
+            )}
+            {(selectedSeller.location?.city || selectedSeller.location?.country) && (
+              <span style={{
+                fontSize: 12,
+                color: "#6b7280",
+              }}>
+                📍 {[selectedSeller.location?.city, selectedSeller.location?.country].filter(Boolean).join(", ")}
+              </span>
+            )}
+          </div>
+
+          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {!currentUser || currentUser.id !== selectedSeller.id ? (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => handleFollow(selectedSeller, e)}
+                  style={{
+                    flex: 1,
+                    minWidth: 120,
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    border: "none",
+                    background: selectedSeller.isFollowing ? "#f3f4f6" : "#1e3a5f",
+                    color: selectedSeller.isFollowing ? "#374151" : "#fff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {selectedSeller.isFollowing ? "Following" : "Follow"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleMessage(selectedSeller, e)}
+                  style={{
+                    flex: 1,
+                    minWidth: 120,
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    border: "1px solid #1e3a5f",
+                    background: "#fff",
+                    color: "#1e3a5f",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Message
+                </button>
+              </>
+            ) : (
+              <div style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>
+                This is you.
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => handleViewProfile(selectedSeller, e)}
+            style={{
+              width: "100%",
+              marginTop: 12,
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid #e5e7eb",
+              background: "#fff",
+              color: "#111827",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            View Profile
+          </button>
+        </div>
+      )}
     </div>
   );
 }
