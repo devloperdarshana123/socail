@@ -1,5 +1,5 @@
 
-
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import EmojiPicker from "emoji-picker-react";
@@ -211,8 +211,6 @@ const handleDelete = async () => {
   });
 };
 
-
-
 const toggleHighlight = async (highlightId) => {
   const result = await dispatch(addToHighlight({ highlightId, storyId: story.id }));
   
@@ -236,7 +234,6 @@ const toggleHighlight = async (highlightId) => {
   }
 };
 
-
 const createNewHighlight = async () => {
   if (!newTitle.trim()) return;
   const result = await dispatch(createHighlight({
@@ -254,7 +251,7 @@ const createNewHighlight = async () => {
 
   if (!story) return null;
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -624,6 +621,7 @@ const createNewHighlight = async () => {
 
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.getElementById("storyViewer")
   );
 }

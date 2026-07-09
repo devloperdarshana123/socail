@@ -1,5 +1,5 @@
 
-
+import { createPortal } from "react-dom";
 import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, Loader2, Type, Image } from "lucide-react";
@@ -134,7 +134,7 @@ export default function StoryCreate({ onClose, onCreated }) {
   const isMediaReady = !!file && !uploading;
   const isTextReady = text.trim().length > 0 && !uploading;
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
@@ -142,10 +142,10 @@ export default function StoryCreate({ onClose, onCreated }) {
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
         style={{ zIndex: 99999 }}
-      
+        onClick={onClose}
       >
         <motion.div
-          initial={{ scale: 0.92, opacity: 0 }}
+          initial={{ scale:     0.92, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.92, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
@@ -381,6 +381,6 @@ export default function StoryCreate({ onClose, onCreated }) {
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>, document.getElementById("modal-root")
   );
 }
