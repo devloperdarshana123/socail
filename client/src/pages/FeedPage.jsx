@@ -167,10 +167,10 @@ const CATEGORIES = [
 export default function FeedPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [mapSearch, setMapSearch] = useState("");
 
   return (
     <WavyBackground>
+      
       <div className="min-h-screen" style={{ background: "transparent" }}>
         <style>{`
           @keyframes feedFadeUp {
@@ -189,9 +189,8 @@ export default function FeedPage() {
         >
           <StoryBar />
         </div>
-
         <div className="flex items-center justify-center min-h-[calc(100vh-56px)] px-4 py-10">
-          <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center lg:items-start gap-10 lg:gap-14">
+          <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center lg:items-start justify-center gap-10 lg:gap-14">
             <div
               className="w-full lg:w-[32rem] flex flex-col items-center text-center shrink-0 fp-fade-1"
               style={{ marginTop: "-40px" }}
@@ -232,13 +231,11 @@ export default function FeedPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && setMapSearch(searchQuery)}
                   placeholder="e.g. marble supplier Delhi..."
                   className="flex-1 px-4 py-3 text-sm outline-none bg-transparent"
                   style={{ color: "#2A2A28" }}
                 />
                 <button
-                  onClick={() => setMapSearch(searchQuery)}
                   className="px-6 py-3 text-sm font-semibold text-white shrink-0 transition-opacity hover:opacity-90"
                   style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #16304e 100%)" }}
                 >
@@ -273,9 +270,9 @@ export default function FeedPage() {
               </div>
             </div>
 
-            <div className="w-full lg:flex-1 flex items-start justify-start fp-fade-2">
-              <div style={{ width: "min(620px, 90vw)", height: "min(620px, 90vw)", marginTop: "0px", alignSelf: "flex-start" }}>
-                <MapView searchQuery={mapSearch} selectedCategory={activeCategory} />
+            <div className="w-full lg:flex-1 flex items-start justify-center fp-fade-2">
+              <div style={{ width: "min(560px, 90vw)", height: "min(560px, 90vw)" }}>
+                <MapView />
               </div>
             </div>
           </div>

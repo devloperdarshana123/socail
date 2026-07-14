@@ -6,22 +6,50 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer";
 import ThreeGlobe from "three-globe";
+import { feature } from "topojson-client";
+import countriesTopology from "world-atlas/countries-110m.json";
 import api from "../lib/services/api";
+import { findFeatureAtLatLng } from "../utils/geo";
 
 // ─────────────────────────────────────────────
 //  Constants
 // ─────────────────────────────────────────────
+// world-atlas ships country shapes as compact TopoJSON; `feature()` expands
+// that into a standard GeoJSON FeatureCollection (one Feature per country).
+// Computed once at module load since the border data never changes at runtime.
+const COUNTRY_FEATURES = feature(countriesTopology, countriesTopology.objects.countries).features;
+
+// Dot color per businessCategory. The current user's own dot is always green
+// (see pointColor below) — no category color here uses green, to avoid clashing.
 const CATEGORIES = [
-  { value: "all",       label: "All",       color: "#1e3a5f" },
+  { value: "all",                    label: "All",                    color: "#1e3a5f" },
+  { value: "natural_stone_supplier", label: "Natural Stone Supplier", color: "#7c3aed" },
+  { value: "quarry_owner",           label: "Quarry Owner",           color: "#b45309" },
+  { value: "stone_processor",        label: "Stone Processor",        color: "#0369a1" },
+  { value: "cnc_fabrication",        label: "CNC & Fabrication",      color: "#be123c" },
+  { value: "tiles_surfaces",         label: "Tiles & Surfaces",       color: "#ca8a04" },
+  { value: "interior_designer",      label: "Interior Designer",      color: "#db2777" },
+  { value: "architect",              label: "Architect",              color: "#4338ca" },
+  { value: "contractor_builder",     label: "Contractor & Builder",   color: "#92400e" },
+  { value: "importer_exporter",      label: "Importer / Exporter",    color: "#0e7490" },
+  { value: "distributor_wholesaler", label: "Distributor / Wholesaler", color: "#dc2626" },
+  { value: "retailer",               label: "Retailer",               color: "#9333ea" },
+  { value: "equipment_supplier",     label: "Equipment Supplier",     color: "#475569" },
+  { value: "other",                  label: "Other",                  color: "#78716c" },
+  // Legacy values from older accounts, mapped onto the closest new category's color.
   { value: "marble",    label: "Marble",    color: "#7c3aed" },
   { value: "granite",   label: "Granite",   color: "#b45309" },
   { value: "limestone", label: "Limestone", color: "#0369a1" },
-  { value: "cnc",       label: "CNC",       color: "#065f46" },
-  { value: "quarry",    label: "Quarry",    color: "#9f1239" },
-  { value: "supplier",  label: "Supplier",  color: "#1d4ed8" },
-  { value: "designer",  label: "Designer",  color: "#be185d" },
-  { value: "other",     label: "Other",     color: "#374151" },
+  { value: "cnc",       label: "CNC",       color: "#be123c" },
+  { value: "quarry",    label: "Quarry",    color: "#b45309" },
+  { value: "supplier",  label: "Supplier",  color: "#475569" },
+  { value: "designer",  label: "Designer",  color: "#db2777" },
 ];
+
+// Canonical categories only (skips "all" and legacy aliases) — what the legend displays.
+const LEGEND_ITEMS = CATEGORIES.filter(
+  (c) => !["all", "marble", "granite", "limestone", "cnc", "quarry", "supplier", "designer"].includes(c.value)
+);
 
 const VELOCITY = 1;
 const dayNightShader = {
@@ -171,7 +199,7 @@ const createHtmlElement = (seller, onSelect) => {
   dot.style.width = "12px";
   dot.style.height = "12px";
   dot.style.borderRadius = "50%";
-  dot.style.background = categoryColor(seller.businessCategory);
+  dot.style.background = seller.dotColor || categoryColor(seller.businessCategory);
   dot.style.display = "block";
   dot.style.boxShadow = "0 0 0 2px rgba(255,255,255,0.85)";
   element.appendChild(dot);
@@ -204,6 +232,9 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [popupPosition, setPopupPosition] = useState({ x: 24, y: 24 });
   const [globeReady, setGlobeReady] = useState(false);
+  const [hoveredCountry, setHoveredCountry] = useState(null);
+  const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
+  const [legendOpen, setLegendOpen] = useState(false);
 
   const fetchSellers = useCallback(async () => {
     setLoading(true);
@@ -337,6 +368,11 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
 
       const globe = new ThreeGlobe({ waitForGlobeReady: false })
         .showAtmosphere(false)
+        .polygonsData(COUNTRY_FEATURES)
+        .polygonCapColor(() => "rgba(255,255,255,0.02)")
+        .polygonSideColor(() => "rgba(0,0,0,0)")
+        .polygonStrokeColor(() => "rgba(255,255,255,0.35)")
+        .polygonAltitude(0.003)
         .pointsData([])
         .pointLat("lat")
         .pointLng("lng")
@@ -392,6 +428,40 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
         }
       });
 
+      // Invisible sphere matching the globe's exact radius, used only for
+      // raycasting hit-tests — keeps hover math independent of the visible
+      // polygon border altitude bumps.
+      const hitSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(globe.getGlobeRadius(), 48, 48),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      scene.add(hitSphere);
+
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+
+      const handlePointerMove = (event) => {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObject(hitSphere);
+
+        if (hits.length > 0) {
+          const { lat, lng } = globe.toGeoCoords(hits[0].point);
+          const match = findFeatureAtLatLng(lat, lng, COUNTRY_FEATURES);
+          setHoveredCountry(match ? match.properties.name : null);
+          setHoverPosition({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+        } else {
+          setHoveredCountry(null);
+        }
+      };
+      const handlePointerLeave = () => setHoveredCountry(null);
+
+      renderer.domElement.addEventListener("pointermove", handlePointerMove);
+      renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
+
       const animate = () => {
         controls.update();
         globe.setPointOfView(camera);
@@ -427,6 +497,8 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
 
       return () => {
         window.removeEventListener("resize", handleResize);
+        renderer.domElement.removeEventListener("pointermove", handlePointerMove);
+        renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
         cancelAnimationFrame(frameRef.current);
         controls.dispose();
         renderer.dispose();
@@ -444,6 +516,10 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
   useEffect(() => {
     if (!globeRef.current) return;
 
+    const isSelf = (seller) =>
+      (currentUser?.id && String(seller.id) === String(currentUser.id)) ||
+      (currentUser?.username && seller.username === currentUser.username);
+
     const points = jitterCoords(sellers)
       .map((seller) => {
         const coords = seller.location?.coordinates?.coordinates;
@@ -452,6 +528,7 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
           ...seller,
           lat: coords[1],
           lng: coords[0],
+          dotColor: isSelf(seller) ? "#22c55e" : categoryColor(seller.businessCategory),
         };
       })
       .filter(Boolean);
@@ -459,13 +536,43 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
     globeRef.current
       .pointsData(points)
       .htmlElementsData(points)
-      .pointColor((seller) =>
-        seller.id === currentUser?.id ? "#22c55e" : categoryColor(seller.businessCategory)
-      );
+      .pointColor((seller) => seller.dotColor);
   }, [sellers, currentUser]);
+
+  const hoveredCountryUserCount = hoveredCountry
+    ? sellers.filter((seller) => {
+        const coords = seller.location?.coordinates?.coordinates;
+        if (!coords || coords.length < 2) return false;
+        const [lng, lat] = coords;
+        const match = findFeatureAtLatLng(lat, lng, COUNTRY_FEATURES);
+        return match?.properties?.name === hoveredCountry;
+      }).length
+    : 0;
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {hoveredCountry && (
+        <div style={{
+          position: "absolute",
+          left: hoverPosition.x + 14,
+          top: hoverPosition.y + 14,
+          zIndex: 30,
+          pointerEvents: "none",
+          background: "rgba(15,23,42,0.92)",
+          color: "#fff",
+          padding: "6px 12px",
+          borderRadius: 8,
+          fontSize: 12.5,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+        }}>
+          {hoveredCountry}
+          <span style={{ opacity: 0.7, fontWeight: 500, marginLeft: 6 }}>
+            · {hoveredCountryUserCount} user{hoveredCountryUserCount === 1 ? "" : "s"}
+          </span>
+        </div>
+      )}
       {loading && (
         <div style={{
           position: "absolute", top: 12, left: "50%",
@@ -541,6 +648,69 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
           zIndex: 1,
         }}
       />
+
+      <div
+        onMouseEnter={() => setLegendOpen(true)}
+        onMouseLeave={() => setLegendOpen(false)}
+        style={{ position: "absolute", right: 14, bottom: 14, zIndex: 25 }}
+      >
+        <div style={{
+          width: 34,
+          height: 34,
+          borderRadius: "50%",
+          background: "rgba(15,23,42,0.85)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+          border: "1px solid rgba(255,255,255,0.12)",
+        }}>
+          <span style={{ color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "Georgia, serif", fontStyle: "italic" }}>i</span>
+        </div>
+
+        {legendOpen && (
+          <div style={{
+            position: "absolute",
+            right: 0,
+            bottom: 30,
+            paddingBottom: 12,
+            width: 232,
+            background: "rgba(15,23,42,0.94)",
+            backdropFilter: "blur(10px)",
+            borderRadius: 14,
+            padding: "12px 14px 10px",
+            boxShadow: "0 14px 36px rgba(0,0,0,0.35)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}>
+            <p style={{
+              margin: "0 0 9px",
+              fontSize: 10,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.5)",
+              fontFamily: "system-ui, sans-serif",
+              fontWeight: 700,
+            }}>
+              Map Legend
+            </p>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#22c55e", flexShrink: 0, boxShadow: "0 0 0 2px rgba(255,255,255,0.15)" }} />
+              <span style={{ fontSize: 12.5, color: "#fff", fontFamily: "system-ui, sans-serif", fontWeight: 700 }}>You</span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 230, overflowY: "auto" }}>
+              {LEGEND_ITEMS.map((c) => (
+                <div key={c.value} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: "50%", background: c.color, flexShrink: 0, boxShadow: "0 0 0 2px rgba(255,255,255,0.1)" }} />
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", fontFamily: "system-ui, sans-serif" }}>{c.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {selectedSeller && (
         <div style={{
