@@ -1,4 +1,4 @@
-
+﻿
 
 // import { useState } from "react";
 // import MapView from "../components/MapView";
@@ -37,22 +37,22 @@
 //   return (
 //     <div className="min-h-screen bg-gray-100">
 
-//     {/* ── STORY BAR (top) ── */}
+//     {/* â”€â”€ STORY BAR (top) â”€â”€ */}
 //       <div className="w-full bg-white border-b border-gray-100 shadow-sm px-4 py-3">
 //         <StoryBar />
 //       </div>
 
-//       {/* ── MAIN CONTENT ── */}
+//       {/* â”€â”€ MAIN CONTENT â”€â”€ */}
 //       <div className="flex items-center justify-center min-h-[calc(100vh-56px)] px-4 py-8">
 //         <div className="w-full max-w-6xl flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
 
-//           {/* ── LEFT: AI Search Panel ── */}
+//           {/* â”€â”€ LEFT: AI Search Panel â”€â”€ */}
 //           <div className="w-full lg:w-130 flex flex-col items-center text-center shrink-0" style={{ marginTop: "-50px" }}>
 
 //             {/* 3D Robot */}
 //             <div className="mb-4" style={{ width: "380px", height: "420px", overflow: "hidden" }}>
 //               <iframe
-//                 src="/Robot-V1.html?embed=1"
+//                 src="/Robot-V1.html"
 //                 title="Erovians AI Robot"
 //                 style={{ width: "100%", height: "100%", border: "none", background: "transparent", display: "block" }}
 //                 scrolling="no"
@@ -108,7 +108,7 @@
 //             </div>
 //           </div>
 
-//           {/* ── RIGHT: Map ── */}
+//           {/* â”€â”€ RIGHT: Map â”€â”€ */}
 //           <div className="w-full lg:flex-1 flex items-center justify-center">
 //             <div
 //               className="relative"
@@ -128,7 +128,7 @@
 //         </div>
 //       </div>
 
-//       {/* ── CHATBOT (floating, bottom) ── */}
+//       {/* â”€â”€ CHATBOT (floating, bottom) â”€â”€ */}
 //       <ChatBot />
 //     </div>
 //   );
@@ -209,7 +209,7 @@ export default function FeedPage() {
                   }}
                 />
                 <iframe
-                  src="/Robot-V1.html?embed=1"
+                  src="/Robot-V1.html"
                   title="Erovians AI Robot"
                   style={{ width: "100%", height: "100%", border: "none", background: "transparent", display: "block", position: "relative" }}
                   scrolling="no"
