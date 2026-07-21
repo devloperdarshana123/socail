@@ -10,6 +10,8 @@ import { feature } from "topojson-client";
 import countriesTopology from "world-atlas/countries-110m.json";
 import api from "../lib/services/api";
 import { findFeatureAtLatLng } from "../utils/geo";
+import { useDebouncedCallback } from "../lib/hooks/useDebouncedCallback";
+import { getCachedSellers, setCachedSellers } from "../lib/services/sellersCache";
 
 // ─────────────────────────────────────────────
 //  Constants
@@ -237,6 +239,14 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
   const [legendOpen, setLegendOpen] = useState(false);
 
   const fetchSellers = useCallback(async () => {
+    const cacheKey = `${selectedCategory}|${searchQuery.trim().toLowerCase()}`;
+    const cached = getCachedSellers(cacheKey);
+    if (cached) {
+      setSellers(jitterCoords(cached));
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -246,8 +256,13 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
       if (searchQuery.trim()) params.append("q", searchQuery.trim());
 
       const { data } = await api.get(`/user/map-sellers?${params}`);
-      if (data.success) setSellers(jitterCoords(data.users || []));
-      else throw new Error(data.message || "Failed to load sellers");
+      if (data.success) {
+        const users = data.users || [];
+        setSellers(jitterCoords(users));
+        setCachedSellers(cacheKey, users);
+      } else {
+        throw new Error(data.message || "Failed to load sellers");
+      }
     } catch (err) {
       console.error("Globe fetch failed:", err);
       setError("Could not load sellers. Please try again.");
@@ -324,13 +339,16 @@ export default function MapView({ searchQuery = "", selectedCategory = "all" }) 
     }
   }, []);
 
+  // Debounced so rapid category clicks or fast typing don't each fire a
+  // separate request — settles 250ms after the last change.
+  const debouncedLoadSellers = useDebouncedCallback(() => {
+    fetchSellers();
+    if (searchQuery) flyToSearch(searchQuery);
+  }, 250);
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchSellers();
-      if (searchQuery) flyToSearch(searchQuery);
-    }, searchQuery ? 400 : 0);
-    return () => clearTimeout(timer);
-  }, [fetchSellers, flyToSearch, searchQuery]);
+    debouncedLoadSellers();
+  }, [selectedCategory, searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps -- debouncedLoadSellers wraps the latest fetchSellers/flyToSearch/searchQuery via a ref, intentionally excluded
 
   useEffect(() => {
     const container = globeContainer.current;

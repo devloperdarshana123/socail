@@ -190,8 +190,10 @@ const initialState = {
     resolved_action_taken: 0, resolved_no_action: 0, dismissed: 0,
   },
   priorities: { low: 0, medium: 0, high: 0, critical: 0 },
+  // Defaults to "pending" — the actionable review queue — instead of every
+  // report ever filed. "Reset filters" returns here, not to an unfiltered view.
   filters: {
-    status:        "",
+    status:        "pending",
     targetModel:   "",
     reason:        "",
     priority:      "",

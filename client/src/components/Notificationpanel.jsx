@@ -1,7 +1,7 @@
 
 // ─────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -11,6 +11,7 @@ import {
   fetchNotifications,
   markOneReadLocal,
 } from "../lib/redux/notificationSlice";
+import { bucketByDate, DATE_BUCKET_LABELS } from "../utils/dateBuckets";
 
 export default function NotificationPanel() {
   const dispatch    = useDispatch();
@@ -70,6 +71,12 @@ export default function NotificationPanel() {
     // Yahan navigate kar sakte ho notification ke refId pe
     // e.g., navigate(`/post/${notification.refId}`)
   };
+
+  // ── Group into Today / This Week / This Month / Older sections ─────────
+  const groupedNotifications = useMemo(
+    () => bucketByDate(notifications, "createdAt"),
+    [notifications],
+  );
 
   return (
     <div style={{ position: "relative" }} ref={panelRef}>
@@ -181,14 +188,32 @@ export default function NotificationPanel() {
             </div>
           ) : (
             <>
-              {notifications.map((n) => (
-                <NotificationItem
-                  key={n._id}
-                  notification={n}
-                  onClick={() => handleItemClick(n)}
-                  onDelete={(e) => handleDelete(e, n._id)}
-                />
-              ))}
+              {Object.entries(groupedNotifications).map(([bucket, items]) =>
+                items.length === 0 ? null : (
+                  <div key={bucket}>
+                    <div
+                      style={{
+                        padding:      "8px 16px 4px",
+                        fontSize:     "11px",
+                        fontWeight:   600,
+                        textTransform:"uppercase",
+                        letterSpacing:"0.04em",
+                        color:        "var(--color-text-tertiary)",
+                      }}
+                    >
+                      {DATE_BUCKET_LABELS[bucket]}
+                    </div>
+                    {items.map((n) => (
+                      <NotificationItem
+                        key={n._id}
+                        notification={n}
+                        onClick={() => handleItemClick(n)}
+                        onDelete={(e) => handleDelete(e, n._id)}
+                      />
+                    ))}
+                  </div>
+                )
+              )}
 
               {/* Load more */}
               {hasMore && (

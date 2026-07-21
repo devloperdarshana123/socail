@@ -20,6 +20,7 @@ import {
 } from "../lib/redux/followSlice";
 import useChat from "../lib/hooks/useChat";
 import { getSocket } from "../lib/services/socketManager";
+import { uploadToCloudinarySigned } from "../lib/services/cloudinaryUpload";
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:9080";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (d) =>
@@ -1017,13 +1018,7 @@ const unread = typeof conv.unreadCount === "object"
       if (file.size > 5 * 1024 * 1024) { showToast("Image must be under 5MB"); return; }
       showToast("Uploading...");
       try {
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("upload_preset", import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/upload`, {
-          method: "POST", body: fd,
-        });
-        const data = await res.json();
+        const data = await uploadToCloudinarySigned(file, { folder: "group_avatars", resourceType: "image" });
         const avatarUrl = data.secure_url;
         const backendRes = await fetch(`${BASE_URL}/api/v2/messages/conversations/group/${activeConvId}/rename`, {
           method: "PATCH", credentials: "include",

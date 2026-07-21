@@ -194,9 +194,12 @@ const initialState = {
     removed: 0,
     pending: 0,
   },
+  // Defaults to the flagged (needs-review) queue instead of the full comment
+  // list — admins land on actionable items, not a firehose. "Reset filters"
+  // returns here rather than to an unfiltered view of every comment.
   filters: {
     search:    "",
-    status:    "",
+    status:    "flagged",
     sortBy:    "createdAt",
     sortOrder: "desc",
     page:      1,

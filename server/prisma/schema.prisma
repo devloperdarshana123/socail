@@ -89,6 +89,11 @@ model User {
   reportsEscalated  Report[]                  @relation("ReportEscalated")
   reportsReviewed   Report[]                  @relation("ReportReviewed")
   reportsAgainstMe  Report[]  @relation("ReportedUser")
+
+  // Admin listing filters/sorts (server/src/controllers/admin/admin.user.controller.js)
+  @@index([accountStatus, createdAt])
+  @@index([role])
+  @@index([createdAt])
 }
 
 model RefreshToken {
@@ -159,6 +164,10 @@ model Post {
   saved     Saved[]
   reports   Report[]
   postViews PostView[]
+
+  // Feed/profile/draft cursor pagination (server/src/utils/postHelpers.js)
+  @@index([authorId, createdAt])
+  @@index([isDraft, authorId, createdAt])
 }
 
 model Comment {
@@ -202,7 +211,13 @@ model Comment {
   rootReplies   Comment[] @relation("RootReplies")
 
   likes Like[]
-  reports Report[] 
+  reports Report[]
+
+  // Top-level/reply cursor pagination + admin listing (comment.controller.js, admin.comment.controller.js)
+  @@index([postId, createdAt])
+  @@index([rootCommentId, createdAt])
+  @@index([parentCommentId])
+  @@index([isDeleted, status, createdAt])
 }
 
 model Like {
@@ -243,6 +258,9 @@ model Follow {
   following   User   @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+  // Followers-list lookups (followerId is already the unique constraint's
+  // leading column, so only the reverse direction needs its own index).
+  @@index([followingId])
 }
 
 model Report {
@@ -287,6 +305,8 @@ model Report {
   reviewedBy   User?   @relation("ReportReviewed", fields: [reviewedById], references: [id])
 
   @@unique([reportedById, postId])
+  // Admin report queue (admin.report.controller.js: where.status, orderBy priority+createdAt)
+  @@index([status, createdAt])
 }
 
 model Saved {
@@ -336,6 +356,10 @@ model Notification {
 
   senderId String?
   sender   User?   @relation("NotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  // Inbox pagination + unread count (server/src/utils/notificationHelpers.js)
+  @@index([receiverId, createdAt])
+  @@index([receiverId, isRead])
 }
 
 model Conversation {
@@ -400,6 +424,9 @@ model Message {
   sender   User   @relation("sender", fields: [senderId], references: [id], onDelete: Cascade)
 
   receipts MessageReceipt[]
+
+  // Conversation history pagination (server/src/utils/messageHelpers.js)
+  @@index([conversationId, createdAt])
 }
 
 model MessageReceipt {
@@ -578,6 +605,12 @@ model AuditLog {
 
   performedById String
   performedBy   User   @relation(fields: [performedById], references: [id], onDelete: Cascade)
+
+  // Admin audit log listing (server/src/controllers/admin/admin.auditlog.controller.js)
+  @@index([createdAt])
+  @@index([category, createdAt])
+  @@index([performedById])
+  @@index([targetId])
 }
 
 model AdminNotification {

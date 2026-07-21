@@ -7,8 +7,7 @@ import { useDispatch } from "react-redux";
 import EmojiPicker from "emoji-picker-react";
 import { createStory, createTextStory, fetchStoriesFeed } from "../lib/redux/storySlice";
 import { toast } from "react-hot-toast";
-const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+import { uploadToCloudinarySigned } from "../lib/services/cloudinaryUpload";
 
 const BACKGROUNDS = [
   "linear-gradient(135deg, #667eea, #764ba2)",
@@ -50,42 +49,30 @@ export default function StoryCreate({ onClose, onCreated }) {
     });
   };
 
-  const uploadToCloudinary = (f) =>
-    new Promise((resolve, reject) => {
-      const isVideo = f.type.startsWith("video/");
-      const fd = new FormData();
-      fd.append("file", f);
-      fd.append("upload_preset", UPLOAD_PRESET);
+  const uploadToCloudinary = async (f) => {
+    const isVideo = f.type.startsWith("video/");
 
-      const xhr = new XMLHttpRequest();
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable)
-          setProgress(Math.round((e.loaded / e.total) * 100));
-      });
-     xhr.addEventListener("load", () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const r = JSON.parse(xhr.responseText);
-          const isVid = r.resource_type === "video" || isVideo;
-          const optimizedUrl = isVid
-            ? r.secure_url.replace("/upload/", "/upload/q_auto,w_720,vc_auto/")
-            : r.secure_url.replace("/upload/", "/upload/q_auto:good,w_1080,f_auto/");
-          resolve({
-            url: optimizedUrl,
-            publicId: r.public_id,
-            resourceType: r.resource_type || (isVideo ? "video" : "image"),
-            width: r.width || null,
-            height: r.height || null,
-            duration: r.duration || null,
-            thumbnailUrl: r.eager?.[0]?.secure_url || null,
-          });
-        } else {
-          reject(new Error("Cloudinary upload failed"));
-        }
-      });
-      xhr.addEventListener("error", () => reject(new Error("Network error")));
-      xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`);
-      xhr.send(fd);
+    const r = await uploadToCloudinarySigned(f, {
+      folder: "stories",
+      resourceType: isVideo ? "video" : "image",
+      onProgress: (pct) => setProgress(pct),
     });
+
+    const isVid = r.resource_type === "video" || isVideo;
+    const optimizedUrl = isVid
+      ? r.secure_url.replace("/upload/", "/upload/q_auto,w_720,vc_auto/")
+      : r.secure_url.replace("/upload/", "/upload/q_auto:good,w_1080,f_auto/");
+
+    return {
+      url: optimizedUrl,
+      publicId: r.public_id,
+      resourceType: r.resource_type || (isVideo ? "video" : "image"),
+      width: r.width || null,
+      height: r.height || null,
+      duration: r.duration || null,
+      thumbnailUrl: r.eager?.[0]?.secure_url || null,
+    };
+  };
 
   const handleMediaSubmit = async () => {
     if (!file || uploading) return;

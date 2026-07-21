@@ -5,40 +5,28 @@ import { X, Loader2, FileText, Play, Plus, Trash2, ImageIcon } from "lucide-reac
 import { toast } from "react-hot-toast";
 import { useDispatch } from "react-redux";
 import { updateDraft, publishDraftPost } from "../lib/redux/postSlice";
+import { uploadToCloudinarySigned } from "../lib/services/cloudinaryUpload";
 
-const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+const uploadToCloudinary = async (file) => {
+  const isVideo = file.type.startsWith("video/");
 
-const uploadToCloudinary = (file) =>
-  new Promise((resolve, reject) => {
-    const isVideo = file.type.startsWith("video/");
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("upload_preset", UPLOAD_PRESET);
-
-    const xhr = new XMLHttpRequest();
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const r = JSON.parse(xhr.responseText);
-        resolve({
-          url:          r.secure_url,
-          publicId:     r.public_id,
-          resourceType: r.resource_type || (isVideo ? "video" : "image"),
-          width:        r.width    || null,
-          height:       r.height   || null,
-          duration:     r.duration || null,
-          thumbnailUrl: r.eager?.[0]?.secure_url || null,
-          format:       r.format   || null,
-          bytes:        r.bytes    || null,
-        });
-      } else {
-        reject(new Error("Cloudinary upload failed"));
-      }
-    });
-    xhr.addEventListener("error", () => reject(new Error("Network error")));
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`);
-    xhr.send(fd);
+  const r = await uploadToCloudinarySigned(file, {
+    folder: "temp_uploads",
+    resourceType: isVideo ? "video" : "image",
   });
+
+  return {
+    url:          r.secure_url,
+    publicId:     r.public_id,
+    resourceType: r.resource_type || (isVideo ? "video" : "image"),
+    width:        r.width    || null,
+    height:       r.height   || null,
+    duration:     r.duration || null,
+    thumbnailUrl: r.eager?.[0]?.secure_url || null,
+    format:       r.format   || null,
+    bytes:        r.bytes    || null,
+  };
+};
 
 export default function EditDraftModal({ post, onClose, onSaved }) {
   

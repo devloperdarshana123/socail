@@ -27,11 +27,14 @@ const storage = {
 
 // ── Persist Configs ───────────────────────────────────────────────────────────
 
-// Auth — sirf token aur user persist karo
+// Auth — sirf user persist karo
+// accessToken is NOT persisted here — the real session lives in an httpOnly
+// cookie (server/src/utils/authCookies.js) and api.js never reads a token
+// from redux/localStorage, so persisting it would only add XSS surface.
 const authPersistConfig = {
   key: "auth",
   storage,
-  whitelist: ["user", "isAuthenticated", "accessToken"],
+  whitelist: ["user", "isAuthenticated"],
 };
 
 // Chat — sirf conversations sidebar persist karo

@@ -36,6 +36,8 @@ import messageRouter from "./routes/auth/message.route.js";
 import notificationRoutes from "./routes/auth/notification.route.js";
 import transcribeRoute from "./routes/auth/transcribe.route.js";
 import reportRouter from "./routes/auth/report.route.js";
+import uploadRouter from "./routes/auth/upload.route.js";
+import { verifyAppCheck } from "./middlewares/appCheck.js";
 import "./cron/suspensionCron.js";
 import "./cron/cleanupOrphanMedia.js";
 // admin
@@ -70,7 +72,7 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-platform"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-platform", "X-Firebase-AppCheck"],
     exposedHeaders: ["set-cookie"],
   }),
 );
@@ -90,6 +92,7 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 app.use("/api/", globalRouteLimiter);
+app.use("/api/", verifyAppCheck);
 app.use("/api/v2/auth/login", authRouteLimiter);
 app.use("/api/v2/auth/register", authRouteLimiter);
 app.use("/api/v2/auth/forgot-password", authRouteLimiter);
@@ -128,6 +131,7 @@ app.use("/api/v2/stories", storyRouter);
 app.use("/api/v2/follow", followRouter);
 app.use("/api/v2/notifications", notificationRoutes);
 app.use("/api/v2/user/report", reportRouter);
+app.use("/api/v2/uploads", uploadRouter);
 
 app.use("/api/v2/transcribe", transcribeLimiter);
 app.use("/api/v2/transcribe", transcribeRoute);

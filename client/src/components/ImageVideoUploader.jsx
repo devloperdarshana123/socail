@@ -244,10 +244,9 @@
 
 import { useState, useRef, forwardRef, useImperativeHandle } from "react";
 import { X, UploadCloud } from "lucide-react";
+import { uploadToCloudinarySigned } from "../lib/services/cloudinaryUpload";
 
-const CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-const API_BASE       = import.meta.env.VITE_API_BASE_URL; // tumhara backend base url
+const API_BASE = import.meta.env.VITE_API_BASE_URL; // tumhara backend base url
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 20 * 1024 * 1024;
@@ -260,67 +259,41 @@ const ImageVideoUploader = forwardRef(function ImageVideoUploader(
   const [items,    setItems]    = useState([]);
   const [progress, setProgress] = useState({});
   const [errors,   setErrors]   = useState([]);
-  const xhrsRef       = useRef({});
   const submittedRef  = useRef(false); // ✅ flag: post submit ho gaya to delete skip karo
 
-  const uploadFile = (file, order) =>
-    new Promise((resolve, reject) => {
-      const isVideo = file.type.startsWith("video/");
+  const uploadFile = async (file, order) => {
+    const isVideo = file.type.startsWith("video/");
 
-      if (isVideo && file.size > MAX_VIDEO_SIZE)
-        return reject(new Error(`${file.name} exceeds 100MB limit`));
-      if (!isVideo && file.size > MAX_IMAGE_SIZE)
-        return reject(new Error(`${file.name} exceeds 10MB limit`));
+    if (isVideo && file.size > MAX_VIDEO_SIZE)
+      throw new Error(`${file.name} exceeds 100MB limit`);
+    if (!isVideo && file.size > MAX_IMAGE_SIZE)
+      throw new Error(`${file.name} exceeds 10MB limit`);
 
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("upload_preset", UPLOAD_PRESET);
-      fd.append("folder", "temp_uploads"); // ✅ temp folder — Step 5 mein backend isko "posts" me move karega
-
-      if (!isVideo) {
-        fd.append("quality", "auto:good");
-        fd.append("fetch_format", "auto");
-      }
-
-      const xhr = new XMLHttpRequest();
-      xhrsRef.current[file.name] = xhr;
-
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          setProgress((p) => ({ ...p, [file.name]: pct }));
-        }
-      });
-
-      xhr.addEventListener("load", () => {
-        delete xhrsRef.current[file.name];
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const r = JSON.parse(xhr.responseText);
-          resolve({
-            url:          r.secure_url,
-            publicId:     r.public_id,
-            resourceType: r.resource_type || (isVideo ? "video" : "image"),
-            width:        r.width        || null,
-            height:       r.height       || null,
-            duration:     r.duration     || null,
-            thumbnailUrl: r.eager?.[0]?.secure_url || null,
-            format:       r.format       || null,
-            bytes:        r.bytes        || null,
-            order,
-          });
-        } else {
-          reject(new Error(`Upload failed (${xhr.status})`));
-        }
-      });
-
-      xhr.addEventListener("error", () => {
-        delete xhrsRef.current[file.name];
-        reject(new Error(`Network error uploading ${file.name}`));
-      });
-
-      xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`);
-      xhr.send(fd);
+    const r = await uploadToCloudinarySigned(file, {
+      folder: "temp_uploads", // Step 5 mein backend isko "posts" me move karega
+      resourceType: isVideo ? "video" : "image",
+      onProgress: (pct) => setProgress((p) => ({ ...p, [file.name]: pct })),
     });
+
+    // Quality/format optimization applied at delivery time (URL transform)
+    // instead of upload time — keeps it out of the signed-params contract.
+    const optimizedUrl = isVideo
+      ? r.secure_url
+      : r.secure_url.replace("/upload/", "/upload/q_auto:good,f_auto/");
+
+    return {
+      url:          optimizedUrl,
+      publicId:     r.public_id,
+      resourceType: r.resource_type || (isVideo ? "video" : "image"),
+      width:        r.width        || null,
+      height:       r.height       || null,
+      duration:     r.duration     || null,
+      thumbnailUrl: r.eager?.[0]?.secure_url || null,
+      format:       r.format       || null,
+      bytes:        r.bytes        || null,
+      order,
+    };
+  };
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || []).slice(0, MAX_FILES - items.length);

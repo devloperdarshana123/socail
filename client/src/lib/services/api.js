@@ -1,5 +1,7 @@
 
 import axios from "axios";
+import { getToken } from "firebase/app-check";
+import { appCheck } from "../../config/firebase";
 
 const BASE = import.meta.env.VITE_SERVER_URL || "http://localhost:9080/api/v2";
 
@@ -147,6 +149,16 @@ const SKIP_REFRESH_ROUTES = [
 api.interceptors.request.use(
   async (config) => {
     config.headers["x-platform"] = "web";
+
+    if (appCheck) {
+      try {
+        const { token } = await getToken(appCheck, /* forceRefresh */ false);
+        config.headers["X-Firebase-AppCheck"] = token;
+      } catch {
+        // App Check unreachable/misconfigured — let the request through;
+        // the server runs in monitor mode until APP_CHECK_ENFORCE=true.
+      }
+    }
 
     const isSkip = SKIP_REFRESH_ROUTES.some((r) => config.url?.includes(r));
 

@@ -5,30 +5,18 @@ import { useCallback, useRef, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { getSocket } from "../services/socketManager";
 import { addOptimisticMessage } from "../redux/chatSlice";
+import { uploadToCloudinarySigned } from "../services/cloudinaryUpload";
 // ── Cloudinary upload ────── line ke upar yeh add karo
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:9080";
-// ── Cloudinary upload ────────────────────────────────────────────────────────
-const CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-export const uploadToCloudinary = async (file, resourceType = "image") => {
-  if (!CLOUD_NAME || !UPLOAD_PRESET)
-    throw new Error("Cloudinary env vars missing");
+// mediaType: "image" | "audio" — semantic kind, not the raw Cloudinary resource_type.
+export const uploadToCloudinary = async (file, mediaType = "image") => {
+  const folder = mediaType === "audio" ? "chat_audio" : "chat_images";
+  // Cloudinary has no "/audio/upload" endpoint — audio is stored as a video resource.
+  const cloudinaryResourceType = mediaType === "audio" ? "video" : "image";
 
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", UPLOAD_PRESET);
-  formData.append("folder", resourceType === "audio" ? "chat_audio" : "chat_images");
+  const data = await uploadToCloudinarySigned(file, { folder, resourceType: cloudinaryResourceType });
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`,
-    { method: "POST", body: formData }
-  );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || "Upload failed");
-  }
-  const data = await res.json();
   return {
     url:      data.secure_url,
     publicId: data.public_id,
@@ -236,7 +224,7 @@ recordingTimerRef.current = setInterval(() => {
       const ext  = audioBlob.type.includes("ogg") ? "ogg" : "webm";
       const file = new File([audioBlob], `voice_${Date.now()}.${ext}`, { type: audioBlob.type });
 
-      const audioData = await uploadToCloudinary(file, "video"); // Cloudinary audio = video resource type
+      const audioData = await uploadToCloudinary(file, "audio"); // stored as a Cloudinary video resource internally
       onProgress?.("sending");
 
       const tempId  = `temp_audio_${Date.now()}`;
