@@ -7,6 +7,7 @@ import { sendMail } from "../../utils/sendMail.js";
 import { postDeleted }      from "../../mail/templates/postDeleted.js";
 import { accountSuspended } from "../../mail/templates/accountSuspended.js";
 import redis from "../../config/redis.js";
+import { dateRangeToCreatedAt } from "../../utils/dateRange.js";
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -41,10 +42,13 @@ export const getAllUsers = asyncHandler(async (req, res, next) => {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const skip  = (page - 1) * limit;
 
-  const { search, status, role, sort, sortBy, sortOrder } = req.query;
+  const { search, status, role, sort, sortBy, sortOrder, dateRange } = req.query;
 
   // ── Build where — always exclude super_admin ─────────────────
   const where = { role: { not: "super_admin" } };
+
+  const createdAt = dateRangeToCreatedAt(dateRange);
+  if (createdAt) where.createdAt = createdAt;
 
   if (search?.trim()) {
     where.OR = [
@@ -636,13 +640,16 @@ export const getAllPosts = asyncHandler(async (req, res, next) => {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const skip  = (page - 1) * limit;
 
-  const { type, search, sortBy = "createdAt", sortOrder = "desc" } = req.query;
+  const { type, search, sortBy = "createdAt", sortOrder = "desc", dateRange } = req.query;
 
   const where = {
     isDeleted: false,
     isDraft:   false,
     author:    { role: { not: "super_admin" } },
   };
+
+  const createdAt = dateRangeToCreatedAt(dateRange);
+  if (createdAt) where.createdAt = createdAt;
 
   if (type && ["image", "reel", "text"].includes(type)) {
     where.type = type;

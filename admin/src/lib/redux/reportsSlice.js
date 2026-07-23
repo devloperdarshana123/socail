@@ -200,6 +200,7 @@ const initialState = {
     escalated:     "",
     claimedByMe:   "",
     unclaimedOnly: "",
+    dateRange:     "",
     sortOrder:     "desc",
     page:          1,
     limit:         20,
@@ -502,6 +503,7 @@ export const selectActiveFilterCount = createSelector(
     if (f.escalated)     count += 1;
     if (f.claimedByMe)   count += 1;
     if (f.unclaimedOnly) count += 1;
+    if (f.dateRange)     count += 1;
     if (f.sortOrder !== "desc") count += 1;
     return count;
   }

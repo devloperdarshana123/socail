@@ -14,6 +14,7 @@ import {
   clearExplore,
   setPostsFromCache,
 } from "../lib/redux/exploreSlice";
+import { bucketByDate, DATE_BUCKET_LABELS } from "../utils/dateBuckets";
 
 const T = {
   bg:          "#faf6f0",
@@ -287,6 +288,32 @@ function MasonryGrid({ posts, onPostClick, loading }) {
   );
 }
 
+const DATE_BUCKET_ORDER = ["today", "thisWeek", "thisMonth", "older"];
+
+// Groups posts into date sections, each with its own independently-balanced
+// masonry grid. Posts are always fetched newest-first (see explore.controller.js),
+// so bucket order always reads chronologically top to bottom.
+function DateGroupedMasonry({ posts, onPostClick, loading }) {
+  const sortedPosts = [...posts].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const buckets = bucketByDate(sortedPosts, "createdAt");
+  const sections = DATE_BUCKET_ORDER
+    .map((key) => ({ key, label: DATE_BUCKET_LABELS[key], items: buckets[key] }))
+    .filter((section) => section.items.length > 0);
+
+  return (
+    <div>
+      {sections.map(({ key, label, items }) => (
+        <div key={key} className="mb-6">
+          <h2 className="text-xs font-bold uppercase tracking-wide mb-3 px-1" style={{ color: T.textLt }}>
+            {label} <span className="font-medium normal-case" style={{ opacity: 0.6 }}>· {items.length}</span>
+          </h2>
+          <MasonryGrid posts={items} onPostClick={onPostClick} loading={loading} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Explore() {
   const dispatch = useDispatch();
   const {
@@ -383,8 +410,10 @@ export default function Explore() {
           </div>
         )}
 
-        {!error && (
-          <MasonryGrid
+        {!error && (loading && posts.length === 0 ? (
+          <MasonryGrid posts={posts} onPostClick={() => {}} loading={loading} />
+        ) : (
+          <DateGroupedMasonry
             posts={posts}
             onPostClick={(post) => {
               setSelectedPost(post);
@@ -392,7 +421,7 @@ export default function Explore() {
             }}
             loading={loading}
           />
-        )}
+        ))}
 
         {loadingMore && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mt-6">

@@ -122,7 +122,7 @@ export const getFollowers = asyncHandler(async (req, res, next) => {
 
   return res.status(200).json({
     success: true,
-    data: followers.map((f) => f.follower),
+    data: followers.map((f) => ({ ...f.follower, followedAt: f.createdAt })),
     nextCursor,
   });
 });
@@ -136,7 +136,7 @@ export const getFollowing = asyncHandler(async (req, res, next) => {
 
   return res.status(200).json({
     success: true,
-    data: following.map((f) => f.following),
+    data: following.map((f) => ({ ...f.following, followedAt: f.createdAt })),
     nextCursor,
   });
 });

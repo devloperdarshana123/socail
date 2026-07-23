@@ -61,9 +61,12 @@ export const getExplorePosts = asyncHandler(async (req, res, next) => {
     ...(type !== "all" && { type }),
   };
 
+  // `id` is a random UUID, not time-ordered — sort by createdAt (with id as
+  // a tiebreaker for full determinism) so explore is chronological, not an
+  // arbitrary shuffle.
   const rawPosts = await prisma.post.findMany({
     where,
-    orderBy: { id: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     select: {
@@ -118,7 +121,7 @@ export const searchPosts = asyncHandler(async (req, res, next) => {
 
   const rawPosts = await prisma.post.findMany({
     where,
-    orderBy: { id: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     select: {
@@ -192,7 +195,7 @@ export const getPublicProfile = asyncHandler(async (req, res, next) => {
   if (canViewPosts) {
     const rawPosts = await prisma.post.findMany({
       where: { authorId: user.id, isDraft: false, isDeleted: false, visibility: "public" },
-      orderBy: { id: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: postLimit + 1,
       ...(postCursor && { cursor: { id: postCursor }, skip: 1 }),
       select: {

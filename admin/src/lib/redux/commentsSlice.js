@@ -194,12 +194,14 @@ const initialState = {
     removed: 0,
     pending: 0,
   },
-  // Defaults to the flagged (needs-review) queue instead of the full comment
-  // list — admins land on actionable items, not a firehose. "Reset filters"
-  // returns here rather than to an unfiltered view of every comment.
+  // Was defaulting to the flagged (needs-review) queue, but that reads as a
+  // broken/empty page whenever nothing happens to be flagged — which is most
+  // of the time on a small or early-stage dataset. Default to everything,
+  // newest first; the flagged filter is one click away when it's needed.
   filters: {
     search:    "",
-    status:    "flagged",
+    status:    "",
+    dateRange: "",
     sortBy:    "createdAt",
     sortOrder: "desc",
     page:      1,
@@ -476,6 +478,7 @@ export const selectActiveFilterCount = createSelector(
     let count = 0;
     if (filters.search)              count += 1;
     if (filters.status)              count += 1;
+    if (filters.dateRange)           count += 1;
     if (filters.sortBy !== "createdAt") count += 1;
     if (filters.sortOrder !== "desc")   count += 1;
     return count;

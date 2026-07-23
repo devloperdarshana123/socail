@@ -179,7 +179,7 @@ const initialState = {
   stats: { total: 0, active: 0, suspended: 0, banned: 0, verified: 0 },
   statsLoading: false,
   filters: {
-    search: "", role: "", status: "", verified: "",
+    search: "", role: "", status: "", verified: "", dateRange: "",
     sortBy: "createdAt", sortOrder: "desc", page: 1, limit: 12,
   },
 };

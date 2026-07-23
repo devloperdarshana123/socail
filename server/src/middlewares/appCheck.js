@@ -6,13 +6,15 @@
 // before the reCAPTCHA site key is configured on the client. Flip
 // APP_CHECK_ENFORCE=true once the App Check metrics dashboard shows a clean
 // pass rate.
-import admin from "../config/firebase.js";
+import admin, { firebaseReady } from "../config/firebase.js";
 import logger from "../config/logger.js";
 
 const ENFORCE = process.env.APP_CHECK_ENFORCE === "true";
 
 export const verifyAppCheck = async (req, res, next) => {
   const token = req.header("X-Firebase-AppCheck");
+
+  if (!firebaseReady) return next();
 
   if (!token) {
     if (ENFORCE) {

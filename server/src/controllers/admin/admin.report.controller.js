@@ -4,6 +4,7 @@ import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError     from "../../utils/AppError.js";
 import prisma       from "../../config/prisma.js";
 import logger       from "../../config/logger.js";
+import { dateRangeToCreatedAt } from "../../utils/dateRange.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Constants
@@ -144,10 +145,14 @@ export const getAllReports = asyncHandler(async (req, res, next) => {
     claimedByMe,
     unclaimedOnly,
     sortOrder = "desc",
+    dateRange,
   } = req.query;
 
   // ── Build where ──────────────────────────────────────────────────────────
   const where = {};
+
+  const createdAt = dateRangeToCreatedAt(dateRange);
+  if (createdAt) where.createdAt = createdAt;
 
  if (status && ALLOWED_STATUSES.includes(status)) where.status = status;
   if (targetModel && ["Post", "Comment", "User"].includes(targetModel)) where.targetModel  = targetModel;

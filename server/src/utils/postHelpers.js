@@ -157,14 +157,17 @@ export const getFeedPosts = async (userIds, { beforeId = null, limit = 20 } = {}
     visibility: "public",
   };
 
-  if (beforeId) {
-    query.id = { lt: beforeId };
-  }
-
+  // `id` is a random UUID (Prisma's default), so it carries no chronological
+  // meaning — filtering `id < beforeId` while sorting by createdAt used to
+  // compare two unrelated orderings, silently skipping/duplicating posts as
+  // pages advanced. Prisma's cursor pagination anchors on the row itself
+  // (via its unique id) and slices relative to it under whatever `orderBy`
+  // is given, so this stays consistent with the createdAt sort below.
   const posts = await prisma.post.findMany({
     where: query,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
+    ...(beforeId && { cursor: { id: beforeId }, skip: 1 }),
     select: {
       id: true,
       type: true,

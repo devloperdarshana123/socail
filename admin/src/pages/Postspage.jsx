@@ -15,6 +15,8 @@ import {
 } from "../lib/redux/postsSlice";
 import { PostsGridSkeleton } from "../components/skeletons";
 import PostDetailModal from "../components/PostDetailmodal";
+import { DATE_RANGE_OPTIONS } from "../lib/dateRangeOptions";
+import { bucketByDate, DATE_BUCKET_LABELS, dateBucketOrder } from "../lib/dateBuckets";
 
 // ── Module-level constants (stable references, never rebuilt on render) ────────
 
@@ -362,6 +364,7 @@ export default function PostsPage() {
     dispatch(fetchAllPosts({
       type:      filters.type      || undefined,
       search:    filters.search    || undefined,
+      dateRange: filters.dateRange || undefined,
       sortBy:    filters.sortBy,
       sortOrder: filters.sortOrder,
       page:      filters.page,
@@ -437,6 +440,16 @@ export default function PostsPage() {
     { ...STAT_CARD_DEFS[2], value: reelsCount   },
     { ...STAT_CARD_DEFS[3], value: textCount    },
   ], [total, photosCount, reelsCount, textCount]);
+
+  // Date-bucketed sections — only meaningful when sorted by createdAt (any
+  // other sort would interleave buckets out of order).
+  const dateSections = useMemo(() => {
+    if (filters.sortBy !== "createdAt") return null;
+    const buckets = bucketByDate(posts, "createdAt");
+    return dateBucketOrder(filters.sortOrder)
+      .map((key) => ({ key, label: DATE_BUCKET_LABELS[key], items: buckets[key] }))
+      .filter((section) => section.items.length > 0);
+  }, [posts, filters.sortBy, filters.sortOrder]);
 
   // Pagination page numbers
   const pageNumbers = useMemo(() => {
@@ -580,6 +593,16 @@ export default function PostsPage() {
                     <option value="viewsCount_desc">Most viewed</option>
                   </select>
                   <select
+                    value={filters.dateRange}
+                    onChange={(e) => dispatch(setPostFilters({ dateRange: e.target.value, page: 1 }))}
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2
+                      text-xs text-slate-600 focus:outline-none focus:border-violet-400 cursor-pointer"
+                  >
+                    {DATE_RANGE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <select
                     value={filters.limit}
                     onChange={(e) => dispatch(setPostFilters({ limit: Number(e.target.value), page: 1 }))}
                     className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2
@@ -655,6 +678,18 @@ export default function PostsPage() {
                 </select>
               </div>
 
+              {/* Date range */}
+              <select
+                value={filters.dateRange}
+                onChange={(e) => dispatch(setPostFilters({ dateRange: e.target.value, page: 1 }))}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5
+                  text-sm text-slate-600 focus:outline-none focus:border-violet-400 cursor-pointer transition-colors"
+              >
+                {DATE_RANGE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+
               {/* Per page */}
               <select
                 value={filters.limit}
@@ -690,6 +725,27 @@ export default function PostsPage() {
               >
                 Clear all filters
               </button>
+            </div>
+          ) : dateSections ? (
+            <div>
+              {dateSections.map(({ key, label, items }) => (
+                <div key={key} className="mb-6">
+                  <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3 px-1">
+                    {label} <span className="text-slate-300 font-medium normal-case">· {items.length}</span>
+                  </h2>
+                  <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
+                    {items.map((post) => (
+                      <PostTile
+                        key={post.id}
+                        post={post}
+                        onDelete={handleDelete}
+                        deleteLoading={deleteLoading}
+                        onOpen={handleOpen}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">

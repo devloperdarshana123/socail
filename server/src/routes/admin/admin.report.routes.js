@@ -113,7 +113,7 @@ router.patch(
 router.patch(
   "/reports/bulk",
   auditLog({
-    action:     AUDIT_ACTIONS.REPORTS_BULK_UPDATED,
+    action:     AUDIT_ACTIONS.REPORT_BULK_UPDATED,
     targetType: "report",
     targetMeta: (req) => ({
       status:      req.body?.status      ?? null,

@@ -4,7 +4,8 @@ import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import prisma from "../../config/prisma.js";
 import logger from "../../config/logger.js";
-import { AUDIT_ACTIONS } from "../../utils/auditLogger.js";
+import { auditLogger, AUDIT_ACTIONS } from "../../utils/auditLogger.js";
+import { dateRangeToCreatedAt } from "../../utils/dateRange.js";
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -17,32 +18,23 @@ const extractAvatar = (avatar) => {
   return null;
 };
 
-const auditComment = async ({ req, action, commentId, commentContent, postId, postCaption, postType, newStatus, note }) => {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        performedById:   req.user.id,
-        performedByName: req.user.fullName || req.user.username || "Admin",
-        action,
-        targetId:   commentId,
-        targetType: "comment",
-        targetMeta: {
-          commentId,
-          commentText: (commentContent || "").slice(0, 120),
-          postId:      postId      || null,
-          postCaption: (postCaption || "No caption").slice(0, 80),
-          postType:    postType    || "post",
-          newStatus:   newStatus   || null,
-          reason:      req.body?.reason || null,
-        },
-        ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
-        userAgent: req.headers["user-agent"] || null,
-        note:      note || null,
-      },
-    });
-  } catch (err) {
-    console.error("[AuditLog] comment audit failed:", err.message);
-  }
+const auditComment = ({ req, action, commentId, commentContent, postId, postCaption, postType, newStatus, note }) => {
+  auditLogger({
+    req,
+    action,
+    targetId:   commentId,
+    targetType: "comment",
+    targetMeta: {
+      commentId,
+      commentText: (commentContent || "").slice(0, 120),
+      postId:      postId      || null,
+      postCaption: (postCaption || "No caption").slice(0, 80),
+      postType:    postType    || "post",
+      newStatus:   newStatus   || null,
+      reason:      req.body?.reason || null,
+    },
+    note: note || null,
+  });
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -58,6 +50,7 @@ export const getAllComments = asyncHandler(async (req, res) => {
     sort     = "newest",
     postId,
     authorId,
+    dateRange,
   } = req.query;
 
   const pageNum  = Math.max(1, parseInt(page, 10));
@@ -69,6 +62,9 @@ export const getAllComments = asyncHandler(async (req, res) => {
   if (status)   where.status   = status;
   if (postId)   where.postId   = postId;
   if (authorId) where.authorId = authorId;
+
+  const createdAt = dateRangeToCreatedAt(dateRange);
+  if (createdAt) where.createdAt = createdAt;
 
   // Search — content, author username/fullName
   if (search.trim()) {
@@ -243,9 +239,9 @@ export const getCommentById = asyncHandler(async (req, res, next) => {
 
   logger.info(`Admin viewed comment ${req.params.id}`);
 
-  await auditComment({
+  auditComment({
     req,
-    action:       AUDIT_ACTIONS.COMMENT_VIEWED ?? "comment_viewed",
+    action:       AUDIT_ACTIONS.COMMENT_VIEWED,
     commentId:    comment.id,
     commentContent: comment.content,
     postId:       comment.post?.id,
@@ -317,14 +313,14 @@ export const updateCommentStatus = asyncHandler(async (req, res, next) => {
   logger.info(`Admin ${req.user.id} set comment ${req.params.id} status → ${status}`);
 
   const commentActionMap = {
-    active:  AUDIT_ACTIONS.COMMENT_APPROVED ?? "comment_approved",
-    flagged: AUDIT_ACTIONS.COMMENT_FLAGGED  ?? "comment_flagged",
-    removed: AUDIT_ACTIONS.COMMENT_REMOVED  ?? "comment_removed",
+    active:  AUDIT_ACTIONS.COMMENT_APPROVED,
+    flagged: AUDIT_ACTIONS.COMMENT_FLAGGED,
+    removed: AUDIT_ACTIONS.COMMENT_REMOVED,
   };
 
-  await auditComment({
+  auditComment({
     req,
-    action:        commentActionMap[status] || "comment_removed",
+    action:        commentActionMap[status] ?? AUDIT_ACTIONS.COMMENT_REMOVED,
     commentId:     comment.id,
     commentContent: comment.content,
     newStatus:     status,
@@ -363,9 +359,9 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
 
   logger.info(`Admin ${req.user.id} soft-deleted comment ${req.params.id}`);
 
-  await auditComment({
+  auditComment({
     req,
-    action:        AUDIT_ACTIONS.COMMENT_DELETED ?? "comment_deleted",
+    action:        AUDIT_ACTIONS.COMMENT_DELETED,
     commentId:     comment.id,
     commentContent: comment.content,
     newStatus:     "removed",
@@ -415,22 +411,16 @@ export const bulkUpdateComments = asyncHandler(async (req, res, next) => {
 
   logger.info(`Admin ${req.user.id} bulk-${action}: ${result.count}/${ids.length} comments`);
 
-  await prisma.auditLog.create({
-    data: {
-      performedById:   req.user.id,
-      performedByName: req.user.fullName || req.user.username || "Admin",
-      action:          AUDIT_ACTIONS.COMMENT_BULK_UPDATED ?? "comment_bulk_updated",
-      targetId:        null,
-      targetType:      "comment",
-      targetMeta: {
-        actionTaken: action,
-        status:      action === "approve" ? "active" : action === "flag" ? "flagged" : "removed",
-        reason:      reason || null,
-      },
-      note:      `Bulk ${action}: ${result.count}/${ids.length} comments modified`,
-      ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
-      userAgent: req.headers["user-agent"] || null,
+  auditLogger({
+    req,
+    action:     AUDIT_ACTIONS.COMMENT_BULK_UPDATED,
+    targetType: "comment",
+    targetMeta: {
+      actionTaken: action,
+      status:      action === "approve" ? "active" : action === "flag" ? "flagged" : "removed",
+      reason:      reason || null,
     },
+    note: `Bulk ${action}: ${result.count}/${ids.length} comments modified`,
   });
 
   return res.status(200).json({

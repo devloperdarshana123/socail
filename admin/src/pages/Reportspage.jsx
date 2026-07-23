@@ -18,6 +18,7 @@ import {
 
 // Top pe import add karo
 import { getAdminSocket } from "../lib/adminSocket";
+import { DATE_RANGE_OPTIONS } from "../lib/dateRangeOptions";
 
 // ─────────────────────────────────────────────────────────────
 //  Constants  (module-level — never recreated)
@@ -1022,6 +1023,7 @@ export default function ReportsPage() {
     escalated:     filterEscalated,
     claimedByMe:   filterClaimedByMe,
     unclaimedOnly: filterUnclaimedOnly,
+    dateRange:     filterDateRange,
     sortOrder:     filterSortOrder,
     page:          filterPage,
     limit:         filterLimit,
@@ -1036,6 +1038,7 @@ export default function ReportsPage() {
       escalated:     filterEscalated     || undefined,
       claimedByMe:   filterClaimedByMe   || undefined,
       unclaimedOnly: filterUnclaimedOnly || undefined,
+      dateRange:     filterDateRange     || undefined,
       sortOrder:     filterSortOrder,
       page:          filterPage,
       limit:         filterLimit,
@@ -1044,7 +1047,7 @@ export default function ReportsPage() {
     dispatch,
     filterStatus, filterTargetModel, filterReason, filterPriority,
     filterEscalated, filterClaimedByMe, filterUnclaimedOnly,
-    filterSortOrder, filterPage, filterLimit,
+    filterDateRange, filterSortOrder, filterPage, filterLimit,
   ]);
 
   useEffect(() => { loadReports(); }, [loadReports]);
@@ -1119,8 +1122,8 @@ export default function ReportsPage() {
   }, [dispatch, allSelected]);
 
   const hasActiveFilters = useMemo(() =>
-    !!(filterStatus || filterTargetModel || filterReason || filterPriority || filterEscalated || filterClaimedByMe || filterUnclaimedOnly),
-    [filterStatus, filterTargetModel, filterReason, filterPriority, filterEscalated, filterClaimedByMe, filterUnclaimedOnly]
+    !!(filterStatus || filterTargetModel || filterReason || filterPriority || filterEscalated || filterClaimedByMe || filterUnclaimedOnly || filterDateRange),
+    [filterStatus, filterTargetModel, filterReason, filterPriority, filterEscalated, filterClaimedByMe, filterUnclaimedOnly, filterDateRange]
   );
 
   // Filter select rows — stable array referencing module-level option arrays
@@ -1128,8 +1131,9 @@ export default function ReportsPage() {
     { value: filterTargetModel, onChange: (v) => dispatch(setFilters({ targetModel: v })),   options: TARGET_OPTIONS   },
     { value: filterReason,      onChange: (v) => dispatch(setFilters({ reason: v })),         options: REASON_OPTIONS   },
     { value: filterPriority,    onChange: (v) => dispatch(setFilters({ priority: v })),       options: PRIORITY_OPTIONS },
+    { value: filterDateRange,   onChange: (v) => dispatch(setFilters({ dateRange: v })),      options: DATE_RANGE_OPTIONS },
     { value: filterSortOrder,   onChange: (v) => dispatch(setFilters({ sortOrder: v })),      options: SORT_OPTIONS     },
-  ], [dispatch, filterTargetModel, filterReason, filterPriority, filterSortOrder]);
+  ], [dispatch, filterTargetModel, filterReason, filterPriority, filterDateRange, filterSortOrder]);
 
   return (
     <div className="min-h-screen bg-slate-50">

@@ -4,9 +4,12 @@ import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import prisma from "../../config/prisma.js";
 import logger from "../../config/logger.js";
+import { AUDIT_ACTIONS } from "../../utils/auditLogger.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Valid constants (previously from auditlog.model.js)
+//  AUDIT_ACTIONS is re-exported from the canonical source in utils/auditLogger.js
+//  so the filter dropdown / validation always matches what's actually written to the DB.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const AUDIT_CATEGORIES = {
@@ -16,25 +19,7 @@ export const AUDIT_CATEGORIES = {
   SETTINGS: "settings",
 };
 
-export const AUDIT_ACTIONS = {
-  // Auth
-  ADMIN_LOGIN:          "admin_login",
-  ADMIN_LOGOUT:         "admin_logout",
-  // User
-  USER_BANNED:          "user_banned",
-  USER_UNBANNED:        "user_unbanned",
-  USER_SUSPENDED:       "user_suspended",
-  USER_UNSUSPENDED:     "user_unsuspended",
-  USER_ROLE_CHANGED:    "user_role_changed",
-  USER_DELETED:         "user_deleted",
-  // Content
-  POST_DELETED:         "post_deleted",
-  COMMENT_DELETED:      "comment_deleted",
-  REPORT_RESOLVED:      "report_resolved",
-  REPORT_DISMISSED:     "report_dismissed",
-  // Settings
-  SETTINGS_UPDATED:     "settings_updated",
-};
+export { AUDIT_ACTIONS };
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers

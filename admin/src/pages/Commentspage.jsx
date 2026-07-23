@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef, memo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import CustomSelect from "../components/CustomSelect";
+import { DATE_RANGE_OPTIONS } from "../lib/dateRangeOptions";
+import { bucketByDate, DATE_BUCKET_LABELS, dateBucketOrder } from "../lib/dateBuckets";
 import PostPreviewModal from "../components/Postpreviewmodal";
 import { getAdminSocket , onAdminSocketReady} from "../lib/adminSocket";
 import {
@@ -80,6 +82,16 @@ const LIMIT_OPTIONS = [
   { value: "24", label: "24 / page" },
   { value: "48", label: "48 / page" },
 ];
+
+// The backend only understands a single `sort` string (see sortMap in
+// admin.comment.controller.js) — sortBy/sortOrder from the UI need mapping
+// onto it, or the API silently falls back to "newest" every time.
+function mapSortParam(sortBy, sortOrder) {
+  if (sortBy === "createdAt")   return sortOrder === "asc" ? "oldest" : "newest";
+  if (sortBy === "likesCount")  return "most_likes";
+  if (sortBy === "reportCount") return "most_reports";
+  return "newest";
+}
 
 const AVATAR_COLORS = [
   "bg-pink-500","bg-violet-500","bg-cyan-500",
@@ -627,17 +639,49 @@ export default function CommentsPage() {
     return Array.from(groups.values());
   }, [comments, viewMode]);
 
+  // Date-bucketed sections for the flat view — only meaningful when sorted
+  // by createdAt (any other sort would interleave buckets out of order).
+  const dateSections = useMemo(() => {
+    if (viewMode !== "flat" || filters.sortBy !== "createdAt") return null;
+    const buckets = bucketByDate(comments, "createdAt");
+    return dateBucketOrder(filters.sortOrder)
+      .map((key) => ({ key, label: DATE_BUCKET_LABELS[key], items: buckets[key] }))
+      .filter((section) => section.items.length > 0);
+  }, [comments, viewMode, filters.sortBy, filters.sortOrder]);
+
+  const commentsFetchParams = useMemo(() => ({
+    search:    filters.search    || undefined,
+    status:    filters.status    || undefined,
+    dateRange: filters.dateRange || undefined,
+    sort:      mapSortParam(filters.sortBy, filters.sortOrder),
+    page:      filters.page,
+    limit:     filters.limit,
+  }), [filters]);
+
+  const emptyState = useMemo(() => {
+    if (!loading && comments.length === 0 && currentPage > totalPages && totalPages > 0) {
+      return {
+        title: `No comments on page ${currentPage}`,
+        subtitle: "Try a lower page number or reset filters",
+      };
+    }
+
+    return {
+      title: "No matching comments found",
+      subtitle: "Try changing your filters or switching to a broader status",
+    };
+  }, [loading, comments.length, currentPage, totalPages]);
+
   useEffect(() => {
-    dispatch(fetchComments({
-      search:    filters.search    || undefined,
-      status:    filters.status    || undefined,
-      sortBy:    filters.sortBy,
-      sortOrder: filters.sortOrder,
-      page:      filters.page,
-      limit:     filters.limit,
-    }));
+    dispatch(fetchComments(commentsFetchParams));
     dispatch(fetchCommentStats());
-  }, [dispatch, filters]);
+  }, [dispatch, commentsFetchParams]);
+
+  useEffect(() => {
+    if (!loading && totalPages > 0 && currentPage > totalPages) {
+      dispatch(setPage(1));
+    }
+  }, [loading, currentPage, totalPages, dispatch]);
 
   // ✅ OPTIMIZATION: deps fixed
   useEffect(() => {
@@ -702,8 +746,8 @@ useEffect(() => {
     dispatch(fetchComments({
       search:    f.search    || undefined,
       status:    f.status    || undefined,
-      sortBy:    f.sortBy,
-      sortOrder: f.sortOrder,
+      dateRange: f.dateRange || undefined,
+      sort:      mapSortParam(f.sortBy, f.sortOrder),
       page:      f.page,
       limit:     f.limit,
     }));
@@ -845,11 +889,11 @@ showToast(failed > 0
 
   // ✅ OPTIMIZATION: stat values memoized so StatCards don't re-render on unrelated state changes
   const statValues = useMemo(() => ({
-    total:   loading ? "—" : (stats.total || totalComments).toLocaleString(),
+    total:   loading ? "—" : totalComments.toLocaleString(),
     flagged: loading ? "—" : stats.flagged,
     removed: loading ? "—" : stats.removed,
     pending: loading ? "—" : stats.pending,
-  }), [loading, stats, totalComments]);
+  }), [loading, stats.flagged, stats.removed, stats.pending, totalComments]);
 
   return (
     <>
@@ -903,7 +947,7 @@ showToast(failed > 0
           <div className="flex items-center justify-between mb-7">
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Comments</h1>
-              <p className="text-sm text-slate-400 mt-0.5">{loading ? "Loading…" : `${totalComments.toLocaleString()} total comments`}</p>
+              <p className="text-sm text-slate-400 mt-0.5">{loading ? "Loading…" : `${totalComments.toLocaleString()} matching comments`}</p>
             </div>
             <button onClick={handleResetFilters} className="text-xs font-medium text-slate-400 hover:text-slate-600 transition-colors border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50">
               Reset filters
@@ -911,7 +955,7 @@ showToast(failed > 0
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-7">
-            <StatCard label="Total Comments" value={statValues.total}   accent="blue"    icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
+            <StatCard label="Matching Comments" value={statValues.total}   accent="blue"    icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
             <StatCard label="Flagged"        value={statValues.flagged} accent="amber"   icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6H13l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>} />
             <StatCard label="Removed"        value={statValues.removed} accent="red"     icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>} />
             <StatCard label="Pending Review" value={statValues.pending} accent="emerald" icon={<svg fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
@@ -930,6 +974,7 @@ showToast(failed > 0
                 )}
               </div>
               <CustomSelect value={filters.status}         onChange={(val) => handleFilterChange("status", val)}          options={STATUS_OPTIONS} />
+              <CustomSelect value={filters.dateRange}      onChange={(val) => handleFilterChange("dateRange", val)}       options={DATE_RANGE_OPTIONS} />
               <CustomSelect value={filters.sortBy}         onChange={(val) => handleFilterChange("sortBy", val)}          options={SORT_OPTIONS} />
               <CustomSelect value={String(filters.limit)}  onChange={(val) => handleFilterChange("limit", Number(val))}   options={LIMIT_OPTIONS} />
 
@@ -963,7 +1008,7 @@ showToast(failed > 0
           {error && (
             <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-center justify-between">
               <span>{error}</span>
-              <button onClick={() => dispatch(fetchComments({ ...filters }))} className="text-xs underline hover:text-red-900 font-medium">Retry</button>
+              <button onClick={() => dispatch(fetchComments(commentsFetchParams))} className="text-xs underline hover:text-red-900 font-medium">Retry</button>
             </div>
           )}
 
@@ -977,8 +1022,8 @@ showToast(failed > 0
               <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center">
                 <svg className="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
               </div>
-              <p className="text-sm font-medium text-slate-500">No comments found</p>
-              <p className="text-xs text-slate-400">Try adjusting your filters</p>
+              <p className="text-sm font-medium text-slate-500">{emptyState.title}</p>
+              <p className="text-xs text-slate-400">{emptyState.subtitle}</p>
             </div>
           ) : viewMode === "grouped" ? (
             <div>
@@ -996,6 +1041,31 @@ showToast(failed > 0
                   onRemove={handleRemove}
                   actionLoading={actionLoading}
                 />
+              ))}
+            </div>
+          ) : dateSections ? (
+            <div>
+              {dateSections.map(({ key, label, items }) => (
+                <div key={key} className="mb-6">
+                  <h2 className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3 px-1">
+                    {label} <span className="text-slate-300 font-medium normal-case">· {items.length}</span>
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {items.map((comment) => (
+                      <CommentCard
+                        key={comment.id}
+                        comment={comment}
+                        selected={selected.has(comment.id)}
+                        onSelect={() => toggleSelect(comment.id)}
+                        onView={handleViewDetail}
+                        onApprove={handleApprove}
+                        onFlag={handleFlag}
+                        onRemove={handleRemove}
+                        actionLoading={actionLoading}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           ) : (

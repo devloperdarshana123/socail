@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, memo, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import CustomSelect from "../components/CustomSelect";
+import { DATE_RANGE_OPTIONS } from "../lib/dateRangeOptions";
 import {
   fetchUsers, updateUserStatus, toggleVerifiedBadge, deleteUser,
   setFilters, setPage, clearErrors, resetFilters, bulkUpdateStatus,
@@ -641,6 +642,7 @@ export default function UsersPage() {
       role:      filters.role      || undefined,
       status:    filters.status    || undefined,
       verified:  filters.verified  || undefined,
+      dateRange: filters.dateRange || undefined,
       sortBy:    filters.sortBy,
       sortOrder: filters.sortOrder,
       page:      filters.page,
@@ -897,6 +899,7 @@ export default function UsersPage() {
               <CustomSelect value={filters.role}     onChange={(val) => handleFilterChange("role", val)}     options={[{ value: "", label: "All Roles" }, { value: "user", label: "User" }, { value: "moderator", label: "Moderator" }]} />
               <CustomSelect value={filters.status}   onChange={(val) => handleFilterChange("status", val)}   options={[{ value: "", label: "All Statuses" }, { value: "active", label: "Active" }, { value: "suspended", label: "Suspended" }, { value: "banned", label: "Banned" }]} />
               <CustomSelect value={filters.verified} onChange={(val) => handleFilterChange("verified", val)} options={[{ value: "", label: "All" }, { value: "true", label: "Verified ✓" }, { value: "false", label: "Unverified" }]} />
+              <CustomSelect value={filters.dateRange} onChange={(val) => handleFilterChange("dateRange", val)} options={DATE_RANGE_OPTIONS} />
               <CustomSelect value={String(filters.limit)} onChange={(val) => handleFilterChange("limit", Number(val))} options={[{ value: "12", label: "12 / page" }, { value: "24", label: "24 / page" }, { value: "50", label: "50 / page" }]} />
             </div>
           </div>

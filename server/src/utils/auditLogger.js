@@ -36,6 +36,14 @@ export const AUDIT_ACTIONS = {
   REPORT_UNDER_REVIEW:          "report.under_review",
   REPORT_STALE_CLAIMS_RELEASED: "report.stale_claims_released",
 
+  // Content moderation — comments
+  COMMENT_VIEWED:       "comment.viewed",
+  COMMENT_APPROVED:     "comment.approved",
+  COMMENT_FLAGGED:      "comment.flagged",
+  COMMENT_REMOVED:      "comment.removed",
+  COMMENT_DELETED:      "comment.deleted",
+  COMMENT_BULK_UPDATED: "comment.bulk_updated",
+
   // Settings
   SETTINGS_PROFILE_UPDATED:       "settings.profile_updated",
   SETTINGS_AVATAR_UPDATED:        "settings.avatar_updated",
@@ -70,6 +78,13 @@ const ACTION_CATEGORY_MAP = {
   "report.escalated":              "content",
   "report.under_review":           "content",
   "report.stale_claims_released":  "content",
+
+  "comment.viewed":       "content",
+  "comment.approved":     "content",
+  "comment.flagged":      "content",
+  "comment.removed":      "content",
+  "comment.deleted":      "content",
+  "comment.bulk_updated": "content",
 
   "settings.profile_updated":       "settings",
   "settings.avatar_updated":        "settings",

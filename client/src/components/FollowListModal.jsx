@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useDispatch } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, UserCheck, Loader2, Users } from "lucide-react";
 import { unfollowUser } from "../lib/redux/authSlice";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/services/api";
+import { bucketByDate, DATE_BUCKET_LABELS } from "../utils/dateBuckets";
 
 export default function FollowListModal({ userId, type, onClose, onUnfollow }) {
   const dispatch    = useDispatch();
@@ -52,6 +53,18 @@ export default function FollowListModal({ userId, type, onClose, onUnfollow }) {
     } catch {}
     finally { setLoadingMore(false); }
   }, [nextCursor, loadingMore, userId, type]);
+
+  const groupedList = useMemo(() => {
+    if (!list || list.length === 0) {
+      return { today: [], thisWeek: [], thisMonth: [], older: [] };
+    }
+    const sorted = [...list].sort((a, b) => {
+      const left = new Date(b.followedAt || b.createdAt).getTime();
+      const right = new Date(a.followedAt || a.createdAt).getTime();
+      return left - right;
+    });
+    return bucketByDate(sorted, "followedAt");
+  }, [list]);
 
   // ── Infinite scroll ────────────────────────────────────────────────────────
   const handleScroll = useCallback(() => {
@@ -126,49 +139,58 @@ export default function FollowListModal({ userId, type, onClose, onUnfollow }) {
 
             ) : (
               <>
-                {list.map((u) => (
-                  <div
-                    key={u._id}
-                    className="flex items-center justify-between p-2 rounded-xl hover:bg-[#fdf3e7] transition-colors"
-                  >
-                    {/* Avatar + name */}
-                    <div
-                      className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
-                      onClick={() => { navigate(`/profile/${u.username}`); onClose(); }}
-                    >
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-[#e8d5be] shrink-0">
-                        {u.avatar?.url ? (
-                          <img src={u.avatar.url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-[#d4b896] to-[#c09a6e]">
-                            <span className="text-white font-bold text-sm">
-                              {u.fullName?.[0]?.toUpperCase() ?? "?"}
-                            </span>
+                {Object.entries(groupedList).map(([bucket, items]) =>
+                  items.length === 0 ? null : (
+                    <div key={bucket}>
+                      <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#8b7355]">
+                        {DATE_BUCKET_LABELS[bucket]} <span className="font-medium normal-case">· {items.length}</span>
+                      </div>
+                      {items.map((u) => (
+                        <div
+                          key={u._id}
+                          className="flex items-center justify-between p-2 rounded-xl hover:bg-[#fdf3e7] transition-colors"
+                        >
+                          {/* Avatar + name */}
+                          <div
+                            className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                            onClick={() => { navigate(`/profile/${u.username}`); onClose(); }}
+                          >
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-[#e8d5be] shrink-0">
+                              {u.avatar?.url ? (
+                                <img src={u.avatar.url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-linear-to-br from-[#d4b896] to-[#c09a6e]">
+                                  <span className="text-white font-bold text-sm">
+                                    {u.fullName?.[0]?.toUpperCase() ?? "?"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-[#2d1f0f] truncate">{u.fullName}</p>
+                              <p className="text-xs text-[#8b7355] truncate">@{u.username}</p>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[#2d1f0f] truncate">{u.fullName}</p>
-                        <p className="text-xs text-[#8b7355] truncate">@{u.username}</p>
-                      </div>
-                    </div>
 
-                    {/* Unfollow button — only on "following" tab */}
-                    {type === "following" && (
-                      <button
-                        onClick={() => handleUnfollow(u._id)}
-                        disabled={unfollowing.has(u._id)}
-                        className="flex items-center gap-1 text-xs bg-white border border-[#ddd0c0] text-[#5a3e2b] hover:bg-[#f5ece0] px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ml-2 disabled:opacity-50"
-                      >
-                        {unfollowing.has(u._id)
-                          ? <Loader2 size={11} className="animate-spin" />
-                          : <UserCheck size={12} />
-                        }
-                        Following
-                      </button>
-                    )}
-                  </div>
-                ))}
+                          {/* Unfollow button — only on "following" tab */}
+                          {type === "following" && (
+                            <button
+                              onClick={() => handleUnfollow(u._id)}
+                              disabled={unfollowing.has(u._id)}
+                              className="flex items-center gap-1 text-xs bg-white border border-[#ddd0c0] text-[#5a3e2b] hover:bg-[#f5ece0] px-3 py-1.5 rounded-full font-semibold transition-colors shrink-0 ml-2 disabled:opacity-50"
+                            >
+                              {unfollowing.has(u._id)
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <UserCheck size={12} />
+                              }
+                              Following
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
 
                 {/* Load more spinner (infinite scroll fallback) */}
                 {loadingMore && (

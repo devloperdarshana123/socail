@@ -97,7 +97,7 @@ export const rejectRequest = async (followerId, recipientId) => {
 export const getPendingRequests = async (userId, afterId, limit) => {
   const rows = await prisma.follow.findMany({
     where: { followingId: userId, status: "pending" },
-    orderBy: { id: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(afterId && { cursor: { id: afterId }, skip: 1 }),
     include: {
@@ -118,7 +118,7 @@ export const getPendingRequests = async (userId, afterId, limit) => {
 export const getFollowers = async (userId, afterId, limit) => {
   const rows = await prisma.follow.findMany({
     where: { followingId: userId, status: "accepted" },
-    orderBy: { id: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(afterId && { cursor: { id: afterId }, skip: 1 }),
     include: {
@@ -139,7 +139,7 @@ export const getFollowers = async (userId, afterId, limit) => {
 export const getFollowing = async (userId, afterId, limit) => {
   const rows = await prisma.follow.findMany({
     where: { followerId: userId, status: "accepted" },
-    orderBy: { id: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(afterId && { cursor: { id: afterId }, skip: 1 }),
     include: {

@@ -81,6 +81,7 @@ const initialState = {
   filters: {
     type:      "",
     search:    "",
+    dateRange: "",
     sortBy:    "createdAt",
     sortOrder: "desc",
     page:      1,
@@ -199,6 +200,7 @@ export const selectActivePostFilterCount = createSelector(
     let count = 0;
     if (f.search)               count += 1;
     if (f.type)                 count += 1;
+    if (f.dateRange)            count += 1;
     if (f.sortBy !== "createdAt")  count += 1;
     if (f.sortOrder !== "desc")    count += 1;
     return count;
