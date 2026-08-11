@@ -2,7 +2,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
+import * as ExploreHelper from "../../utils/exploreHelpers.js";
 import redis from "../../config/redis.js";
 
 const EXPLORE_CACHE_TTL = 60;
@@ -53,26 +53,7 @@ export const getExplorePosts = asyncHandler(async (req, res, next) => {
     } catch {}
   }
 
-  const where = {
-    isDeleted: false,
-    isDraft: false,
-    visibility: "public",
-    author: { accountStatus: { not: "deactivated" }, role: { not: "super_admin" } },
-    ...(type !== "all" && { type }),
-  };
-
-  const rawPosts = await prisma.post.findMany({
-    where,
-    orderBy: { id: "desc" },
-    take: limit + 1,
-    ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-    select: {
-      id: true, type: true, caption: true, media: true,
-      likesCount: true, commentsCount: true, viewsCount: true, savedCount: true,
-      createdAt: true, hashtags: true, commentsDisabled: true, likesHidden: true,
-      author: { select: AUTHOR_SELECT },
-    },
-  });
+  const rawPosts = await ExploreHelper.findExplorePosts({ type, limit, cursor });
 
   const hasMore = rawPosts.length > limit;
   const finalPosts = hasMore ? rawPosts.slice(0, limit) : rawPosts;
@@ -105,29 +86,7 @@ export const searchPosts = asyncHandler(async (req, res, next) => {
   if (!q) return next(new AppError("Search query required.", 400));
   if (q.length > 100) return next(new AppError("Search query too long.", 400));
 
-  const where = {
-    isDeleted: false,
-    isDraft: false,
-    visibility: "public",
-    author: { accountStatus: { not: "deactivated" }, role: { not: "super_admin" } },
-    OR: [
-      { caption: { contains: q, mode: "insensitive" } },
-      { hashtags: { hasSome: [q.toLowerCase()] } },
-    ],
-  };
-
-  const rawPosts = await prisma.post.findMany({
-    where,
-    orderBy: { id: "desc" },
-    take: limit + 1,
-    ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-    select: {
-      id: true, type: true, caption: true, media: true,
-      likesCount: true, commentsCount: true, viewsCount: true,
-      createdAt: true, hashtags: true,
-      author: { select: AUTHOR_SELECT },
-    },
-  });
+  const rawPosts = await ExploreHelper.searchExplorePosts({ q, limit, cursor });
 
   const hasMore = rawPosts.length > limit;
   const finalPosts = hasMore ? rawPosts.slice(0, limit) : rawPosts;
@@ -161,23 +120,13 @@ export const getPublicProfile = asyncHandler(async (req, res, next) => {
     } catch {}
   }
 
-  const user = await prisma.user.findFirst({
-    where: { username, accountStatus: "active", role: { not: "super_admin" } },
-    select: {
-      id: true, fullName: true, username: true, avatar: true, coverPhoto: true,
-      bio: true, designation: true, businessCategory: true, location: true,
-      followersCount: true, followingCount: true, isVerifiedBadge: true, isPrivate: true,
-    },
-  });
+  const user = await ExploreHelper.findPublicProfileUser(username);
 
   if (!user) return next(new AppError("User not found.", 404));
 
   const currentUserId = req.user?.id || null;
   const followRecord = currentUserId
-    ? await prisma.follow.findUnique({
-        where: { followerId_followingId: { followerId: currentUserId, followingId: user.id } },
-        select: { status: true },
-      })
+    ? await ExploreHelper.findFollowStatus(currentUserId, user.id)
     : null;
 
   const isFollowing = followRecord?.status === "accepted";
@@ -190,17 +139,7 @@ export const getPublicProfile = asyncHandler(async (req, res, next) => {
   const canViewPosts = !user.isPrivate || isFollowing || (currentUserId && user.id === currentUserId);
 
   if (canViewPosts) {
-    const rawPosts = await prisma.post.findMany({
-      where: { authorId: user.id, isDraft: false, isDeleted: false, visibility: "public" },
-      orderBy: { id: "desc" },
-      take: postLimit + 1,
-      ...(postCursor && { cursor: { id: postCursor }, skip: 1 }),
-      select: {
-        id: true, type: true, media: true, caption: true,
-        likesCount: true, commentsCount: true, viewsCount: true,
-        commentsDisabled: true, likesHidden: true, createdAt: true,
-      },
-    });
+    const rawPosts = await ExploreHelper.findProfilePosts({ authorId: user.id, postLimit, postCursor });
 
     hasMorePosts = rawPosts.length > postLimit;
     posts = hasMorePosts ? rawPosts.slice(0, postLimit) : rawPosts;

@@ -1,0 +1,11 @@
+{
+  "name": "@erovians/shared-mongodb",
+  "version": "1.0.0",
+  "description": "Canonical MongoDB schemas, models, indexes and validation for the Erovians platform — shared by server/ and chat-server/",
+  "private": true,
+  "type": "module",
+  "main": "database/mongodb/index.js",
+  "dependencies": {
+    "mongoose": "^9.8.0"
+  }
+}

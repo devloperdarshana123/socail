@@ -1,7 +1,6 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
 import * as UserHelper from "../../utils/userHelpers.js";
 import * as OtpHelper from "../../utils/otpHelpers.js";
 import { sendTemplateMail } from "../../mail/index.js";
@@ -85,7 +84,7 @@ export const register = asyncHandler(async (req, res, next) => {
     userData.phoneNumber = phoneNumber.trim();
   }
 
-  const user = await prisma.user.create({ data: userData });
+  const user = await UserHelper.createUser(userData);
   logger.info("User registered", { userId: user.id, authProvider: userData.authProvider });
 
   const otpPurpose = hasEmail ? OTP_PURPOSE.EMAIL_VERIFY : OTP_PURPOSE.MOBILE_VERIFY;
@@ -153,7 +152,7 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
   }
 
   const updatedUser = Object.keys(updateData).length
-    ? await prisma.user.update({ where: { id: userId }, data: updateData })
+    ? await UserHelper.updateUserById(userId, updateData)
     : user;
 
   logger.info("OTP verified", { userId, purpose });
@@ -430,14 +429,11 @@ export const setUsername = asyncHandler(async (req, res, next) => {
   const user = await UserHelper.findById(req.user.id);
   if (!user) return next(new AppError("User not found", 404));
 
-  const updatedUser = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      username: trimmed,
-      onboardingStep: 3,
-      accountStatus: "active",
-      isOnboardingComplete: true,
-    },
+  const updatedUser = await UserHelper.updateUserById(user.id, {
+    username: trimmed,
+    onboardingStep: 3,
+    accountStatus: "active",
+    isOnboardingComplete: true,
   });
 
   await redis.del(`user:auth:${user.id}`).catch(() => {});
@@ -506,10 +502,7 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
 
   const hashedPassword = await UserHelper.hashPassword(newPassword);
 
-  const updatedUser = await prisma.user.update({
-    where: { id: user.id },
-    data: { password: hashedPassword },
-  });
+  const updatedUser = await UserHelper.updateUserById(user.id, { password: hashedPassword });
 
   await UserHelper.removeAllRefreshTokens(user.id);
   await redis.del(`user:auth:${user.id}`).catch(() => {});
@@ -549,27 +542,21 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
     return next(new AppError("Google account mein email nahi hai.", 400));
   }
 
-  let user = await prisma.user.findFirst({
-    where: {
-      OR: [{ firebaseUid: googleId }, { email: email.toLowerCase() }],
-    },
-  });
+  let user = await UserHelper.findByFirebaseUidOrEmail(googleId, email);
 
   let isNewUser = false;
 
   if (!user) {
     isNewUser = true;
-    user = await prisma.user.create({
-      data: {
-        fullName: name || "Google User",
-        email: email.toLowerCase(),
-        firebaseUid: googleId,
-        authProvider: "google",
-        isEmailVerified: true,
-        accountStatus: "pending",
-        onboardingStep: 2,
-        avatar: picture ? { url: picture, publicId: null } : null,
-      },
+    user = await UserHelper.createUser({
+      fullName: name || "Google User",
+      email: email.toLowerCase(),
+      firebaseUid: googleId,
+      authProvider: "google",
+      isEmailVerified: true,
+      accountStatus: "pending",
+      onboardingStep: 2,
+      avatar: picture ? { url: picture, publicId: null } : null,
     });
     logger.info("New user via Google OAuth", { userId: user.id, email });
     notifyAdmin({
@@ -583,12 +570,9 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
       },
     }).catch(() => {});
   } else if (!user.firebaseUid) {
-    user = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        firebaseUid: googleId,
-        ...(!user.avatar && picture ? { avatar: { url: picture, publicId: null } } : {}),
-      },
+    user = await UserHelper.updateUserById(user.id, {
+      firebaseUid: googleId,
+      ...(!user.avatar && picture ? { avatar: { url: picture, publicId: null } } : {}),
     });
     logger.info("Google account linked to existing user", { userId: user.id });
   }

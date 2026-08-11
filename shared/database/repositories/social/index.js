@@ -1,0 +1,11 @@
+export { SocialPostRepository, PrismaSocialPostRepository, MongoSocialPostRepository } from "./SocialPostRepository.js";
+export { CommentRepository, PrismaCommentRepository, MongoCommentRepository } from "./CommentRepository.js";
+export { LikeRepository, PrismaLikeRepository, MongoLikeRepository } from "./LikeRepository.js";
+export { FollowRepository, PrismaFollowRepository, MongoFollowRepository } from "./FollowRepository.js";
+export { SavedRepository, PrismaSavedRepository, MongoSavedRepository } from "./SavedRepository.js";
+export { BlockRepository, PrismaBlockRepository, MongoBlockRepository } from "./BlockRepository.js";
+export { StoryRepository, PrismaStoryRepository, MongoStoryRepository } from "./StoryRepository.js";
+export { StoryViewRepository, PrismaStoryViewRepository, MongoStoryViewRepository } from "./StoryViewRepository.js";
+export { PostViewRepository, PrismaPostViewRepository, MongoPostViewRepository } from "./PostViewRepository.js";
+export { HighlightRepository, PrismaHighlightRepository, MongoHighlightRepository } from "./HighlightRepository.js";
+export { HashtagRepository, PrismaHashtagRepository, MongoHashtagRepository } from "./HashtagRepository.js";

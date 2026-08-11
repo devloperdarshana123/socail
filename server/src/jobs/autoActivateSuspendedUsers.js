@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import prisma from "../config/prisma.js";
+import { userRepository } from "../config/repositories.js";
 import logger from "../config/logger.js";
 import { sendMail } from "../utils/sendMail.js";
 import { accountActivated } from "../mail/templates/accountActivated.js";
@@ -11,10 +11,7 @@ export const startAutoActivateJob = () => {
       const now = new Date();
 
       // Find expired suspensions
-     const allSuspended = await prisma.user.findMany({
-        where: {
-          accountStatus: "suspended",
-        },
+     const allSuspended = await userRepository.findManyOrdered({ accountStatus: "suspended" }, {
         select: {
           id: true,
           email: true,
@@ -32,12 +29,9 @@ export const startAutoActivateJob = () => {
 
       // Activate them
       for (const user of expiredUsers) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            accountStatus: "active",
-            activeSuspension: null,
-          },
+        await userRepository.update(user.id, {
+          accountStatus: "active",
+          activeSuspension: null,
         });
 
         // Send email

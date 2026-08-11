@@ -3,7 +3,6 @@
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
 import * as MsgHelper from "../../utils/messageHelpers.js";
-import prisma from "../../config/prisma.js";
 import { encryptMessage, decryptMessage } from "../../utils/encryption.js";
 
 const isValidUUID = (id) =>
@@ -41,10 +40,7 @@ export const getOrCreateConversation = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid participantId.", 400));
 
   // Check participant exists
-  const participant = await prisma.user.findUnique({
-    where: { id: participantId },
-    select: { id: true },
-  });
+  const participant = await MsgHelper.findParticipantById(participantId);
   if (!participant)
     return next(new AppError("User not found.", 404));
 
@@ -84,10 +80,7 @@ export const deleteConversation = asyncHandler(async (req, res, next) => {
   if (!isValidUUID(conversationId))
     return next(new AppError("Invalid conversationId.", 400));
 
-  const conv = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true },
-  });
+  const conv = await MsgHelper.findConversationExists(conversationId);
   if (!conv)
     return next(new AppError("Conversation not found.", 404));
 
@@ -255,10 +248,7 @@ export const reactToMessage = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid messageId.", 400));
 
   // Participant check
-  const msg = await prisma.message.findUnique({
-    where: { id: messageId },
-    select: { conversationId: true },
-  });
+  const msg = await MsgHelper.getMessageConversationId(messageId);
   if (!msg)
     return next(new AppError("Message not found.", 404));
 

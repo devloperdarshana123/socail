@@ -1,7 +1,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError      from "../../utils/AppError.js";
-import prisma        from "../../config/prisma.js";
+import * as AdminNotificationHelper from "../../utils/adminNotificationHelpers.js";
 import logger        from "../../config/logger.js";
 
 const MAX_LIMIT = 50;
@@ -25,11 +25,8 @@ export const getAdminNotifications = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || MAX_LIMIT, MAX_LIMIT);
 
   const [notifications, unreadCount] = await Promise.all([
-    prisma.adminNotification.findMany({
-      orderBy: { createdAt: "desc" },
-      take:    limit,
-    }),
-    prisma.adminNotification.count({ where: { isRead: false } }),
+    AdminNotificationHelper.findAdminNotifications(limit),
+    AdminNotificationHelper.countUnreadAdminNotifications(),
   ]);
 
   return res.status(200).json({
@@ -43,10 +40,7 @@ export const getAdminNotifications = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 
 export const markAllAdminNotificationsRead = asyncHandler(async (req, res) => {
-  const result = await prisma.adminNotification.updateMany({
-    where: { isRead: false },
-    data:  { isRead: true, readAt: new Date() },
-  });
+  const result = await AdminNotificationHelper.markAllAdminNotificationsRead();
 
   logger.info("Admin notifications marked as read", { modifiedCount: result.count });
 
@@ -66,12 +60,10 @@ export const saveAdminNotification = asyncHandler(async (req, res, next) => {
 
   if (!type) return next(new AppError("type is required.", 400));
 
-  const notification = await prisma.adminNotification.create({
-    data: {
-      type,
-      label: LABEL_MAP[type] || type,
-      meta,
-    },
+  const notification = await AdminNotificationHelper.createAdminNotification({
+    type,
+    label: LABEL_MAP[type] || type,
+    meta,
   });
 
   logger.info("Admin notification saved", { type, id: notification.id });

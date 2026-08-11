@@ -1,9 +1,50 @@
-import prisma from "../config/prisma.js";
+import { transactionRunner } from "../config/transaction.js";
+import {
+  socialPostRepository,
+  userRepository,
+  followRepository,
+  likeRepository,
+  savedRepository,
+  postViewRepository,
+} from "../config/repositories.js";
 import cloudinary from "../config/cloudinaryConfig.js";
 import logger from "../config/logger.js";
 import { finalizeMedia } from "../helper/cloudinaryUpload.js";
 
+// Persistence for the post domain now flows through the repository layer
+// (Phase 7A) instead of the Prisma client directly. Database/behavior are
+// unchanged — every query below is the same shape as the prisma.* call it
+// replaces; only the access path moved.
+//
+// Helper-owned business logic, all unchanged: media sanitization and its
+// Cloudinary finalize/thumbnail steps, location parsing, caption limits and
+// trimming, per-type media validation and its thrown messages, ownership and
+// draft-visibility rules, the hasMore/nextCursor pagination math, and the
+// postsCount increment/decrement decisions.
+//
+// Projection ownership stays here too: each list method passes its OWN
+// `select` to the repository rather than accepting a repository-defined
+// shape, so the three lists keep their three deliberately different
+// projections (feed has savedCount, profile does not, drafts have no author).
+//
+// Both callback transactions run through transactionRunner.run() with `{ tx }`
+// threaded into every repository call, preserving statement order and
+// whole-callback rollback.
+//
+// NOTE: findById calls pass includeDeleted: true throughout — the original
+// findUnique queries did not filter on isDeleted, and each method performs
+// its own isDeleted check to decide what to return.
+
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+// The author projection attached to created/updated posts and list rows.
+const POST_AUTHOR_SELECT = {
+  id: true,
+  username: true,
+  fullName: true,
+  avatar: true,
+  isVerifiedBadge: true,
+};
 
 // ── Sanitize media item ─────────────────────────
 export const sanitizeMediaItem = (item, index) => ({
@@ -67,9 +108,9 @@ export const createPost = async (userId, postData) => {
     } catch {}
   }
 
-  const post = await prisma.$transaction(async (tx) => {
-    const newPost = await tx.post.create({
-      data: {
+  const post = await transactionRunner.run(async (tx) => {
+    const newPost = await socialPostRepository.create(
+      {
         authorId: userId,
         type,
         caption: caption.trim().slice(0, 2200),
@@ -80,24 +121,14 @@ export const createPost = async (userId, postData) => {
         isDraft: Boolean(isDraft),
         ...(locationData && { location: locationData }),
       },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            fullName: true,
-            avatar: true,
-            isVerifiedBadge: true,
-          },
-        },
-      },
-    });
+      {
+        tx,
+        include: { author: { select: POST_AUTHOR_SELECT } },
+      }
+    );
 
     if (!newPost.isDraft) {
-      await tx.user.update({
-        where: { id: userId },
-        data: { postsCount: { increment: 1 } },
-      });
+      await userRepository.update(userId, { postsCount: { inc: 1 } }, { tx });
     }
 
     return newPost;
@@ -110,8 +141,8 @@ export const createPost = async (userId, postData) => {
 export const getPostById = async (postId, userId = null) => {
   if (!isValidUUID(postId)) return null;
 
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
+  const post = await socialPostRepository.findById(postId, {
+    includeDeleted: true,
     select: {
       id: true,
       type: true,
@@ -131,11 +162,7 @@ export const getPostById = async (postId, userId = null) => {
       updatedAt: true,
       author: {
         select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
+          ...POST_AUTHOR_SELECT,
           accountStatus: true,
         },
       },
@@ -143,7 +170,7 @@ export const getPostById = async (postId, userId = null) => {
   });
 
   if (!post || post.isDeleted) return null;
-  if (post.isDraft && userId !== post.author.id) return null;
+  if (post.isDraft && String(userId) !== String(post.author.id)) return null;
 
   return post;
 };
@@ -161,9 +188,7 @@ export const getFeedPosts = async (userIds, { beforeId = null, limit = 20 } = {}
     query.id = { lt: beforeId };
   }
 
-  const posts = await prisma.post.findMany({
-    where: query,
-    orderBy: { createdAt: "desc" },
+  const posts = await socialPostRepository.findManyWithCursor(query, {
     take: limit + 1,
     select: {
       id: true,
@@ -177,15 +202,7 @@ export const getFeedPosts = async (userIds, { beforeId = null, limit = 20 } = {}
       commentsDisabled: true,
       likesHidden: true,
       createdAt: true,
-      author: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-        },
-      },
+      author: { select: POST_AUTHOR_SELECT },
     },
   });
 
@@ -198,8 +215,7 @@ export const getFeedPosts = async (userIds, { beforeId = null, limit = 20 } = {}
 
 // ── Get user posts ──────────────────────────────
 export const getUserPosts = async (userId, isFollower, isOwner, { beforeId = null, limit = 18 } = {}) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  const user = await userRepository.findById(userId, {
     select: { isPrivate: true },
   });
 
@@ -218,9 +234,7 @@ export const getUserPosts = async (userId, isFollower, isOwner, { beforeId = nul
     query.id = { lt: beforeId };
   }
 
-  const posts = await prisma.post.findMany({
-    where: query,
-    orderBy: { createdAt: "desc" },
+  const posts = await socialPostRepository.findManyWithCursor(query, {
     take: limit + 1,
     select: {
       id: true,
@@ -231,15 +245,7 @@ export const getUserPosts = async (userId, isFollower, isOwner, { beforeId = nul
       commentsCount: true,
       viewsCount: true,
       createdAt: true,
-      author: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-        },
-      },
+      author: { select: POST_AUTHOR_SELECT },
     },
   });
 
@@ -252,25 +258,21 @@ export const getUserPosts = async (userId, isFollower, isOwner, { beforeId = nul
 
 // ── Delete post (soft delete) ───────────────────
 export const deletePost = async (postId, userId) => {
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
+  const post = await socialPostRepository.findById(postId, {
+    includeDeleted: true,
     select: { id: true, authorId: true, isDeleted: true, isDraft: true, media: true },
   });
 
-  if (!post || post.isDeleted || post.authorId !== userId) {
+  if (!post || post.isDeleted || String(post.authorId) !== String(userId)) {
     return null;
   }
 
-  await prisma.post.update({
-    where: { id: postId },
-    data: { isDeleted: true },
-  });
+  // update(), NOT delete() — the repository's delete() would also stamp
+  // deletedAt, which this query never wrote.
+  await socialPostRepository.update(postId, { isDeleted: true });
 
   if (!post.isDraft) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { postsCount: { decrement: 1 } },
-    });
+    await userRepository.update(userId, { postsCount: { dec: 1 } });
   }
 
   return post;
@@ -288,9 +290,7 @@ export const getDraftPosts = async (userId, { beforeId = null, limit = 20 } = {}
     query.id = { lt: beforeId };
   }
 
-  const posts = await prisma.post.findMany({
-    where: query,
-    orderBy: { createdAt: "desc" },
+  const posts = await socialPostRepository.findManyWithCursor(query, {
     take: limit + 1,
     select: {
       id: true,
@@ -313,12 +313,12 @@ export const getDraftPosts = async (userId, { beforeId = null, limit = 20 } = {}
 
 // ── Publish draft ───────────────────────────────
 export const publishDraft = async (postId, userId) => {
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
+  const post = await socialPostRepository.findById(postId, {
+    includeDeleted: true,
     select: { id: true, authorId: true, isDraft: true, isDeleted: true, type: true, media: true },
   });
 
-  if (!post || post.isDeleted || post.authorId !== userId || !post.isDraft) {
+  if (!post || post.isDeleted || String(post.authorId) !== String(userId) || !post.isDraft) {
     return null;
   }
 
@@ -329,26 +329,13 @@ export const publishDraft = async (postId, userId) => {
     throw new Error("Reel must have exactly one video.");
   }
 
-  const updated = await prisma.post.update({
-    where: { id: postId },
-    data: { isDraft: false },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-        },
-      },
-    },
-  });
+  const updated = await socialPostRepository.update(
+    postId,
+    { isDraft: false },
+    { include: { author: { select: POST_AUTHOR_SELECT } } }
+  );
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { postsCount: { increment: 1 } },
-  });
+  await userRepository.update(userId, { postsCount: { inc: 1 } });
 
   return updated;
 };
@@ -357,8 +344,8 @@ export const publishDraft = async (postId, userId) => {
 export const updatePost = async (postId, userId, updateData) => {
   const { caption, isDraft, media } = updateData;
 
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
+  const post = await socialPostRepository.findById(postId, {
+    includeDeleted: true,
     select: {
       id: true,
       authorId: true,
@@ -368,7 +355,7 @@ export const updatePost = async (postId, userId, updateData) => {
     },
   });
 
-  if (!post || post.isDeleted || post.authorId !== userId) {
+  if (!post || post.isDeleted || String(post.authorId) !== String(userId)) {
     return null;
   }
 
@@ -402,33 +389,98 @@ export const updatePost = async (postId, userId, updateData) => {
     updateObj.media = await finalizeMedia(sanitized);
   }
 
-  const updated = await prisma.post.update({
-    where: { id: postId },
-    data: updateObj,
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-        },
-      },
-    },
+  const updated = await socialPostRepository.update(postId, updateObj, {
+    include: { author: { select: POST_AUTHOR_SELECT } },
   });
 
   return updated;
 };
 
+// ── Controller-extracted lookups (Milestone 5D) ─────────────────────────
+//    Each of these was inline in post.controller.js and is moved here
+//    verbatim so the controller performs no direct DB access. Queries are
+//    byte-identical to those they replace; the controller keeps all
+//    orchestration (Promise.all grouping, filtering, response shaping).
+
+// getPostInteraction: has the viewer liked this post?
+export const findPostLikeByUser = async (userId, postId) => {
+  return likeRepository.findExclusivePostLike(userId, postId, {
+    select: { id: true },
+  });
+};
+
+// getPostInteraction: has the viewer saved this post?
+export const findPostSavedByUser = async (userId, postId) => {
+  return savedRepository.findByUserAndPost(userId, postId, {
+    select: { id: true },
+  });
+};
+
+// getPostInteraction: current counts for this post.
+export const getPostInteractionCounts = async (postId) => {
+  return socialPostRepository.findById(postId, {
+    includeDeleted: true,
+    select: { likesCount: true, commentsCount: true, viewsCount: true },
+  });
+};
+
+// getFeedPosts: the ids this user follows (accepted only).
+export const getAcceptedFollowingIds = async (userId) => {
+  return followRepository.findAllFollowingIds(userId, { status: "accepted" });
+};
+
+// getFeedPosts: ids of super_admins, filtered out of the feed author set.
+export const getSuperAdminIds = async () => {
+  return userRepository.findAllByRole("super_admin", { select: { id: true } });
+};
+
+// getUserPosts: target user's role + privacy (for the super_admin block).
+export const getUserRoleAndPrivacy = async (userId) => {
+  return userRepository.findById(userId, {
+    select: { role: true, isPrivate: true },
+  });
+};
+
+// getUserPosts: count of the user's visible (published, non-deleted) posts.
+export const countVisibleUserPosts = async (userId) => {
+  return socialPostRepository.count({
+    authorId: userId,
+    isDeleted: false,
+    isDraft: false,
+  });
+};
+
+// getUserPosts: the viewer's follow relationship to the profile owner.
+export const getFollowStatus = async (followerId, followingId) => {
+  return followRepository.findByFollowerAndFollowing(followerId, followingId, {
+    select: { status: true },
+  });
+};
+
+// updatePost: current media (for Cloudinary deletion diffing).
+export const getPostMediaForUpdate = async (postId) => {
+  return socialPostRepository.findById(postId, {
+    includeDeleted: true,
+    select: { media: true },
+  });
+};
+
+// recordView: the post's updated view count (read after recording).
+export const getPostViewsCount = async (postId) => {
+  return socialPostRepository.findById(postId, {
+    includeDeleted: true,
+    select: { viewsCount: true },
+  });
+};
+
 // ── Record view ─────────────────────────────────
 export async function recordPostView(postId, userId, options = {}) {
   try {
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { 
-        id: true, 
-        viewsCount: true, 
+    const post = await socialPostRepository.findById(postId, {
+      includeDeleted: true,
+      select: {
+        id: true,
+        viewsCount: true,
         authorId: true,
         isDeleted: true,
       },
@@ -436,7 +488,7 @@ export async function recordPostView(postId, userId, options = {}) {
 
     if (!post || post.isDeleted) return null;
 
-    const selfView = userId === post.authorId;
+    const selfView = String(userId) === String(post.authorId);
 
     if (selfView) {
       return {
@@ -447,22 +499,23 @@ export async function recordPostView(postId, userId, options = {}) {
     }
 
    try {
-      const updated = await prisma.$transaction(async (tx) => {
-        await tx.postView.create({
-          data: {
+      const updated = await transactionRunner.run(async (tx) => {
+        await postViewRepository.create(
+          {
             postId,
             userId,
             source: options.source || "modal",
             duration: options.duration || 0,
             device: options.device || "desktop",
           },
-        });
+          { tx }
+        );
 
-        return tx.post.update({
-          where: { id: postId },
-          data: { viewsCount: { increment: 1 } },
-          select: { viewsCount: true },
-        });
+        return socialPostRepository.update(
+          postId,
+          { viewsCount: { inc: 1 } },
+          { tx, select: { viewsCount: true } }
+        );
       });
 
       return {

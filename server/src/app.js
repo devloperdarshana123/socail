@@ -16,7 +16,7 @@ import {
   transcribeLimiter,
   globalRouteLimiter,
 } from "./middlewares/rateLimiter.js";
-import prisma from "./config/prisma.js";
+import { pingDatabase } from "./config/database.js";
 import authRoute from "./routes/auth/auth.route.js";
 import globalErrorHandler from "./middlewares/globalErrorHandler.js";
 import AppError from "./utils/AppError.js";
@@ -94,14 +94,11 @@ app.use("/api/v2/auth/login", authRouteLimiter);
 app.use("/api/v2/auth/register", authRouteLimiter);
 app.use("/api/v2/auth/forgot-password", authRouteLimiter);
 
-// ── Health Check — Prisma DB ping ──
+// ── Health Check — active-provider DB ping ──
+// Provider-aware so /health means the same thing on both backends and does
+// not require a Prisma client on a Mongo deployment. Response shape unchanged.
 app.get("/health", async (req, res) => {
-  let dbStatus = "connected";
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-  } catch {
-    dbStatus = "disconnected";
-  }
+  const dbStatus = await pingDatabase();
 
   res.status(200).json({
     status     : "ok",

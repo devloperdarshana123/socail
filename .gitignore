@@ -1,0 +1,51 @@
+# Repository-root ignores.
+#
+# The per-package .gitignore files (server/, chat-server/, client/, admin/)
+# stay authoritative for their own trees; nothing here overrides them. This
+# file exists because the migration added two top-level directories —
+# `shared/` and `infrastructure/` — that had no ignore rules of their own,
+# and because two test-harness artefacts are generated at paths no package
+# .gitignore covers.
+
+# ── Dependencies ─────────────────────────────────────────────────────────
+# `shared/` is a new package with its own node_modules (mongoose,
+# mongodb-memory-server). server/ and chat-server/ already ignore theirs;
+# without this, `git add shared/` would stage ~923 files.
+node_modules/
+**/node_modules/
+
+# ── Test-harness runtime data ────────────────────────────────────────────
+# embedded-postgres writes a full PostgreSQL data directory here on every
+# run of the Postgres suite, and the harness records its connection details
+# alongside it. Both are recreated per run and must never be committed.
+server/tests/.pgdata/
+server/tests/.test-env.json
+
+# ── Secrets ──────────────────────────────────────────────────────────────
+# Real environment files, at any depth. The `!` rules below keep the
+# committed TEMPLATES visible — they carry key names only, never values.
+.env
+**/.env
+.env.local
+**/.env.local
+.env.*.local
+**/.env.*.local
+
+!.env.example
+!**/.env.example
+
+# ── Migration tooling output ─────────────────────────────────────────────
+# `--report=` writes machine-readable run reports (preflight.json,
+# migration.json, …). They are per-run evidence, not source.
+preflight.json
+dryrun.json
+migration.json
+validation.json
+indexes.json
+rerun.json
+cutover.json
+
+# Database dumps, wherever a rehearsal leaves them.
+*.dump
+*.pgdump
+*.sql.gz

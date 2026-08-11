@@ -5,7 +5,6 @@ import AppError from "../../utils/AppError.js";
 import logger from "../../config/logger.js";
 import { notifyChat } from "../../helper/notifyChat.js";
 import * as LikeHelper from "../../utils/likeHelpers.js";
-import prisma from "../../config/prisma.js";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -29,10 +28,7 @@ export const togglePostLike = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid reaction type.", 400));
   }
 
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    select: { id: true, authorId: true, likesCount: true, likesHidden: true, isDeleted: true },
-  });
+  const post = await LikeHelper.getPostForLike(postId);
 
   if (!post || post.isDeleted) {
     return next(new AppError("Post not found", 404));
@@ -72,10 +68,7 @@ export const togglePostLike = asyncHandler(async (req, res, next) => {
   }
 
   // Optimistic count
-  const updatedPost = await prisma.post.findUnique({
-  where: { id: postId },
-  select: { likesCount: true },
-});
+  const updatedPost = await LikeHelper.getPostLikesCount(postId);
 const actualCount = updatedPost?.likesCount ?? 0;
   return res.status(200).json({
     success: true,
@@ -98,10 +91,7 @@ export const toggleCommentLike = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid comment ID.", 400));
   }
 
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
-    select: { id: true, authorId: true, likesCount: true, isDeleted: true },
-  });
+  const comment = await LikeHelper.getCommentForLike(commentId);
 
   if (!comment || comment.isDeleted) {
     return next(new AppError("Comment not found", 404));
@@ -117,10 +107,7 @@ export const toggleCommentLike = asyncHandler(async (req, res, next) => {
 
   logger.info("Comment like toggled", { userId, commentId, liked });
 
-  const updatedComment = await prisma.comment.findUnique({
-  where: { id: commentId },
-  select: { likesCount: true },
-});
+  const updatedComment = await LikeHelper.getCommentLikesCount(commentId);
 const actualCount = updatedComment?.likesCount ?? 0;
 
 return res.status(200).json({

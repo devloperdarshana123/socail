@@ -7,7 +7,6 @@ import { notifyChat } from "../../helper/notifyChat.js";
 import * as StoryHelper from "../../utils/storyHelpers.js";
 import * as HighlightHelper from "../../utils/highlightHelpers.js";
 import redis from "../../config/redis.js";
-import prisma from "../../config/prisma.js";
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 // ─────────────────────────────────────────────
@@ -158,10 +157,7 @@ export const reactToStory = asyncHandler(async (req, res, next) => {
     return next(new AppError("Story not found or expired.", 404));
   }
 
-  const story = await prisma.story.findUnique({
-    where: { id: req.params.id },
-    select: { authorId: true },
-  });
+  const story = await StoryHelper.getStoryAuthorId(req.params.id);
 
   if (reaction && story?.authorId !== req.user.id) {
     notifyChat("/notify/story-reaction", {
@@ -184,10 +180,7 @@ export const toggleStoryLike = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid story ID.", 400));
   }
 
-  const existing = await prisma.storyView.findUnique({
-    where: { storyId_viewerId: { storyId: req.params.id, viewerId: req.user.id } },
-    select: { reaction: true },
-  });
+  const existing = await StoryHelper.getStoryViewReaction(req.params.id, req.user.id);
 
   const wasLiked = existing?.reaction === "❤️";
   const newReaction = wasLiked ? null : "❤️";
@@ -199,10 +192,7 @@ export const toggleStoryLike = asyncHandler(async (req, res, next) => {
 
   const liked = !wasLiked;
 
-  const story = await prisma.story.findUnique({
-    where: { id: req.params.id },
-    select: { authorId: true },
-  });
+  const story = await StoryHelper.getStoryAuthorId(req.params.id);
 
   if (!story) {
     return next(new AppError("Story not found.", 404));

@@ -1,12 +1,38 @@
-import prisma from "../config/prisma.js";
+import { transactionRunner } from "../config/transaction.js";
+import {
+  userRepository,
+  socialPostRepository,
+  storyRepository,
+  sessionRepository,
+} from "../config/repositories.js";
 import * as UserHelper from "./userHelpers.js";
+
+// Persistence for the settings domain now flows through the repository
+// layer (Phase 7A) instead of the Prisma client directly. Database/behavior
+// are unchanged — every query below is the same shape as the prisma.* call
+// it replaces; only the access path moved.
+//
+// Business logic stays entirely in this helper, unchanged: the fullName/bio
+// validation rules and their thrown Error messages, the null-coercion of
+// optional profile fields, Nominatim geocoding (including its
+// swallow-and-continue catch), the Google-vs-normal password branch, the
+// 30-day reactivation window, and every returned message string.
+//
+// Both callback-form transactions now run through transactionRunner.run()
+// and pass `{ tx }` to each repository call, so ordering and whole-callback
+// rollback are preserved exactly — see the transaction-semantics tests in
+// the settings characterization suite.
+//
+// NOTE: every findById here passes an explicit `select` except
+// getFullUserById, which deliberately omits one so the repository returns
+// the complete row that sendUserToken consumes — matching the original
+// unprojected findUnique.
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 // ── Get user profile ────────────────────────────────────────────────────
 export const getUserProfile = async (userId) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  const user = await userRepository.findById(userId, {
     select: {
       id: true,
       username: true,
@@ -32,6 +58,36 @@ export const getUserProfile = async (userId) => {
   });
 
   return user;
+};
+
+// ── Account-lookup helpers (extracted verbatim from setting.controller.js
+//    so the controller no longer touches Prisma directly — Milestone 5
+//    helpers-as-boundary. Each query is byte-identical to the one it
+//    replaces; returns null for a missing user, as findUnique does. ───────
+
+// permanentlyDeleteAccount: fetch the stored hash to verify the password.
+export const getPasswordForVerification = async (userId) => {
+  return userRepository.findById(userId, {
+    select: { password: true },
+  });
+};
+
+// reactivateAccount: status + password + onboarding, for verify & response.
+export const getUserForReactivation = async (userId) => {
+  return userRepository.findById(userId, {
+    select: {
+      id: true,
+      accountStatus: true,
+      password: true,
+      isOnboardingComplete: true,
+      onboardingStep: true,
+    },
+  });
+};
+
+// reactivateAccount: full user row handed to sendUserToken after restore.
+export const getFullUserById = async (userId) => {
+  return userRepository.findById(userId);
 };
 
 // ── Update profile ──────────────────────────────────────────────────────
@@ -107,10 +163,7 @@ export const updateUserProfile = async (userId, updateData) => {
     }
   }
 
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: updateFields,
-  });
+  const updated = await userRepository.update(userId, updateFields);
 
   return updated;
 };
@@ -121,8 +174,7 @@ export const updatePassword = async (userId, oldPassword, newPassword) => {
     throw new Error("New password must be at least 8 characters long.");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  const user = await userRepository.findById(userId, {
     select: { id: true, password: true, authProvider: true },
   });
 
@@ -135,10 +187,7 @@ export const updatePassword = async (userId, oldPassword, newPassword) => {
   if (isGoogleUser) {
     // Google user — set password without verification
     const hashedPassword = await UserHelper.hashPassword(newPassword);
-    await prisma.user.update({
-      where: { id: userId },
-      data: { password: hashedPassword },
-    });
+    await userRepository.update(userId, { password: hashedPassword });
 
     return { message: "Password created successfully. You can now login with email too." };
   }
@@ -158,21 +207,17 @@ export const updatePassword = async (userId, oldPassword, newPassword) => {
   }
 
   const hashedPassword = await UserHelper.hashPassword(newPassword);
-  await prisma.user.update({
-    where: { id: userId },
-    data: { password: hashedPassword },
-  });
+  await userRepository.update(userId, { password: hashedPassword });
 
   // Log out all sessions — remove all refresh tokens
-  await prisma.refreshToken.deleteMany({ where: { userId } });
+  await sessionRepository.deleteManyByUserId(userId);
 
   return { message: "Password updated successfully." };
 };
 
 // ── Deactivate account ──────────────────────────────────────────────────
 export const deactivateAccount = async (userId) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  const user = await userRepository.findById(userId, {
     select: { id: true },
   });
 
@@ -181,33 +226,36 @@ export const deactivateAccount = async (userId) => {
   }
 
   // Soft delete — anonymize
- await prisma.$transaction(async (tx) => {
+ await transactionRunner.run(async (tx) => {
   // Soft delete — anonymize
-await tx.user.update({
-    where: { id: userId },
-    data: {
+await userRepository.update(
+    userId,
+    {
       accountStatus: "deactivated",
       deactivatedAt: new Date(),
       bio: "",
       designation: "",
       avatar: null,
     },
-  });
+    { tx }
+  );
 
   // Posts hide karo
-  await tx.post.updateMany({
-    where: { authorId: userId },
-    data: { isDeleted: true },
-  });
+  await socialPostRepository.updateManyWhere(
+    { authorId: userId },
+    { isDeleted: true },
+    { tx }
+  );
 
   // Stories hide karo
-  await tx.story.updateMany({
-    where: { authorId: userId },
-    data: { isDeleted: true },
-  });
+  await storyRepository.updateManyWhere(
+    { authorId: userId },
+    { isDeleted: true },
+    { tx }
+  );
 
   // Sessions remove karo
-  await tx.refreshToken.deleteMany({ where: { userId } });
+  await sessionRepository.deleteManyByUserId(userId, { tx });
 });
 
 return { message: "Account deactivated successfully." };
@@ -245,7 +293,8 @@ return { message: "Account deactivated successfully." };
 export const hardDeleteAccount = async (userId) => {
   // Schema mein onDelete: Cascade already set hai most relations pe,
   // isliye sirf user delete karna kaafi hai — DB khud sab cascade kar dega
-  await prisma.user.delete({ where: { id: userId } });
+  // (userRepository.delete is a HARD delete, matching the original.)
+  await userRepository.delete(userId);
 
   return { message: "Account permanently deleted." };
 };
@@ -253,8 +302,7 @@ export const hardDeleteAccount = async (userId) => {
 
 // ── Reactivate account ──────────────────────────────────────────────────
 export const reactivateAccount = async (userId) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  const user = await userRepository.findById(userId, {
     select: { id: true, accountStatus: true, deactivatedAt: true },
   });
 
@@ -269,24 +317,23 @@ export const reactivateAccount = async (userId) => {
     }
   }
 
-  await prisma.$transaction(async (tx) => {
+  await transactionRunner.run(async (tx) => {
     // Account wapas active karo
-    await tx.user.update({
-      where: { id: userId },
-      data: { accountStatus: "active" },
-    });
+    await userRepository.update(userId, { accountStatus: "active" }, { tx });
 
     // Posts wapas visible karo
-    await tx.post.updateMany({
-      where: { authorId: userId, isDeleted: true },
-      data: { isDeleted: false },
-    });
+    await socialPostRepository.updateManyWhere(
+      { authorId: userId, isDeleted: true },
+      { isDeleted: false },
+      { tx }
+    );
 
     // Stories wapas visible karo
-    await tx.story.updateMany({
-      where: { authorId: userId, isDeleted: true },
-      data: { isDeleted: false },
-    });
+    await storyRepository.updateManyWhere(
+      { authorId: userId, isDeleted: true },
+      { isDeleted: false },
+      { tx }
+    );
   });
 
   return { message: "Account reactivated successfully." };

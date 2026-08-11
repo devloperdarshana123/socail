@@ -2,7 +2,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
+import * as AdminAuthHelper from "../../utils/adminAuthHelpers.js";
 import { sendAdminToken }    from "../../utils/sendAdminToken.js";
 import { clearAdminCookies } from "../../utils/authCookies.js";
 import { ADMIN_COOKIE_ACCESS, ADMIN_COOKIE_REFRESH } from "../../utils/authCookies.js";
@@ -38,19 +38,7 @@ export const adminLogin = asyncHandler(async (req, res, next) => {
   }
 
   // Prisma: findUnique by email
-  const user = await prisma.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
-    select: {
-      id:            true,
-      fullName:      true,
-      email:         true,
-      username:      true,
-      password:      true,
-      role:          true,
-      accountStatus: true,
-      avatar:        true,
-    },
-  });
+  const user = await AdminAuthHelper.findAdminByEmail(email.trim().toLowerCase());
 
   if (!user || !user.password) {
     return next(new AppError("Invalid email or password", 401));
@@ -103,12 +91,7 @@ export const adminLogout = asyncHandler(async (req, res, next) => {
   // Remove refresh token from DB
   if (incomingRefreshToken) {
     const tokenHash = hashToken(incomingRefreshToken);
-    await prisma.refreshToken.deleteMany({
-      where: {
-        userId:    req.user.id,
-        tokenHash,
-      },
-    });
+    await AdminAuthHelper.deleteAdminRefreshTokenByHash(req.user.id, tokenHash);
   }
 
   logger.info("Admin logged out", { userId: req.user.id });
@@ -138,18 +121,7 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
   }
 
   // ── Step 3: User exists in DB? ───────────────────────────────────────────
-  const user = await prisma.user.findUnique({
-    where: { id: decoded._id },
-    select: {
-      id:            true,
-      fullName:      true,
-      email:         true,
-      username:      true,
-      role:          true,
-      accountStatus: true,
-      avatar:        true,
-    },
-  });
+  const user = await AdminAuthHelper.findAdminById(decoded._id);
 
   if (!user) {
     logger.warn("Admin refresh: user not found", { userId: decoded._id });
@@ -166,13 +138,7 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
   const incomingHash = hashToken(incomingRefreshToken);
   const now          = new Date();
 
-  const storedToken = await prisma.refreshToken.findFirst({
-    where: {
-      userId:    user.id,
-      tokenHash: incomingHash,
-      expiresAt: { gt: now },
-    },
-  });
+  const storedToken = await AdminAuthHelper.findValidAdminRefreshToken(user.id, incomingHash, now);
 
   if (!storedToken) {
     logger.warn("Admin refresh: token hash not found or expired", {
@@ -184,12 +150,12 @@ export const adminRefreshToken = asyncHandler(async (req, res, next) => {
 
   // ── Account status check ─────────────────────────────────────────────────
   if (user.accountStatus === "banned" || user.accountStatus === "suspended") {
-    await prisma.refreshToken.delete({ where: { id: storedToken.id } });
+    await AdminAuthHelper.deleteAdminRefreshTokenById(storedToken.id);
     return next(new AppError("Your account has been suspended or banned.", 403));
   }
 
   // ── Step 6: Rotate — delete old, create new ──────────────────────────────
-  await prisma.refreshToken.delete({ where: { id: storedToken.id } });
+  await AdminAuthHelper.deleteAdminRefreshTokenById(storedToken.id);
 
   // Blacklist old access token
   const oldAccessToken = req.cookies?.[ADMIN_COOKIE_ACCESS];

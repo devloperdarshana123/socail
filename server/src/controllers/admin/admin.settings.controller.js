@@ -1,7 +1,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError      from "../../utils/AppError.js";
-import prisma        from "../../config/prisma.js";
+import * as AdminSettingsHelper from "../../utils/adminSettingsHelpers.js";
 import logger        from "../../config/logger.js";
 import {
   uploadToCloudinary,
@@ -25,22 +25,7 @@ const getCurrentTokenHash = (req) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getAdminProfile = asyncHandler(async (req, res, next) => {
-  const admin = await prisma.user.findUnique({
-    where:  { id: req.user.id },
-    select: {
-      id:                   true,
-      fullName:             true,
-      username:             true,
-      email:                true,
-      avatar:               true,
-      designation:          true,
-      bio:                  true,
-      notificationsEnabled: true,
-      role:                 true,
-      createdAt:            true,
-      lastActiveAt:         true,
-    },
-  });
+  const admin = await AdminSettingsHelper.findAdminProfile(req.user.id);
 
   if (!admin) return next(new AppError("Admin not found.", 404));
 
@@ -67,12 +52,10 @@ export const updateAdminProfile = asyncHandler(async (req, res, next) => {
     if (username && !/^[a-z0-9._]+$/.test(username))
       return next(new AppError("Username: only lowercase letters, numbers, dots, underscores.", 400));
 
-    const taken = await prisma.user.findFirst({
-      where: {
-        username: username.toLowerCase().trim(),
-        id:       { not: req.user.id },
-      },
-    });
+    const taken = await AdminSettingsHelper.findUserByUsernameExcludingId(
+      username.toLowerCase().trim(),
+      req.user.id,
+    );
     if (taken) return next(new AppError("Username is already taken.", 409));
     data.username = username.toLowerCase().trim();
   }
@@ -81,12 +64,10 @@ export const updateAdminProfile = asyncHandler(async (req, res, next) => {
     if (email && !/^\S+@\S+\.\S+$/.test(email))
       return next(new AppError("Enter a valid email address.", 400));
 
-    const taken = await prisma.user.findFirst({
-      where: {
-        email: email.toLowerCase().trim(),
-        id:    { not: req.user.id },
-      },
-    });
+    const taken = await AdminSettingsHelper.findUserByEmailExcludingId(
+      email.toLowerCase().trim(),
+      req.user.id,
+    );
     if (taken) return next(new AppError("Email is already in use.", 409));
     data.email = email.toLowerCase().trim();
   }
@@ -94,20 +75,7 @@ export const updateAdminProfile = asyncHandler(async (req, res, next) => {
   if (designation !== undefined) data.designation = designation.trim();
   if (bio         !== undefined) data.bio         = bio.trim();
 
-  const updated = await prisma.user.update({
-    where:  { id: req.user.id },
-    data,
-    select: {
-      id:          true,
-      fullName:    true,
-      username:    true,
-      email:       true,
-      designation: true,
-      bio:         true,
-      avatar:      true,
-      role:        true,
-    },
-  });
+  const updated = await AdminSettingsHelper.updateAdminProfileFields(req.user.id, data);
 
   logger.info("Admin profile updated", { adminId: req.user.id });
 
@@ -128,10 +96,7 @@ export const updateAdminAvatar = asyncHandler(async (req, res, next) => {
   if (req.file.size > 5 * 1024 * 1024)
     return next(new AppError("Avatar cannot exceed 5MB.", 400));
 
-  const admin = await prisma.user.findUnique({
-    where:  { id: req.user.id },
-    select: { id: true, avatar: true },
-  });
+  const admin = await AdminSettingsHelper.findAdminAvatar(req.user.id);
   if (!admin) return next(new AppError("Admin not found.", 404));
 
   // Delete old avatar from Cloudinary
@@ -152,10 +117,7 @@ export const updateAdminAvatar = asyncHandler(async (req, res, next) => {
 
   const newAvatar = { url: result.secure_url, publicId: result.public_id };
 
-  await prisma.user.update({
-    where: { id: req.user.id },
-    data:  { avatar: newAvatar },
-  });
+  await AdminSettingsHelper.updateAdminAvatar(req.user.id, newAvatar);
 
   logger.info("Admin avatar updated", { adminId: req.user.id });
 
@@ -182,10 +144,7 @@ export const changeAdminPassword = asyncHandler(async (req, res, next) => {
   if (currentPassword === newPassword)
     return next(new AppError("New password must differ from current password.", 400));
 
-  const admin = await prisma.user.findUnique({
-    where:  { id: req.user.id },
-    select: { id: true, password: true },
-  });
+  const admin = await AdminSettingsHelper.findAdminPassword(req.user.id);
   if (!admin) return next(new AppError("Admin not found.", 404));
 
   const isMatch = await bcrypt.compare(currentPassword, admin.password);
@@ -197,18 +156,11 @@ export const changeAdminPassword = asyncHandler(async (req, res, next) => {
   const currentHash = getCurrentTokenHash(req);
 
   // Update password + delete all OTHER refresh tokens in a transaction
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: req.user.id },
-      data:  { password: hashedPassword },
-    }),
-    prisma.refreshToken.deleteMany({
-      where: {
-        userId: req.user.id,
-        ...(currentHash ? { tokenHash: { not: currentHash } } : {}),
-      },
-    }),
-  ]);
+  await AdminSettingsHelper.changeAdminPasswordAndRevokeOtherSessions(
+    req.user.id,
+    hashedPassword,
+    currentHash,
+  );
 
   logger.info("Admin password changed", { adminId: req.user.id });
 
@@ -228,10 +180,7 @@ export const updateNotificationSettings = asyncHandler(async (req, res, next) =>
   if (typeof notificationsEnabled !== "boolean")
     return next(new AppError("notificationsEnabled must be a boolean.", 400));
 
-  await prisma.user.update({
-    where: { id: req.user.id },
-    data:  { notificationsEnabled },
-  });
+  await AdminSettingsHelper.updateAdminNotificationSettings(req.user.id, notificationsEnabled);
 
   logger.info("Admin notification setting updated", {
     adminId: req.user.id,
@@ -255,13 +204,7 @@ export const getAdminSessions = asyncHandler(async (req, res, next) => {
   const currentHash = getCurrentTokenHash(req);
 
   // Fetch only non-expired tokens for this admin
-  const tokens = await prisma.refreshToken.findMany({
-    where: {
-      userId:    req.user.id,
-      expiresAt: { gt: now },
-    },
-    orderBy: { lastUsedAt: "desc" },
-  });
+  const tokens = await AdminSettingsHelper.findActiveAdminSessions(req.user.id, now);
 
   const sessions = tokens
     .map((t) => ({
@@ -293,13 +236,11 @@ export const getAdminSessions = asyncHandler(async (req, res, next) => {
 export const revokeAdminSession = asyncHandler(async (req, res, next) => {
   const { sessionId } = req.params;
 
-  const token = await prisma.refreshToken.findFirst({
-    where: { id: sessionId, userId: req.user.id },
-  });
+  const token = await AdminSettingsHelper.findAdminSessionById(sessionId, req.user.id);
 
   if (!token) return next(new AppError("Session not found.", 404));
 
-  await prisma.refreshToken.delete({ where: { id: sessionId } });
+  await AdminSettingsHelper.deleteAdminSettingsSessionById(sessionId);
 
   logger.info("Admin session revoked", { adminId: req.user.id, sessionId });
 
@@ -314,12 +255,7 @@ export const revokeAdminSession = asyncHandler(async (req, res, next) => {
 export const revokeAllOtherSessions = asyncHandler(async (req, res, next) => {
   const currentHash = getCurrentTokenHash(req);
 
-  await prisma.refreshToken.deleteMany({
-    where: {
-      userId: req.user.id,
-      ...(currentHash ? { tokenHash: { not: currentHash } } : {}),
-    },
-  });
+  await AdminSettingsHelper.deleteOtherAdminSessions(req.user.id, currentHash);
 
   logger.info("Admin all other sessions revoked", { adminId: req.user.id });
 
