@@ -29,7 +29,7 @@ const storage = {
 
 // Auth — sirf user persist karo
 // accessToken is NOT persisted here — the real session lives in an httpOnly
-// cookie (server/src/utils/authCookies.js) and api.js never reads a token
+// cookie (backend/src/utils/authCookies.js) and api.js never reads a token
 // from redux/localStorage, so persisting it would only add XSS surface.
 const authPersistConfig = {
   key: "auth",

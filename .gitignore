@@ -1,6 +1,6 @@
 # Repository-root ignores.
 #
-# The per-package .gitignore files (server/, chat-server/, client/, admin/)
+# The per-package .gitignore files (backend/, chat-server/, frontend/client/, frontend/admin/)
 # stay authoritative for their own trees; nothing here overrides them. This
 # file exists because the migration added two top-level directories —
 # `shared/` and `infrastructure/` — that had no ignore rules of their own,
@@ -9,7 +9,7 @@
 
 # ── Dependencies ─────────────────────────────────────────────────────────
 # `shared/` is a new package with its own node_modules (mongoose,
-# mongodb-memory-server). server/ and chat-server/ already ignore theirs;
+# mongodb-memory-server). backend/ and chat-server/ already ignore theirs;
 # without this, `git add shared/` would stage ~923 files.
 node_modules/
 **/node_modules/
@@ -18,8 +18,8 @@ node_modules/
 # embedded-postgres writes a full PostgreSQL data directory here on every
 # run of the Postgres suite, and the harness records its connection details
 # alongside it. Both are recreated per run and must never be committed.
-server/tests/.pgdata/
-server/tests/.test-env.json
+backend/tests/.pgdata/
+backend/tests/.test-env.json
 
 # ── Secrets ──────────────────────────────────────────────────────────────
 # Real environment files, at any depth. The `!` rules below keep the

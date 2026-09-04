@@ -1,8 +1,8 @@
 // Buckets an already-loaded page of items into display groups by date.
-// Mirrors client/src/utils/dateBuckets.js — keep the two in sync.
+// Mirrors frontend/client/src/utils/dateBuckets.js — keep the two in sync.
 // This is a display grouping over whatever page is currently loaded — it does
 // not replace server-side date filtering (see the `dateRange` query param /
-// server/src/utils/dateRange.js for a true "only load this month" filter).
+// backend/src/utils/dateRange.js for a true "only load this month" filter).
 export function bucketByDate(items, dateField = "createdAt") {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

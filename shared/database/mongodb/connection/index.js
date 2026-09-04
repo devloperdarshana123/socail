@@ -1,14 +1,14 @@
 import mongoose from "mongoose";
 
 // ─────────────────────────────────────────────
-//  Shared MongoDB connection module — used by both server/ and
-//  chat-server/. Superseded server/src/config/mongodb.js from Milestone 1
+//  Shared MongoDB connection module — used by both backend/ and
+//  chat-server/. Superseded backend/src/config/mongodb.js from Milestone 1
 //  (Milestone 1's module is now a thin re-export of this one — see that
 //  file's comment). No app-specific logger dependency: pass one in via
 //  `logger` if you want richer output (winston, pino, …); defaults to
 //  console so this module has zero peer dependencies of its own.
 //
-//  Still non-fatal by design: neither server/ nor chat-server/ should
+//  Still non-fatal by design: neither backend/ nor chat-server/ should
 //  crash or fail to start because Mongo is unset or unreachable — Postgres
 //  remains each service's primary datastore until a later milestone.
 // ─────────────────────────────────────────────

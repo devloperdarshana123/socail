@@ -2,7 +2,7 @@
 
 Milestones 3–4 of the MongoDB migration. This is the persistence
 abstraction between application code and the database — **not wired into
-`server/` or `chat-server/` yet**. `DATABASE_PROVIDER=prisma` (the default)
+`backend/` or `chat-server/` yet**. `DATABASE_PROVIDER=prisma` (the default)
 means production keeps using Prisma/Postgres exactly as it does today; the
 Mongo implementations are complete and tested but inactive until a later
 milestone flips that switch.
@@ -202,7 +202,7 @@ base methods; the factory returns the correct class for both
 returns Mongo regardless of the requested provider; the full
 `RepositoryProvider` tree builds without error and has the expected entity
 count per domain; error normalizers produce the correct class for known
-Prisma/Mongo error shapes; `server/`'s real, unmodified Prisma client
+Prisma/Mongo error shapes; `backend/`'s real, unmodified Prisma client
 wires into both the Milestone 3 and Milestone 4 repositories correctly
 (import + instantiation only — no live query). **Not verified**: live CRUD
 execution against a real database — this sandbox has neither a running

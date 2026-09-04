@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // This project does not use Firebase Storage — media is stored in Cloudinary
-// via signed uploads (see server/src/controllers/auth/upload.controller.js).
+// via signed uploads (see backend/src/controllers/auth/upload.controller.js).
 //
 // These rules exist purely so the Storage product, if left enabled in the
 // Firebase console, is not sitting open in test mode. Deploy with:

@@ -6,14 +6,14 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
-      "cwd": "client"
+      "cwd": "frontend/client"
     },
     {
       "name": "admin",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5174,
-      "cwd": "admin"
+      "cwd": "frontend/admin"
     }
   ]
 }

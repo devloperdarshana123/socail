@@ -1,5 +1,5 @@
 
-// server/src/routes/admin/Admin.auth.route.js
+// backend/src/routes/admin/Admin.auth.route.js
 import express from "express";
 import {
   adminLogin, adminLogout, adminRefreshToken, getAdminMe, getAdminSocketToken,

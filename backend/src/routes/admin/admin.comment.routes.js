@@ -1,4 +1,4 @@
-// server/src/routes/admin/Admin.comment.routes.js
+// backend/src/routes/admin/Admin.comment.routes.js
 import express from "express";
 import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {

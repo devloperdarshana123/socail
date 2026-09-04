@@ -1,8 +1,8 @@
 rules_version = '2';
 
 // This project does not use Firestore for application data — all data lives
-// in Postgres via Prisma (see server/prisma/schema.prisma). Firebase is only
-// used to verify Google Sign-In ID tokens (server/src/controllers/auth/auth.controller.js).
+// in Postgres via Prisma (see backend/prisma/schema.prisma). Firebase is only
+// used to verify Google Sign-In ID tokens (backend/src/controllers/auth/auth.controller.js).
 //
 // These rules exist purely so the Firestore product, if left enabled in the
 // Firebase console, is not sitting open in test mode. Deploy with:

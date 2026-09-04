@@ -1,5 +1,5 @@
 
-// server/src/routes/admin/Admin.user.routes.js
+// backend/src/routes/admin/Admin.user.routes.js
 import express from "express";
 import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";
 import {

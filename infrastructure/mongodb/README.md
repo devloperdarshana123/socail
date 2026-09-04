@@ -40,7 +40,7 @@ docker compose logs -f mongodb     # follow server logs
 docker compose logs mongo-init     # confirm "[mongo-init] Initialization complete."
 ```
 
-Then, in `server/.env`, set the matching `MONGO_URI` (see below) so the
+Then, in `backend/.env`, set the matching `MONGO_URI` (see below) so the
 backend can connect. Nothing else needs to change — the server starts and
 runs normally whether or not this stack is up (see **Verification** below).
 
@@ -66,10 +66,10 @@ runs normally whether or not this stack is up (see **Verification** below).
 | `MONGO_ROOT_USER` / `MONGO_ROOT_PASSWORD` | Cluster superuser, created once by the official image on first boot. Used only to bootstrap the cluster and by `mongo-init`. The backend never authenticates as this user. |
 | `MONGO_REPLICA_SET_NAME` | Replica set name (default `erovians-rs0`) |
 | `MONGO_PORT` | Host port mapped to the container's `27017` (default `27017`) |
-| `MONGO_DB_NAME` | The application database name — must match `server/.env`'s value |
-| `MONGO_USER` / `MONGO_PASSWORD` | The least-privilege application user `mongo-init` creates (`readWrite` on `MONGO_DB_NAME` only) — must match `server/.env`'s values |
+| `MONGO_DB_NAME` | The application database name — must match `backend/.env`'s value |
+| `MONGO_USER` / `MONGO_PASSWORD` | The least-privilege application user `mongo-init` creates (`readWrite` on `MONGO_DB_NAME` only) — must match `backend/.env`'s values |
 
-### `server/.env` (application-facing — see `server/.env.example` for the full list alongside the existing Postgres/JWT/etc. variables)
+### `backend/.env` (application-facing — see `backend/.env.example` for the full list alongside the existing Postgres/JWT/etc. variables)
 
 | Variable | Purpose |
 |---|---|
@@ -81,7 +81,7 @@ runs normally whether or not this stack is up (see **Verification** below).
 
 **Note:** these are additive. Every existing PostgreSQL variable
 (`DATABASE_URL`), every JWT secret, and every other existing variable in
-`server/.env` is unchanged and still required — see `server/.env.example`.
+`backend/.env` is unchanged and still required — see `backend/.env.example`.
 
 ## Security notes ("secure defaults")
 
@@ -106,12 +106,12 @@ runs normally whether or not this stack is up (see **Verification** below).
   every environment-variable interpolation (keyfile path escaping, the
   mongo-init connection string, healthcheck credentials) resolves correctly.
   This does **not** require the Docker daemon to be running.
-- The backend's MongoDB connection module (`server/src/config/mongodb.js`)
+- The backend's MongoDB connection module (`backend/src/config/mongodb.js`)
   was exercised directly: with no Mongo env vars set (logs a warning,
   returns `null`, does not throw) and against an unreachable host (retries
   5 times with backoff, then gives up gracefully after ~55s without
   crashing or hanging indefinitely).
-- Confirmed `server/src/server.js`'s existing startup/shutdown sequence is
+- Confirmed `backend/src/server.js`'s existing startup/shutdown sequence is
   unchanged in behavior — the same pre-existing failure mode (missing Redis
   env vars) occurs at the same point it always did.
 - **Not verified in this environment:** an actual `docker compose up`
@@ -144,25 +144,25 @@ which step failed — `init.js` logs each step (`[mongo-init] ...`).
 
 **Backend logs `[MongoDB] Skipping connection — missing environment
 variable(s): ...`**
-Expected and non-fatal if you haven't set up `server/.env`'s `MONGO_URI`/
+Expected and non-fatal if you haven't set up `backend/.env`'s `MONGO_URI`/
 `MONGO_DB_NAME` yet, or haven't started this compose stack. The app
 continues running on Postgres alone.
 
 **Backend logs repeated `[MongoDB] Connection attempt N/5 failed`**
 The connection module retries with backoff before giving up gracefully.
 Check that `docker compose ps` shows `mongodb` as `healthy`, that
-`MONGO_PORT` in the compose `.env` matches the port in `server/.env`'s
+`MONGO_PORT` in the compose `.env` matches the port in `backend/.env`'s
 `MONGO_URI`, and that the username/password/database name match exactly
 across both `.env` files.
 
 **Port `27017` already in use**
 Another MongoDB instance (or a previous uncommitted attempt) may already be
 bound to it. Change `MONGO_PORT` in `infrastructure/mongodb/.env` and update
-the port in `server/.env`'s `MONGO_URI` to match.
+the port in `backend/.env`'s `MONGO_URI` to match.
 
 **Existing Postgres/Prisma functionality seems affected**
 It shouldn't be — this milestone made no changes to `prisma.js`,
 `schema.prisma`, migrations, or any Postgres-related code path. If
 something looks different, it's unrelated to this change; check
-`git diff` against `server/src/config/prisma.js` and `server/prisma/` to
+`git diff` against `backend/src/config/prisma.js` and `backend/prisma/` to
 confirm they're untouched.

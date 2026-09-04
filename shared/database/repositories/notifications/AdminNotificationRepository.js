@@ -14,13 +14,13 @@ import { models } from "../../mongodb/index.js";
 // Milestone 2 absorbed AdminNotification into the unified `notifications`
 // collection via an `audience` field (audience:"admin" + receiverId:null =
 // broadcast) — see mongodb/schemas/messaging.schemas.js. That collection is
-// documented as owned EXCLUSIVELY by chat-server for writes, with server/
+// documented as owned EXCLUSIVELY by chat-server for writes, with backend/
 // only reading it, which is why NotificationRepository's own header stubs
 // findByReceiverId/countUnread rather than implementing them.
 //
 // So the Mongo path for this domain is not simply "unwritten" — it depends
 // on an unresolved product/architecture decision that Phase 6I flagged as
-// the highest-risk item in the migration: whether server/ may write admin
+// the highest-risk item in the migration: whether backend/ may write admin
 // notifications at all, or must publish an event to chat-server instead.
 // Phase 7A is Postgres-only and behaviour-preserving, so that decision is
 // deliberately NOT made here. The Mongo class below fails loudly and
@@ -138,7 +138,7 @@ export class PrismaAdminNotificationRepository extends AdminNotificationReposito
  *
  * ── READS ARE IMPLEMENTED; WRITES ARE NOT ────────────────────────────────
  * The Phase 2 §4 resolution gives chat-server EXCLUSIVE write ownership of
- * `notifications`; server/ reads it. That is an ownership decision, not a
+ * `notifications`; backend/ reads it. That is an ownership decision, not a
  * technical gap, so this class implements the read side in full and leaves
  * the four write methods throwing with the same explanation they always
  * carried. Splitting it this way means enabling DATABASE_PROVIDER=mongo no
@@ -153,7 +153,7 @@ export class MongoAdminNotificationRepository extends AdminNotificationRepositor
   // exclusive write ownership of the unified `notifications` collection.
   // Tracing the actual path settles it: chat-server's emitAdminNotification()
   // emits the socket event and then POSTs to server's
-  // /admin/notifications/save, which is what performs the insert. server/ is
+  // /admin/notifications/save, which is what performs the insert. backend/ is
   // and always has been the only process that WRITES admin rows; chat-server
   // writes only `audience: "user"` ones. The two subsets are disjoint, so
   // there is no ownership conflict to resolve — the block was guarding

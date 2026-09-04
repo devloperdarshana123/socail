@@ -203,7 +203,7 @@ over. Provision it accordingly: replica set, monitoring, backups from day one.
 
 ## Rehearsing
 
-`server/tests/integration/migration.cutover.test.js` runs the whole thing —
+`backend/tests/integration/migration.cutover.test.js` runs the whole thing —
 seed, migrate, validate, re-run — against a disposable embedded PostgreSQL and
 a disposable Mongo replica set. It is part of the PostgreSQL suite, so a
 change that breaks the migration breaks CI.

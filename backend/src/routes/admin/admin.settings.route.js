@@ -1,6 +1,6 @@
 
 
-// server/src/routes/admin/admin.settings.route.js
+// backend/src/routes/admin/admin.settings.route.js
 import { Router }   from "express";
 import multer       from "multer";
 import { isAdminAuthenticated } from "../../middlewares/authenticateAdmin.js";

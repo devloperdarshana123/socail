@@ -1,5 +1,5 @@
 // Maps a `dateRange` query param onto a Prisma `createdAt` filter.
-// Buckets mirror the admin UI (and client/src/utils/dateBuckets.js):
+// Buckets mirror the admin UI (and frontend/client/src/utils/dateBuckets.js):
 //   today  → since local midnight
 //   week   → since Sunday of the current week
 //   month  → since the 1st of the current month

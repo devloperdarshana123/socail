@@ -4,7 +4,7 @@ Milestone 2 of the MongoDB migration. This package is the **canonical
 schema definition** for all 37 collections in the approved Phase 2
 architecture — the fix for the Phase 1 audit's Critical finding (two
 hand-maintained Prisma schema copies of the same database, already
-drifted). `server/` and `chat-server/` both import models from here;
+drifted). `backend/` and `chat-server/` both import models from here;
 neither defines its own copy of anything.
 
 **Scope of this milestone:** schemas, models, indexes, and structural
@@ -53,24 +53,24 @@ shared/
         └── index.js                 # imports every schema, compiles all 37 mongoose.model()s
 ```
 
-## How server/ and chat-server/ import this
+## How backend/ and chat-server/ import this
 
 Plain relative-path imports — no npm workspace, no root `package.json`.
 `shared/` is its own small independent package (own `package.json`, own
-`node_modules/mongoose`), exactly like `admin/`, `client/`, `chat-server/`
-and `server/` already each independently manage their own dependencies.
+`node_modules/mongoose`), exactly like `frontend/admin/`, `frontend/client/`, `chat-server/`
+and `backend/` already each independently manage their own dependencies.
 This is a deliberate, minimal-footprint choice for this milestone; a real
 npm-workspaces setup could be introduced later during the Phase 4 folder
 restructuring if desired, but that's out of scope here.
 
 ```js
-// from anywhere in server/src/... or chat-server/src/...
+// from anywhere in backend/src/... or chat-server/src/...
 import { models, connectMongo, disconnectMongo } from "../../../shared/database/mongodb/index.js";
 
 const post = await models.SocialPost.findById(id);
 ```
 
-`server/src/config/mongodb.js` is now a thin re-export of
+`backend/src/config/mongodb.js` is now a thin re-export of
 `shared/database/mongodb/connection/index.js` (wrapped with server's own
 winston logger) — see that file. `chat-server/` doesn't import anything
 from this package yet; that starts when its repository layer is built.
@@ -187,5 +187,5 @@ which collection and why.
 This package has no relationship to Docker itself — it just needs
 `MONGO_URI`/`MONGO_DB_NAME` in whichever process imports `connectMongo()`.
 See `infrastructure/mongodb/README.md` for running the local MongoDB
-Community Server this package connects to, and `server/.env.example` for
+Community Server this package connects to, and `backend/.env.example` for
 the connection variables.

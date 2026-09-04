@@ -1,7 +1,7 @@
 // middlewares/appCheck.js
 //
 // Verifies the Firebase App Check token the client attaches as
-// X-Firebase-AppCheck (see client/src/lib/services/api.js). Defaults to
+// X-Firebase-AppCheck (see frontend/client/src/lib/services/api.js). Defaults to
 // monitor mode — logs failures but never blocks — so it's safe to deploy
 // before the reCAPTCHA site key is configured on the client. Flip
 // APP_CHECK_ENFORCE=true once the App Check metrics dashboard shows a clean
