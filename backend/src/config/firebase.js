@@ -9,7 +9,7 @@ import admin from "firebase-admin";
 // Google Sign-In and App Check, instead of taking the entire API down.
 export let firebaseReady = false;
 
-if (!admin.apps.length) {
+if (!admin.getApps().length) {
   try {
     admin.initializeApp({
       credential: admin.credential.cert({
