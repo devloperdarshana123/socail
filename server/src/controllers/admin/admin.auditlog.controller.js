@@ -2,7 +2,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
+import * as AdminAuditLogHelper from "../../utils/adminAuditLogHelpers.js";
 import logger from "../../config/logger.js";
 import { AUDIT_ACTIONS } from "../../utils/auditLogger.js";
 
@@ -88,8 +88,8 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
   // Search — performedByName or targetMeta fields
   if (search?.trim()) {
     const term = search.trim();
-    where.OR = [
-      { performedByName: { contains: term, mode: "insensitive" } },
+    where.or = [
+      { performedByName: { like: term, caseInsensitive: true } },
       // targetMeta is Json — search via string cast using raw if needed
       // For now, performedByName search covers most admin use cases
     ];
@@ -97,18 +97,8 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
 
   // ── Run query + count in parallel ─────────────────────────────────────────
   const [logs, total] = await Promise.all([
-    prisma.auditLog.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: limitNum,
-      include: {
-        performedBy: {
-          select: { id: true, username: true, fullName: true, avatar: true, role: true },
-        },
-      },
-    }),
-    prisma.auditLog.count({ where }),
+    AdminAuditLogHelper.findAuditLogs(where, skip, limitNum),
+    AdminAuditLogHelper.countAuditLogs(where),
   ]);
 
   logger.info("Admin fetched audit logs", {
@@ -138,14 +128,7 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getAuditLogById = asyncHandler(async (req, res, next) => {
-  const log = await prisma.auditLog.findUnique({
-    where:   { id: req.params.id },
-    include: {
-      performedBy: {
-        select: { id: true, username: true, fullName: true, avatar: true, role: true },
-      },
-    },
-  });
+  const log = await AdminAuditLogHelper.findAuditLogById(req.params.id);
 
   if (!log) return next(new AppError("Audit log not found.", 404));
 
@@ -162,43 +145,24 @@ export const getAuditStats = asyncHandler(async (req, res) => {
   const daysNum = Math.min(Math.max(parseInt(days) || 30, 1), 365);
   const since   = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000);
 
-  // Prisma groupBy — category breakdown
-  const categoryRaw = await prisma.auditLog.groupBy({
-    by:      ["category"],
-    where:   { createdAt: { gte: since } },
-    _count:  { _all: true },
-    orderBy: { _count: { category: "desc" } },
-  });
+  // Category breakdown — neutral { key, count } rows (M-4)
+  const categoryRaw = await AdminAuditLogHelper.groupAuditLogsByCategory(since);
 
   const categoryBreakdown = categoryRaw.map((r) => ({
-    _id:   r.category,
-    count: r._count._all,
+    _id:   r.key,
+    count: r.count,
   }));
 
   // Top 10 actions
-  const actionRaw = await prisma.auditLog.groupBy({
-    by:      ["action"],
-    where:   { createdAt: { gte: since } },
-    _count:  { _all: true },
-    orderBy: { _count: { action: "desc" } },
-    take:    10,
-  });
+  const actionRaw = await AdminAuditLogHelper.groupAuditLogsByAction(since);
 
   const actionBreakdown = actionRaw.map((r) => ({
-    _id:   r.action,
-    count: r._count._all,
+    _id:   r.key,
+    count: r.count,
   }));
 
   // Daily activity — raw SQL for date truncation
-  const dailyRaw = await prisma.$queryRaw`
-    SELECT
-      TO_CHAR("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
-      COUNT(*)::int AS count
-    FROM "AuditLog"
-    WHERE "createdAt" >= ${since}
-    GROUP BY date
-    ORDER BY date ASC
-  `;
+  const dailyRaw = await AdminAuditLogHelper.findAuditLogDailyActivity(since);
 
   const dailyActivity = dailyRaw.map((r) => ({
     _id:   r.date,

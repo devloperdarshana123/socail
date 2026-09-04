@@ -1,7 +1,7 @@
 
 // server/src/utils/auditLogger.js
 
-import prisma from "../config/prisma.js";
+import { auditLogRepository } from "../config/repositories.js";
 import logger from "../config/logger.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,7 +164,9 @@ async function flush() {
   const data = batch.map(({ _retries, ...doc }) => doc);
 
   try {
-    await prisma.auditLog.createMany({ data, skipDuplicates: true });
+    // Repository-backed batch flush; still duplicate-tolerant, so a retry
+    // after a partial failure does not explode on rows that already landed.
+    await auditLogRepository.createMany(data);
   } catch (err) {
     logger.error("auditLogger: createMany failed", {
       error: err.message,

@@ -1,4 +1,4 @@
-import prisma from "../../config/prisma.js";
+import { notificationRepository } from "../../config/repositories.js";
 import { fetchSender } from "../../services/userService.js";
 import logger from "../../utils/logger.js";
 
@@ -14,15 +14,13 @@ export default (io, socket) => {
 
     let saved;
     try {
-      saved = await prisma.notification.create({
-        data: {
-          receiverId: to.toString(),
-          senderId:   userId,
-          type,
-          refId,
-          refModel,
-          meta,
-        },
+      saved = await notificationRepository.create({
+        receiverId: to.toString(),
+        senderId:   userId,
+        type,
+        refId,
+        refModel,
+        meta,
       });
     } catch (err) {
       logger.error(`❌ DB save failed [${type}]`, { message: err.message });
@@ -92,19 +90,23 @@ export default (io, socket) => {
   // ── Mark as read ──────────────────────────────────────────────────────────
   socket.on("notification:mark_read", async ({ notificationId }) => {
     try {
+      // Neutral filter + write DSL. The "all" branch and the single-id
+      // branch keep their exact predicates — note the single-id form does
+      // NOT re-check isRead, so marking an already-read notification is
+      // still a no-op that returns count 0, as before.
       if (notificationId === "all") {
-        await prisma.notification.updateMany({
-          where: { receiverId: userId, isRead: false },
-          data:  { isRead: true, readAt: new Date() },
-        });
+        await notificationRepository.updateManyWhere(
+          { receiverId: userId, isRead: false },
+          { isRead: true, readAt: new Date() },
+        );
       } else {
-        await prisma.notification.updateMany({
-          where: { id: notificationId, receiverId: userId },
-          data:  { isRead: true, readAt: new Date() },
-        });
+        await notificationRepository.updateManyWhere(
+          { id: notificationId, receiverId: userId },
+          { isRead: true, readAt: new Date() },
+        );
       }
-      const count = await prisma.notification.count({
-        where: { receiverId: userId, isRead: false, isDeleted: false },
+      const count = await notificationRepository.count({
+        receiverId: userId, isRead: false, isDeleted: false,
       });
       socket.emit("notification:unread_count", { count });
     } catch (err) {
@@ -116,12 +118,15 @@ export default (io, socket) => {
   // ── Delete ────────────────────────────────────────────────────────────────
   socket.on("notification:delete", async ({ notificationId }) => {
     try {
-      await prisma.notification.updateMany({
-        where: { id: notificationId, receiverId: userId },
-        data:  { isDeleted: true, deletedAt: new Date() },
-      });
-      const count = await prisma.notification.count({
-        where: { receiverId: userId, isRead: false, isDeleted: false },
+      // Soft delete via updateManyWhere, NOT delete() — the repository's
+      // delete() applies its own payload; this keeps the handler's bundle
+      // authoritative and scoped to the owning receiver.
+      await notificationRepository.updateManyWhere(
+        { id: notificationId, receiverId: userId },
+        { isDeleted: true, deletedAt: new Date() },
+      );
+      const count = await notificationRepository.count({
+        receiverId: userId, isRead: false, isDeleted: false,
       });
       socket.emit("notification:unread_count", { count });
     } catch (err) {

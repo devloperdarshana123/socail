@@ -5,7 +5,7 @@ import AppError from "../../utils/AppError.js";
 import logger from "../../config/logger.js";
 import { notifyChat } from "../../helper/notifyChat.js";
 import * as CommentHelper from "../../utils/commentHelpers.js";
-import prisma from "../../config/prisma.js";
+import { transactionRunner } from "../../config/transaction.js";
 import DOMPurify from "isomorphic-dompurify";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -40,10 +40,7 @@ export const addComment = asyncHandler(async (req, res, next) => {
   });
 
   // Post guard
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    select: { id: true, authorId: true, commentsDisabled: true, isDeleted: true },
-  });
+  const post = await CommentHelper.getPostForCommentGuard(postId);
 
   if (!post || post.isDeleted) {
     return next(new AppError("Post not found", 404));
@@ -56,7 +53,7 @@ export const addComment = asyncHandler(async (req, res, next) => {
   let comment, updatedPost;
 
   try {
-    const transactionResult = await prisma.$transaction(async (tx) => {
+    const transactionResult = await transactionRunner.run(async (tx) => {
       const newComment = await CommentHelper.createComment({
         postId,
         authorId: userId,
@@ -65,11 +62,7 @@ export const addComment = asyncHandler(async (req, res, next) => {
         parentCommentId: parentCommentId || null,
       });
 
-      const updated = await tx.post.update({
-        where: { id: postId },
-        data: { commentsCount: { increment: 1 } },
-        select: { commentsCount: true },
-      });
+      const updated = await CommentHelper.incrementPostCommentsCount(tx, postId);
 
       return { comment: newComment, updatedPost: updated };
     });
@@ -137,10 +130,7 @@ export const getComments = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid post ID.", 400));
   }
 
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    select: { id: true, isDeleted: true },
-  });
+  const post = await CommentHelper.getPostExistence(postId);
 
   if (!post || post.isDeleted) {
     return next(new AppError("Post not found", 404));
@@ -181,10 +171,7 @@ export const getReplies = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid comment ID.", 400));
   }
 
-  const root = await prisma.comment.findUnique({
-    where: { id: commentId },
-    select: { id: true, isDeleted: true },
-  });
+  const root = await CommentHelper.getCommentExistence(commentId);
 
   if (!root || root.isDeleted) {
     return next(new AppError("Comment not found", 404));
@@ -218,10 +205,7 @@ export const getDirectReplies = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid comment ID.", 400));
   }
 
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
-    select: { id: true, isDeleted: true },
-  });
+  const comment = await CommentHelper.getCommentExistence(commentId);
 
   if (!comment || comment.isDeleted) {
     return next(new AppError("Comment not found", 404));
@@ -256,7 +240,7 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
 
   if (isAdmin) {
     try {
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await transactionRunner.run(async (tx) => {
         const { deletedCount, postId } = await CommentHelper.hardDeleteComment(
           commentId,
           userId,
@@ -268,10 +252,7 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
         }
 
         if (postId) {
-          await tx.post.update({
-            where: { id: postId },
-            data: { commentsCount: { decrement: deletedCount } },
-          });
+          await CommentHelper.decrementPostCommentsCount(tx, postId, deletedCount);
         }
 
         return { deletedCount, postId };
@@ -296,17 +277,14 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
   // Regular user: soft delete
  // Regular user: soft delete
   try {
-    await prisma.$transaction(async (tx) => {
+    await transactionRunner.run(async (tx) => {
       const comment = await CommentHelper.softDeleteComment(commentId, userId);
 
       if (!comment) {
         throw new Error("Comment not found or unauthorized");
       }
 
-      await tx.post.update({
-        where: { id: comment.postId },
-        data: { commentsCount: { decrement: 1 } },
-      });
+      await CommentHelper.decrementPostCommentsCount(tx, comment.postId, 1);
     });
 
     logger.info("Comment soft-deleted", {
@@ -334,20 +312,14 @@ export const pinComment = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid comment ID.", 400));
   }
 
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
-    select: { id: true, postId: true, isDeleted: true },
-  });
+  const comment = await CommentHelper.getCommentForPin(commentId);
 
   if (!comment || comment.isDeleted) {
     return next(new AppError("Comment not found", 404));
   }
 
   // Only post author can pin
-  const post = await prisma.post.findUnique({
-    where: { id: comment.postId },
-    select: { id: true, authorId: true, isDeleted: true },
-  });
+  const post = await CommentHelper.getPostForPin(comment.postId);
 
   if (!post || post.isDeleted) {
     return next(new AppError("Post not found", 404));
@@ -380,19 +352,13 @@ export const unpinComment = asyncHandler(async (req, res, next) => {
     return next(new AppError("Invalid comment ID.", 400));
   }
 
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
-    select: { id: true, postId: true, isDeleted: true },
-  });
+  const comment = await CommentHelper.getCommentForPin(commentId);
 
   if (!comment || comment.isDeleted) {
     return next(new AppError("Comment not found", 404));
   }
 
-  const post = await prisma.post.findUnique({
-    where: { id: comment.postId },
-    select: { id: true, authorId: true, isDeleted: true },
-  });
+  const post = await CommentHelper.getPostForPin(comment.postId);
 
   if (!post || post.isDeleted) {
     return next(new AppError("Post not found", 404));

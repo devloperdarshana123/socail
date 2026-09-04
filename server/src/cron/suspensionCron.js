@@ -2,7 +2,8 @@
 
 // cron/suspensionCron.js
 import cron from "node-cron";
-import prisma from "../config/prisma.js";
+import { userRepository, suspensionHistoryRepository } from "../config/repositories.js";
+import { transactionRunner } from "../config/transaction.js";
 import logger from "../config/logger.js";
 import { sendMail } from "../utils/sendMail.js";
 import redis from "../config/redis.js";
@@ -10,8 +11,7 @@ import redis from "../config/redis.js";
 cron.schedule("0 * * * *", async () => {
   try {
     // activeSuspension is a Json field — filter in JS after fetch
-    const suspended = await prisma.user.findMany({
-      where: { accountStatus: "suspended" },
+    const suspended = await userRepository.findManyOrdered({ accountStatus: "suspended" }, {
       select: {
         id:               true,
         username:         true,
@@ -33,26 +33,30 @@ cron.schedule("0 * * * *", async () => {
 
     await Promise.all(
       expired.map(async (user) => {
-        await prisma.$transaction([
+        // The LAST array-form $transaction in the codebase, converted to the
+        // callback runner (the M-13 conversion). Element order is preserved
+        // by awaiting sequentially, and the pair still commits or rolls back
+        // together — a failed history write must not leave the account
+        // silently un-suspended with no audit trail.
+        await transactionRunner.run(async (tx) => {
           // 1. Lift suspension
-          prisma.user.update({
-            where: { id: user.id },
-            data: {
-              accountStatus:    "active",
-              activeSuspension: null,
-            },
-          }),
+          await userRepository.update(
+            user.id,
+            { accountStatus: "active", activeSuspension: null },
+            { tx },
+          );
 
           // 2. Add to suspension history
-          prisma.suspensionHistory.create({
-            data: {
+          await suspensionHistoryRepository.create(
+            {
               userId:      user.id,
               action:      "unsuspended",
               performedBy: null,
               reason:      "Auto-lifted: suspension period expired",
             },
-          }),
-        ]);
+            { tx },
+          );
+        });
 
         // 3. Clear Redis cache
         await redis.del(`user:auth:${user.id}`).catch(() => {});

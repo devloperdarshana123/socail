@@ -9,7 +9,7 @@ import { ENV } from "../config/env.js";
 import { isTokenBlacklisted } from "../utils/tokenBlacklist.js";
 import { USER_COOKIE_ACCESS } from "../utils/authCookies.js";
 import redis from "../config/redis.js";
-import prisma from "../config/prisma.js";
+import { userRepository } from "../config/repositories.js";
 
 export const isAuthenticated = asyncHandler(async (req, res, next) => {
   const authHeader = req.headers?.authorization;
@@ -99,7 +99,7 @@ export const isAuthenticated = asyncHandler(async (req, res, next) => {
   const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt) : null;
   if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
     const now = new Date();
-    prisma.user.update({ where: { id: user.id }, data: { lastActiveAt: now } }).catch(() => {});
+    userRepository.update(user.id, { lastActiveAt: now }).catch(() => {});
     const { password, ...safeForCache } = user;
     redis.set(cacheKey, { ...safeForCache, lastActiveAt: now }, { ex: 300 }).catch(() => {});
   }

@@ -1,5 +1,27 @@
 
-import prisma from "../config/prisma.js";
+import {
+  reportRepository,
+  socialPostRepository,
+  commentRepository,
+  userRepository,
+} from "../config/repositories.js";
+
+// Persistence for the report domain now flows through the repository layer
+// (Phase 7A) instead of the Prisma client directly. Database/behavior are
+// unchanged — every query below is the same shape as the prisma.* call it
+// replaces; only the access path moved.
+//
+// BUSINESS DECISIONS STAY HERE, repositories stay persistence-only:
+//   • VALID_MODELS / VALID_REASONS validation and its thrown messages
+//   • the duplicate-report rule (return the original, do not update it)
+//   • calculateReportPriority's low/medium/high thresholds, and the choice
+//     of which statuses count as "open"
+//   • back-propagating the new priority to existing open reports
+//   • the polymorphic postId/commentId/reportedUserId fan-out
+//   • the status/action allow-lists and the warn→active / suspend→suspended
+//     / ban→banned mapping
+//   • the placeholder objects substituted for deleted targets
+// The repositories below only execute the resulting queries.
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -19,15 +41,39 @@ const VALID_REASONS = new Set([
   "other",
 ]);
 
+// ── Controller-extracted target-existence guards (Milestone 5H) ─────────
+//    Each query below was inline in report.controller.js's submitReport and
+//    is moved here verbatim so the controller performs no direct DB access.
+//    Queries are byte-identical to the ones they replace; null is returned
+//    for a missing row exactly as Prisma's findUnique does. The controller
+//    keeps the targetModel branching and its 404 responses.
+
+export const findPostExists = (targetId) => {
+  return socialPostRepository.findById(targetId, {
+    includeDeleted: true,
+    select: { id: true },
+  });
+};
+
+export const findCommentExists = (targetId) => {
+  return commentRepository.findById(targetId, {
+    select: { id: true },
+  });
+};
+
+export const findUserExists = (targetId) => {
+  return userRepository.findById(targetId, {
+    select: { id: true },
+  });
+};
+
 // ── Get recent report count (rate limit check) ──────────────────────────
 export const getRecentReportCount = async (userId, windowMs = 60_000) => {
   const windowStart = new Date(Date.now() - windowMs);
 
-  const count = await prisma.report.count({
-    where: {
-      reportedById: userId,
-      createdAt: { gte: windowStart },
-    },
+  const count = await reportRepository.count({
+    reportedById: userId,
+    createdAt: { gte: windowStart },
   });
 
   return count;
@@ -36,12 +82,10 @@ export const getRecentReportCount = async (userId, windowMs = 60_000) => {
 // ── Submit report (polymorphic) ─────────────────────────────────────────
 // ── Calculate priority based on existing open reports ──────────────────
 const calculateReportPriority = async (targetId, targetModel) => {
-  const count = await prisma.report.count({
-    where: {
-      targetId,
-      targetModel,
-      status: { in: ["pending", "reviewed"] },
-    },
+  const count = await reportRepository.count({
+    targetId,
+    targetModel,
+    status: { in: ["pending", "reviewed"] },
   });
   if (count >= 3) return "high";
   if (count >= 1) return "medium";
@@ -69,12 +113,10 @@ export const submitReport = async (reportData) => {
 
   // Check if already reported (duplicate protection)
  // Check if already reported (duplicate protection)
-  const existing = await prisma.report.findFirst({
-    where: {
-      reportedById: reportedBy,
-      targetId,
-      targetModel,
-    },
+  const existing = await reportRepository.findFirstWhere({
+    reportedById: reportedBy,
+    targetId,
+    targetModel,
   });
 
   if (existing) {
@@ -85,31 +127,29 @@ export const submitReport = async (reportData) => {
   // Create report
   const priority = await calculateReportPriority(targetId, targetModel);
 
-  const report = await prisma.report.create({
-  data: {
+  const report = await reportRepository.create({
     reportedById: reportedBy,
     targetId: targetId,
     postId: targetModel === "Post" ? targetId : null,
     commentId: targetModel === "Comment" ? targetId : null,
     reportedUserId: targetModel === "User" ? targetId : null,
     targetModel,
-      reason,
-      description: description.trim().slice(0, 500),
-      status: "pending",
-      priority,
-    },
+    reason,
+    description: description.trim().slice(0, 500),
+    status: "pending",
+    priority,
   });
 
   // Purani open reports ki priority bhi update karo same target pe
-  await prisma.report.updateMany({
-    where: {
+  await reportRepository.updateManyWhere(
+    {
       targetId,
       targetModel,
       status: { in: ["pending", "reviewed"] },
       id: { not: report.id },
     },
-    data: { priority },
-  });
+    { priority }
+  );
 
   return { alreadyReported: false, report };
 };
@@ -122,32 +162,30 @@ export const getReports = async ({ status = "pending", limit = 20, offset = 0 } 
     where.status = status;
   }
 
-  const reports = await prisma.report.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
+  const reports = await reportRepository.findManyWithRelations(where, {
     take: limit,
     skip: offset,
-   include: {
-  reportedBy: {
-    select: { id: true, username: true, fullName: true, avatar: true },
-  },
-  post: {
-    select: {
-      id: true, caption: true, media: true,
-      author: { select: { id: true, username: true, fullName: true, avatar: true } },
+    include: {
+      reportedBy: {
+        select: { id: true, username: true, fullName: true, avatar: true },
+      },
+      post: {
+        select: {
+          id: true, caption: true, media: true,
+          author: { select: { id: true, username: true, fullName: true, avatar: true } },
+        },
+      },
+      comment: {
+        select: {
+          id: true,
+          content: true,
+          author: { select: { id: true, username: true, fullName: true, avatar: true } },
+        },
+      },
     },
-  },
-  comment: {
-    select: {
-      id: true,
-      content: true,
-      author: { select: { id: true, username: true, fullName: true, avatar: true } },
-    },
-  },
-},
   });
 
-  const total = await prisma.report.count({ where });
+  const total = await reportRepository.count(where);
 
   return { reports, total, limit, offset };
 };
@@ -160,10 +198,7 @@ export const updateReportStatus = async (reportId, status) => {
     throw new Error(`Invalid status. Allowed: ${validStatuses.join(", ")}`);
   }
 
-  const updated = await prisma.report.update({
-    where: { id: reportId },
-    data: { status },
-  });
+  const updated = await reportRepository.update(reportId, { status });
 
   return updated;
 };
@@ -171,8 +206,7 @@ export const updateReportStatus = async (reportId, status) => {
 // ── Get report details (admin) ──────────────────────────────────────────
 // ✅ FIX: Include post aur reportedUser both
 export const getReportDetails = async (reportId) => {
-  const report = await prisma.report.findUnique({
-    where: { id: reportId },
+  const report = await reportRepository.findById(reportId, {
     include: {
       reportedBy: {
         select: {
@@ -277,10 +311,7 @@ export const getReportDetails = async (reportId) => {
 
 // ── Dismiss report (admin) ──────────────────────────────────────────────
 export const dismissReport = async (reportId) => {
-  return prisma.report.update({
-    where: { id: reportId },
-    data: { status: "dismissed" },
-  });
+  return reportRepository.update(reportId, { status: "dismissed" });
 };
 
 // ── Resolve report + take action ────────────────────────────────────────
@@ -292,8 +323,7 @@ export const resolveReport = async (reportId, action = null) => {
     throw new Error("Invalid action");
   }
 
-  const report = await prisma.report.findUnique({
-    where: { id: reportId },
+  const report = await reportRepository.findById(reportId, {
     select: { id: true, postId: true, targetModel: true, targetId: true },
   });
 
@@ -309,19 +339,15 @@ export const resolveReport = async (reportId, action = null) => {
       ban: "banned",
     };
 
-    await prisma.user.update({
-      where: { id: report.targetId },
-      data: { accountStatus: statusMap[action] || "active" },
+    await userRepository.update(report.targetId, {
+      accountStatus: statusMap[action] || "active",
     });
   }
 
   // Update report status
-  const updated = await prisma.report.update({
-    where: { id: reportId },
-    data: {
-      status: "resolved",
-      actionTaken: action || "none",
-    },
+  const updated = await reportRepository.update(reportId, {
+    status: "resolved",
+    actionTaken: action || "none",
   });
 
   return updated;

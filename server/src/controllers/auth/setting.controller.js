@@ -5,7 +5,6 @@ import logger from "../../config/logger.js";
 import * as SettingsHelper from "../../utils/settingsHelpers.js";
 import * as UserHelper from "../../utils/userHelpers.js";
 import redis from "../../config/redis.js";
-import prisma from "../../config/prisma.js";
 import { sendUserToken } from "../../utils/sendUserToken.js";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -141,10 +140,7 @@ export const permanentlyDeleteAccount = asyncHandler(async (req, res, next) => {
 
   // Verify password
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { password: true },
-    });
+    const user = await SettingsHelper.getPasswordForVerification(req.user.id);
 
     if (!user || !user.password) {
       return next(new AppError("Password verification failed.", 401));
@@ -193,11 +189,7 @@ export const reactivateAccount = asyncHandler(async (req, res, next) => {
   if (!userId || !password)
     return next(new AppError("userId and password are required", 400));
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, accountStatus: true, password: true,
-              isOnboardingComplete: true, onboardingStep: true },
-  });
+  const user = await SettingsHelper.getUserForReactivation(userId);
 
   if (!user) return next(new AppError("User not found", 404));
   if (user.accountStatus !== "deactivated")
@@ -212,7 +204,7 @@ export const reactivateAccount = asyncHandler(async (req, res, next) => {
   // Redis clear
   await redis.del(`user:auth:${userId}`).catch(() => {});
 
-  const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
+  const updatedUser = await SettingsHelper.getFullUserById(userId);
 
   logger.info("User account reactivated", { userId });
 

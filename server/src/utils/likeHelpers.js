@@ -1,4 +1,10 @@
-import prisma from "../config/prisma.js";
+import { transactionRunner } from "../config/transaction.js";
+import { likeRepository, socialPostRepository, commentRepository } from "../config/repositories.js";
+
+// Persistence for the like domain now flows through the repository layer
+// (Phase 7A) instead of the Prisma client directly. Database/behavior are
+// unchanged — every query below is the same shape as the prisma.* call it
+// replaces; only the access path moved.
 
 const VALID_REACTIONS = ["❤️", "🔥", "😮", "😂", "😢", "👏"];
 
@@ -15,57 +21,43 @@ export const toggleLike = async (userId, targetId, targetType, reaction = "❤�
   let liked = false;
   let previousReaction = null;
 
-  await prisma.$transaction(async (tx) => {
+  await transactionRunner.run(async (tx) => {
     // Check if already liked
-    const existing = await tx.like.findFirst({
-      where: {
-        likedById: userId,
-        ...(targetType === "Post" ? { postId: targetId } : {}),
-        ...(targetType === "Comment" ? { commentId: targetId } : {}),
-      },
-    });
+    const existing = await likeRepository.findByUserAndTarget(userId, targetType, targetId, { tx });
 
     if (existing) {
       if (existing.reaction === reaction) {
         // Same reaction — unlike
-        await tx.like.delete({ where: { id: existing.id } });
+        await likeRepository.delete(existing.id, { tx });
         liked = false;
         previousReaction = reaction;
 
         if (updateParentCount) {
           if (targetType === "Post") {
-            await tx.post.update({
-              where: { id: targetId },
-              data: { likesCount: { decrement: 1 } },
-            });
+            await socialPostRepository.update(targetId, { likesCount: { dec: 1 } }, { tx });
           } else if (targetType === "Comment") {
-            await tx.comment.update({
-              where: { id: targetId },
-              data: { likesCount: { decrement: 1 } },
-            });
+            await commentRepository.update(targetId, { likesCount: { dec: 1 } }, { tx });
           }
         }
       } else {
         // Different reaction — update
         previousReaction = existing.reaction;
-        await tx.like.update({
-          where: { id: existing.id },
-          data: { reaction },
-        });
+        await likeRepository.update(existing.id, { reaction }, { tx });
         liked = true;
       }
-   } else {
+    } else {
       // New like
       try {
-        await tx.like.create({
-          data: {
+        await likeRepository.create(
+          {
             likedById: userId,
             reaction,
             targetModel: targetType,
             ...(targetType === "Post" ? { postId: targetId } : {}),
             ...(targetType === "Comment" ? { commentId: targetId } : {}),
           },
-        });
+          { tx }
+        );
       } catch (err) {
         if (err.code === "P2002") {
           // Duplicate like — someone else's request won the race, treat as already liked
@@ -78,15 +70,9 @@ export const toggleLike = async (userId, targetId, targetType, reaction = "❤�
 
       if (updateParentCount) {
         if (targetType === "Post") {
-          await tx.post.update({
-            where: { id: targetId },
-            data: { likesCount: { increment: 1 } },
-          });
+          await socialPostRepository.update(targetId, { likesCount: { inc: 1 } }, { tx });
         } else if (targetType === "Comment") {
-          await tx.comment.update({
-            where: { id: targetId },
-            data: { likesCount: { increment: 1 } },
-          });
+          await commentRepository.update(targetId, { likesCount: { inc: 1 } }, { tx });
         }
       }
     }
@@ -95,47 +81,46 @@ export const toggleLike = async (userId, targetId, targetType, reaction = "❤�
   return { liked, previousReaction };
 };
 
+// ── Like-target lookups (extracted verbatim from like.controller.js so the
+//    controller no longer touches Prisma directly — Milestone 5
+//    helpers-as-boundary. Each query is byte-identical to the one it
+//    replaces; returns null for a missing row, as findUnique does. ────────
+export const getPostForLike = async (postId) => {
+  return socialPostRepository.findById(postId, {
+    includeDeleted: true,
+    select: { id: true, authorId: true, likesCount: true, likesHidden: true, isDeleted: true },
+  });
+};
+
+export const getPostLikesCount = async (postId) => {
+  return socialPostRepository.findById(postId, {
+    includeDeleted: true,
+    select: { likesCount: true },
+  });
+};
+
+export const getCommentForLike = async (commentId) => {
+  return commentRepository.findById(commentId, {
+    select: { id: true, authorId: true, likesCount: true, isDeleted: true },
+  });
+};
+
+export const getCommentLikesCount = async (commentId) => {
+  return commentRepository.findById(commentId, {
+    select: { likesCount: true },
+  });
+};
+
 // ── Get like status ─────────────────────────────────────────────────────
 export const getLikeStatus = async (userId, targetId, targetType) => {
-  return prisma.like.findFirst({
-    where: {
-      likedById: userId,
-      ...(targetType === "Post" ? { postId: targetId } : {}),
-      ...(targetType === "Comment" ? { commentId: targetId } : {}),
-    },
+  return likeRepository.findByUserAndTarget(userId, targetType, targetId, {
     select: { id: true, reaction: true },
   });
 };
 
 // ── Get likers list (cursor-paginated) ──────────────────────────────────
 export const getLikers = async (targetId, targetType, afterId = null, limit = 20) => {
-  const where = {
-    ...(targetType === "Post" ? { postId: targetId } : {}),
-    ...(targetType === "Comment" ? { commentId: targetId } : {}),
-  };
-
-  if (afterId) {
-    where.id = { lt: afterId };
-  }
-
-  const likes = await prisma.like.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-    select: {
-      id: true,
-      reaction: true,
-      likedBy: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-        },
-      },
-    },
-  });
+  const likes = await likeRepository.findLikersWithUser(targetType, targetId, { afterId, limit });
 
   const hasMore = likes.length > limit;
   const items = hasMore ? likes.slice(0, limit) : likes;
@@ -157,11 +142,7 @@ export const getReactionBreakdown = async (targetId, targetType) => {
     ...(targetType === "Comment" ? { commentId: targetId } : {}),
   };
 
-  const likes = await prisma.like.groupBy({
-    by: ["reaction"],
-    where,
-    _count: { reaction: true },
-  });
+  const likes = await likeRepository.groupByReaction(where);
 
   const breakdown = {};
   VALID_REACTIONS.forEach((emoji) => {
@@ -169,7 +150,7 @@ export const getReactionBreakdown = async (targetId, targetType) => {
   });
 
   likes.forEach((item) => {
-    breakdown[item.reaction] = item._count.reaction;
+    breakdown[item.key] = item.count;
   });
 
   return breakdown;
@@ -183,13 +164,7 @@ export const hasLiked = async (userId, targetId, targetType) => {
 
 // ── Delete like ─────────────────────────────────────────────────────────
 export const deleteLike = async (userId, targetId, targetType) => {
-  const deleted = await prisma.like.deleteMany({
-    where: {
-      likedById: userId,
-      ...(targetType === "Post" ? { postId: targetId } : {}),
-      ...(targetType === "Comment" ? { commentId: targetId } : {}),
-    },
-  });
+  const deleted = await likeRepository.deleteByUserAndTarget(userId, targetType, targetId);
 
   return deleted.count > 0;
 };

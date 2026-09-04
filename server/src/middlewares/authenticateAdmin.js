@@ -3,7 +3,7 @@
 import jwt from "jsonwebtoken";
 import asyncHandler from "./asyncHandler.js";
 import AppError from "../utils/AppError.js";
-import prisma from "../config/prisma.js";
+import { userRepository } from "../config/repositories.js";
 import logger from "../config/logger.js";
 import { ENV } from "../config/env.js";
 import { isTokenBlacklisted } from "../utils/tokenBlacklist.js";
@@ -41,9 +41,8 @@ export const isAdminAuthenticated = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // ── User fetch (Prisma) ──────────────────────────────────────────────────
-  const user = await prisma.user.findUnique({
-    where: { id: decoded._id },
+  // ── User fetch (repository-backed) ───────────────────────────────────────
+  const user = await userRepository.findById(decoded._id, {
     select: {
       id:               true,
       email:            true,
@@ -85,9 +84,9 @@ export const isAdminAuthenticated = asyncHandler(async (req, res, next) => {
   const FIVE_MIN   = 5 * 60 * 1000;
   const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt) : null;
   if (!lastActive || Date.now() - lastActive.getTime() > FIVE_MIN) {
-    prisma.user
-      .update({ where: { id: user.id }, data: { lastActiveAt: new Date() } })
-      .catch(() => {});
+    // Fire-and-forget, unchanged: a failed lastActiveAt touch must never
+    // block an authenticated request.
+    userRepository.update(user.id, { lastActiveAt: new Date() }).catch(() => {});
   }
 
   logger.debug("Admin authenticated", { userId: user.id, path: req.originalUrl });

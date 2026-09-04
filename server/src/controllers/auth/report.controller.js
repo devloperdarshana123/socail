@@ -4,7 +4,6 @@ import AppError from "../../utils/AppError.js";
 import logger from "../../config/logger.js";
 import { notifyAdmin } from "../../utils/adminNotify.js";
 import * as ReportHelper from "../../utils/reportHelpers.js";
-import prisma from "../../config/prisma.js";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -75,26 +74,17 @@ export const submitReport = asyncHandler(async (req, res, next) => {
 
   // Verify target exists
   if (targetModel === "Post") {
-    const post = await prisma.post.findUnique({
-      where: { id: targetId },
-      select: { id: true },
-    });
+    const post = await ReportHelper.findPostExists(targetId);
     if (!post) {
       return next(new AppError("Post not found.", 404));
     }
   } else if (targetModel === "Comment") {
-    const comment = await prisma.comment.findUnique({
-      where: { id: targetId },
-      select: { id: true },
-    });
+    const comment = await ReportHelper.findCommentExists(targetId);
     if (!comment) {
       return next(new AppError("Comment not found.", 404));
     }
   } else if (targetModel === "User") {
-    const user = await prisma.user.findUnique({
-      where: { id: targetId },
-      select: { id: true },
-    });
+    const user = await ReportHelper.findUserExists(targetId);
     if (!user) {
       return next(new AppError("User not found.", 404));
     }

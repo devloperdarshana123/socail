@@ -1,18 +1,54 @@
-import prisma from "../config/prisma.js";
+import { transactionRunner } from "../config/transaction.js";
+import {
+  conversationRepository,
+  conversationParticipantRepository,
+  messageRepository,
+  messageReceiptRepository,
+  userRepository,
+} from "../config/repositories.js";
 import { encryptMessage, decryptMessage } from "./encryption.js";
+
+// Persistence for the message/conversation domain now flows through the
+// repository layer (Phase 7A) instead of the Prisma client directly.
+// Database/behavior are unchanged — every query below is the same shape as
+// the prisma.* call it replaces; only the access path moved.
+//
+// ── CONCURRENCY MECHANISMS: TRANSLATED, NOT REDESIGNED ──────────────────
+// reactToMessage's three mechanisms are preserved exactly as found:
+//
+//   1. SELECT ... FOR UPDATE — moved verbatim into
+//      messageRepository.findByIdForUpdate(). Prisma cannot express FOR
+//      UPDATE through the ORM, so this is genuinely load-bearing raw SQL.
+//      It is passed `{ tx }` because a row lock only lives for the life of
+//      its transaction; without one the lock would be released before the
+//      caller could use it.
+//   2. The callback transaction now runs through transactionRunner.run(),
+//      so the read-modify-write stays inside one transaction and the lock
+//      is held across both statements.
+//   3. The 3-attempt retry loop with backoff stays HERE — it is concurrency
+//      policy, not persistence, and it depends on TransactionError
+//      preserving the original err.message so its two fail-fast guard
+//      checks still match.
+//
+// Phase 6I suggested this could eventually become a Mongo findOneAndUpdate;
+// that is deliberately NOT done here. Phase 7A is Postgres-only and
+// behaviour-preserving, so the locking semantics are translated as-is.
+//
+// Nested writes (members.create, groupAdmin.connect) also pass through
+// verbatim — the repositories forward `data` untouched, so group creation
+// stays atomic via Prisma's implicit nested-write transaction, and the
+// add-member guard→upsert sequence stays intentionally non-atomic with the
+// idempotent upsert as its real protection.
 
 // ── Sync lastMessage preview ────────────────────────────────────────────
 export const syncLastMessage = async (conversationId, msg) => {
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      lastMessage: {
-        messageId: msg.id,
-        text: msg.isDeleted ? "" : encryptMessage((msg.text ?? "").slice(0, 100)),
-        senderId: msg.senderId,
-        sentAt: msg.createdAt,
-        isDeleted: msg.isDeleted ?? false,
-      },
+  await conversationRepository.update(conversationId, {
+    lastMessage: {
+      messageId: msg.id,
+      text: msg.isDeleted ? "" : encryptMessage((msg.text ?? "").slice(0, 100)),
+      senderId: msg.senderId,
+      sentAt: msg.createdAt,
+      isDeleted: msg.isDeleted ?? false,
     },
   });
 };
@@ -21,39 +57,17 @@ export const syncLastMessage = async (conversationId, msg) => {
 export const getConversationsList = async (userId, page = 1, limit = 20) => {
   const skip = (page - 1) * limit;
 
-  const members = await prisma.conversationParticipant.findMany({
-    where: { userId, isDeleted: false },
+  const members = await conversationParticipantRepository.findAllActiveByUserId(userId, {
     select: { conversationId: true, unreadCount: true },
   });
 
   const convIds = members.map((m) => m.conversationId);
   const memberMap = new Map(members.map((m) => [m.conversationId, m]));
 
-  const conversations = await prisma.conversation.findMany({
-    where: {
-      id: { in: convIds },
-      isActive: true,
-    },
-    orderBy: { updatedAt: "desc" },
+  const conversations = await conversationRepository.findActiveByIds(convIds, {
     skip,
     take: limit + 1,
-    include: {
-      members: {
-        where: { isDeleted: false },
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              fullName: true,
-              avatar: true,
-              isVerifiedBadge: true,
-              accountStatus: true,
-            },
-          },
-        },
-      },
-    },
+    include: includeMembers,
   });
 
   const hasMore = conversations.length > limit;
@@ -159,13 +173,22 @@ const includeMembers = {
   },
 };
 
+// The sender projection attached to created/listed messages.
+const MESSAGE_SENDER_SELECT = {
+  id: true,
+  username: true,
+  fullName: true,
+  avatar: true,
+  isVerifiedBadge: true,
+};
+
 export const getOrCreateDM = async (userId, participantId) => {
   // Consistent key regardless of who initiates
   const key = [userId, participantId].sort().join(":");
 
   try {
-    const conversation = await prisma.conversation.create({
-      data: {
+    const conversation = await conversationRepository.create(
+      {
         isGroup: false,
         participantsKey: key,
         members: {
@@ -175,8 +198,8 @@ export const getOrCreateDM = async (userId, participantId) => {
           ],
         },
       },
-      include: includeMembers,
-    });
+      { include: includeMembers }
+    );
 
     return {
       ...conversation,
@@ -185,8 +208,7 @@ export const getOrCreateDM = async (userId, participantId) => {
   } catch (err) {
     if (err.code === "P2002") {
       // Already exists — someone else's request won the race, fetch it
-      const existing = await prisma.conversation.findUnique({
-        where: { participantsKey: key },
+      const existing = await conversationRepository.findByParticipantsKey(key, {
         include: includeMembers,
       });
 
@@ -202,32 +224,27 @@ export const getOrCreateDM = async (userId, participantId) => {
 };
 // ── Get total unread count ──────────────────────────────────────────────
 export const getTotalUnread = async (userId) => {
-  const result = await prisma.conversationParticipant.aggregate({
-    where: { userId, isDeleted: false },
-    _sum: { unreadCount: true },
-  });
+  const result = await conversationParticipantRepository.sumUnreadForUser(userId);
 
-  return result._sum.unreadCount ?? 0;
+  return result.unreadCount ?? 0;
 };
 
 // ── Mark conversation read ──────────────────────────────────────────────
 export const markConversationRead = async (conversationId, userId) => {
   // Reset unread counter
-  await prisma.conversationParticipant.updateMany({
-    where: { conversationId, userId },
-    data: { unreadCount: 0, lastSeenAt: new Date() },
-  });
+  await conversationParticipantRepository.updateManyWhere(
+    { conversationId, userId },
+    { unreadCount: 0, lastSeenAt: new Date() }
+  );
 
   // Mark all messages as seen via MessageReceipt
-  const unreadMessages = await prisma.message.findMany({
-    where: { conversationId, isDeleted: false },
+  const unreadMessages = await messageRepository.findAllByConversationId(conversationId, {
     select: { id: true },
   });
 
   await Promise.all(
     unreadMessages.map((msg) =>
-      prisma.messageReceipt.upsert({
-        where: { messageId_userId: { messageId: msg.id, userId } },
+      messageReceiptRepository.upsertByMessageAndUser(msg.id, userId, {
         update: { seenAt: new Date() },
         create: {
           messageId: msg.id,
@@ -242,18 +259,19 @@ export const markConversationRead = async (conversationId, userId) => {
 
 // ── Soft delete conversation for user ───────────────────────────────────
 export const softDeleteConversationForUser = async (conversationId, userId) => {
-  await prisma.conversationParticipant.updateMany({
-    where: { conversationId, userId },
-    data: { isDeleted: true, deletedAt: new Date() },
-  });
+  await conversationParticipantRepository.updateManyWhere(
+    { conversationId, userId },
+    { isDeleted: true, deletedAt: new Date() }
+  );
 };
 
 // ── Get messages (cursor-paginated) ────────────────────────────────────
 export const getMessages = async (conversationId, userId, { limit = 30, before = null } = {}) => {
-  const member = await prisma.conversationParticipant.findUnique({
-    where: { conversationId_userId: { conversationId, userId } },
-    select: { clearedAt: true },
-  });
+  const member = await conversationParticipantRepository.findByConversationAndUser(
+    conversationId,
+    userId,
+    { select: { clearedAt: true } }
+  );
 
   const where = {
     conversationId,
@@ -262,8 +280,7 @@ export const getMessages = async (conversationId, userId, { limit = 30, before =
   };
 
   if (before) {
-    const cursorMsg = await prisma.message.findUnique({
-      where: { id: before },
+    const cursorMsg = await messageRepository.findById(before, {
       select: { createdAt: true },
     });
     if (cursorMsg) {
@@ -274,21 +291,9 @@ export const getMessages = async (conversationId, userId, { limit = 30, before =
     }
   }
 
-  const messages = await prisma.message.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
+  const messages = await messageRepository.findManyWithCursor(where, {
     take: limit + 1,
-    include: {
-      sender: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-        },
-      },
-    },
+    include: { sender: { select: MESSAGE_SENDER_SELECT } },
   });
 
   const hasMore = messages.length > limit;
@@ -312,8 +317,7 @@ export const getMessages = async (conversationId, userId, { limit = 30, before =
 export const createMessage = async (conversationId, senderId, { text, image, replyTo } = {}) => {
   let replyPreview = null;
   if (replyTo) {
-    const parent = await prisma.message.findUnique({
-      where: { id: replyTo },
+    const parent = await messageRepository.findById(replyTo, {
       select: {
         id: true,
         text: true,
@@ -333,8 +337,8 @@ export const createMessage = async (conversationId, senderId, { text, image, rep
     }
   }
 
-  const msg = await prisma.message.create({
-    data: {
+  const msg = await messageRepository.create(
+    {
       conversationId,
       senderId,
       text: text?.trim() ? encryptMessage(text.trim()) : "",
@@ -342,52 +346,38 @@ export const createMessage = async (conversationId, senderId, { text, image, rep
       replyTo: replyPreview || undefined,
       type: image && !text?.trim() ? "image" : "text",
     },
-    include: {
-      sender: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-        },
-      },
-    },
-  });
+    { include: { sender: { select: MESSAGE_SENDER_SELECT } } }
+  );
 
   return msg;
 };
 
 // ── Increment unread for recipients ────────────────────────────────────
 export const incrementUnreadForRecipients = async (conversationId, senderId) => {
-  await prisma.conversationParticipant.updateMany({
-    where: {
+  await conversationParticipantRepository.updateManyWhere(
+    {
       conversationId,
       userId: { not: senderId },
       isDeleted: false,
     },
-    data: { unreadCount: { increment: 1 } },
-  });
+    { unreadCount: { inc: 1 } }
+  );
 };
 
 // ── Edit message ────────────────────────────────────────────────────────
 export const editMessage = async (messageId, userId, newText) => {
-  const msg = await prisma.message.findUnique({
-    where: { id: messageId },
+  const msg = await messageRepository.findById(messageId, {
     select: { id: true, senderId: true, isDeleted: true, conversationId: true },
   });
 
   if (!msg) throw new Error("Message not found");
   if (msg.isDeleted) throw new Error("Cannot edit a deleted message");
-  if (msg.senderId !== userId) throw new Error("Unauthorized");
+  if (String(msg.senderId) !== String(userId)) throw new Error("Unauthorized");
 
-  const updated = await prisma.message.update({
-    where: { id: messageId },
-    data: {
-      text: encryptMessage(newText.trim()),
-      isEdited: true,
-      editedAt: new Date(),
-    },
+  const updated = await messageRepository.update(messageId, {
+    text: encryptMessage(newText.trim()),
+    isEdited: true,
+    editedAt: new Date(),
   });
 
   return updated;
@@ -395,24 +385,22 @@ export const editMessage = async (messageId, userId, newText) => {
 
 // ── Soft delete message ─────────────────────────────────────────────────
 export const softDeleteMessage = async (messageId, userId) => {
-  const msg = await prisma.message.findUnique({
-    where: { id: messageId },
+  const msg = await messageRepository.findById(messageId, {
     select: { id: true, senderId: true, isDeleted: true, conversationId: true },
   });
 
   if (!msg) throw new Error("Message not found");
   if (msg.isDeleted) throw new Error("Message already deleted");
-  if (msg.senderId !== userId) throw new Error("Unauthorized");
+  if (String(msg.senderId) !== String(userId)) throw new Error("Unauthorized");
 
-  const updated = await prisma.message.update({
-    where: { id: messageId },
-    data: {
-      isDeleted: true,
-      deletedAt: new Date(),
-      text: "",
-      image: null,
-      reactions: [],
-    },
+  // update(), NOT delete() — the repository's delete() applies its own
+  // soft-delete payload; this one also blanks text/image/reactions.
+  const updated = await messageRepository.update(messageId, {
+    isDeleted: true,
+    deletedAt: new Date(),
+    text: "",
+    image: null,
+    reactions: [],
   });
 
   return updated;
@@ -449,27 +437,26 @@ export const reactToMessage = async (messageId, userId, emoji) => {
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await prisma.$transaction(async (tx) => {
-        const msg = await tx.$queryRaw`
-          SELECT id, "isDeleted", reactions FROM "Message"
-          WHERE id = ${messageId}
-          FOR UPDATE
-        `;
+      return await transactionRunner.run(async (tx) => {
+        // Row lock — MUST receive `tx`, or the lock is released before the
+        // read-modify-write below can rely on it. See the repository method.
+        const msg = await messageRepository.findByIdForUpdate(messageId, { tx });
 
         if (!msg || msg.length === 0) throw new Error("Message not found");
         if (msg[0].isDeleted) throw new Error("Cannot react to a deleted message");
 
         const currentReactions = msg[0].reactions || [];
-        const filtered = currentReactions.filter((r) => r.userId !== userId);
+        const filtered = currentReactions.filter((r) => String(r.userId) !== String(userId));
 
         if (emoji?.trim()) {
           filtered.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
         }
 
-        const updated = await tx.message.update({
-          where: { id: messageId },
-          data: { reactions: filtered },
-        });
+        const updated = await messageRepository.update(
+          messageId,
+          { reactions: filtered },
+          { tx }
+        );
 
         return updated;
       });
@@ -485,18 +472,167 @@ export const reactToMessage = async (messageId, userId, emoji) => {
 };
 // ── Clear chat for user ─────────────────────────────────────────────────
 export const clearChatForUser = async (conversationId, userId) => {
-  await prisma.conversationParticipant.updateMany({
-    where: { conversationId, userId },
-    data: { clearedAt: new Date() },
-  });
+  await conversationParticipantRepository.updateManyWhere(
+    { conversationId, userId },
+    { clearedAt: new Date() }
+  );
 };
 
 // ── Verify participant ──────────────────────────────────────────────────
 export const isParticipant = async (conversationId, userId) => {
-  const member = await prisma.conversationParticipant.findUnique({
-    where: { conversationId_userId: { conversationId, userId } },
-    select: { id: true, isDeleted: true },
-  });
+  const member = await conversationParticipantRepository.findByConversationAndUser(
+    conversationId,
+    userId,
+    { select: { id: true, isDeleted: true } }
+  );
 
   return !!member && !member.isDeleted;
+};
+
+// ── Controller-extracted guards (Milestone 5G) ──────────────────────────
+//    Each query below was inline in message.controller.js and is moved
+//    here verbatim so the controller performs no direct DB access. Queries
+//    are byte-identical to the ones they replace; null is returned for a
+//    missing row exactly as Prisma's findUnique does.
+
+// getOrCreateConversation: does this participant user exist?
+export const findParticipantById = (userId) => {
+  return userRepository.findById(userId, { select: { id: true } });
+};
+
+// deleteConversation: does this conversation exist?
+export const findConversationExists = (conversationId) => {
+  return conversationRepository.findById(conversationId, { select: { id: true } });
+};
+
+// reactToMessage: the conversation a message belongs to (for the participant check).
+export const getMessageConversationId = (messageId) => {
+  return messageRepository.findById(messageId, { select: { conversationId: true } });
+};
+
+// ── Group persistence, extracted from group.controller.js (Milestone 5J) ─
+//    Every query below was inline in the controller and is moved here
+//    verbatim — messageHelpers is the established owner of conversation /
+//    participant persistence (conversationHelpers.js was dead code, deleted in Phase 7E, which
+//    nothing imports). Queries are byte-identical; the controller keeps ALL
+//    orchestration: validation, the getAdminId normalization, authorization
+//    branching, and every response/status code.
+//
+//    Atomicity is preserved exactly as found (see the group characterization
+//    test header): group creation is atomic via Prisma's nested write; the
+//    add-member guard→upsert sequence stays intentionally non-atomic, with
+//    the idempotent upsert as its real protection.
+
+// createGroupConversation: verify every supplied participant id exists.
+export const findUsersByIds = (participantIds) => {
+  return userRepository.findAllByIds(participantIds, { select: { id: true } });
+};
+
+// createGroupConversation: create the group + its member rows in one
+// nested (implicitly transactional) write.
+//
+// M-3 NOTE — `members: { create: [...] }` is a NESTED COMPOSITE WRITE, not a
+// field mutation, so it is deliberately outside the neutral mutation DSL and
+// passes through untouched. It has no single-document Mongo equivalent: on
+// Mongo this becomes two collection writes inside a transaction, which is a
+// repository-implementation decision, not something a payload translator can
+// express. `groupAdmin: { link }` IS a field-level relation write and is
+// translated. Documented here so the asymmetry is deliberate rather than an
+// oversight; see queryHelpers/mutation.js.
+export const createGroupConversation = ({ groupName, adminId, avatarUrl, allParticipants }) => {
+  return conversationRepository.create(
+    {
+      isGroup: true,
+      groupName: groupName.trim(),
+      groupAdmin: { link: adminId },
+      groupAvatar: avatarUrl ? { url: avatarUrl, publicId: null } : null,
+      members: {
+        create: allParticipants.map((userId) => ({
+          userId,
+        })),
+      },
+    },
+    { include: includeMembers }
+  );
+};
+
+// add / remove / rename / disband: the admin-authorization guard lookup.
+export const getGroupForAdminCheck = (conversationId) => {
+  return conversationRepository.findById(conversationId, {
+    select: { id: true, isGroup: true, groupAdmin: true },
+  });
+};
+
+// leaveGroup: guard lookup including the active member list.
+export const getGroupWithMembers = (conversationId) => {
+  return conversationRepository.findById(conversationId, {
+    select: {
+      id: true,
+      isGroup: true,
+      members: {
+        where: { isDeleted: false },
+        select: { userId: true },
+      },
+    },
+  });
+};
+
+// transferGroupAdmin: guard lookup including admin AND the active member list.
+export const getGroupForAdminTransfer = (conversationId) => {
+  return conversationRepository.findById(conversationId, {
+    select: {
+      id: true,
+      isGroup: true,
+      groupAdmin: true,
+      members: {
+        where: { isDeleted: false },
+        select: { userId: true },
+      },
+    },
+  });
+};
+
+// addGroupMember: is this user already an active member?
+export const findActiveGroupMember = (conversationId, userId) => {
+  return conversationParticipantRepository.findActiveByConversationAndUser(conversationId, userId);
+};
+
+// addGroupMember: idempotent add (re-activates a previously removed member).
+export const upsertGroupMember = (conversationId, userId) => {
+  return conversationParticipantRepository.upsertByConversationAndUser(conversationId, userId, {
+    update: { isDeleted: false },
+    create: { conversationId, userId },
+  });
+};
+
+// removeGroupMember / leaveGroup: soft-delete the participant row.
+export const softDeleteGroupMember = (conversationId, userId) => {
+  return conversationParticipantRepository.updateManyWhere(
+    { conversationId, userId },
+    { isDeleted: true }
+  );
+};
+
+// add / remove member: re-fetch the group with its populated member list.
+export const getGroupWithMemberDetails = (conversationId) => {
+  return conversationRepository.findById(conversationId, { include: includeMembers });
+};
+
+// renameGroup: apply the controller-assembled name/avatar update.
+export const updateGroupInfo = (conversationId, data) => {
+  return conversationRepository.update(conversationId, data);
+};
+
+// transferGroupAdmin: connect the new admin, returning populated members.
+export const updateGroupAdmin = (conversationId, newAdminId) => {
+  return conversationRepository.update(
+    conversationId,
+    { groupAdmin: { link: newAdminId } },
+    { include: includeMembers }
+  );
+};
+
+// disbandGroupConversation: soft-disband (members intentionally left in place).
+export const deactivateGroupConversation = (conversationId) => {
+  return conversationRepository.update(conversationId, { isActive: false });
 };

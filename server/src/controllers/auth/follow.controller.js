@@ -2,7 +2,6 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
 import * as FollowHelper from "../../utils/followHelpers.js";
 import { notifyChat } from "../../helper/notifyChat.js";
 import redis from "../../config/redis.js";
@@ -14,10 +13,7 @@ export const followUser = asyncHandler(async (req, res, next) => {
   if (followerId === followingId)
     return next(new AppError("You cannot follow yourself.", 400));
 
-  const targetUser = await prisma.user.findUnique({
-    where: { id: followingId },
-    select: { accountStatus: true, isPrivate: true, username: true },
-  });
+  const targetUser = await FollowHelper.getFollowTargetSummary(followingId);
 
   if (!targetUser || targetUser.accountStatus !== "active")
     return next(new AppError("User not found.", 404));

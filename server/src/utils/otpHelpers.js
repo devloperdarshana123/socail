@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import prisma from "../config/prisma.js";
+import { otpRepository } from "../config/repositories.js";
 import {
   generateSecureOtp,
   getOtpExpiry,
@@ -9,10 +9,27 @@ import {
   isValidPurpose,
 } from "./otpUtils.js";
 
+// Persistence for the OTP domain now flows through the repository layer
+// (Phase 7A) instead of the Prisma client directly. Database/behavior are
+// unchanged — every query below is the same shape as the prisma.* call it
+// replaces; only the access path moved.
+//
+// All OTP policy stays here: purpose validation, the resend cooldown and
+// ceiling, expiry checks, the attempt budget, the constant-time dummy-hash
+// compare for a missing OTP, and every returned message.
+//
+// IMPORTANT — why these use findByUserAndPurpose / findFirstWhere rather
+// than OtpRepository.findActiveByUserAndPurpose(): that method filters BOTH
+// `isUsed: false` AND `expiresAt > now`. This helper must be able to SEE an
+// expired or used row — verifyOtp reports "OTP has expired" and deletes it,
+// and getStatus reports `expired: true` — so substituting the "active"
+// finder would silently turn those into "OTP not found". See the OTP
+// characterization suite, which pins both messages.
+
 const DUMMY_HASH = await bcrypt.hash("000000", 10);
 
 export const canResend = async (userId, purpose) => {
-  const otpDoc = await prisma.oTP.findUnique({ where: { userId_purpose: { userId, purpose } } });
+  const otpDoc = await otpRepository.findByUserAndPurpose(userId, purpose);
   if (!otpDoc) return { canResend: true };
 
   if (otpDoc.lastResendAt) {
@@ -39,12 +56,11 @@ export const generateOtp = async (userId, purpose) => {
   const salt = await bcrypt.genSalt(OTP_CONFIG.SALT_ROUNDS);
   const hashedOtp = await bcrypt.hash(otp, salt);
 
-  const otpDoc = await prisma.oTP.upsert({
-    where: { userId_purpose: { userId, purpose } },
+  const otpDoc = await otpRepository.upsertByUserAndPurpose(userId, purpose, {
     update: {
       hashedOtp, attempts: 0, isUsed: false,
       expiresAt: getOtpExpiry(), lastResendAt: new Date(),
-      resendCount: { increment: 1 },
+      resendCount: { inc: 1 },
     },
     create: {
       userId, purpose, hashedOtp, expiresAt: getOtpExpiry(),
@@ -68,12 +84,11 @@ export const resendOtp = async (userId, purpose) => {
   const salt = await bcrypt.genSalt(OTP_CONFIG.SALT_ROUNDS);
   const hashedOtp = await bcrypt.hash(otp, salt);
 
-  const otpDoc = await prisma.oTP.upsert({
-    where: { userId_purpose: { userId, purpose } },
+  const otpDoc = await otpRepository.upsertByUserAndPurpose(userId, purpose, {
     update: {
       hashedOtp, attempts: 0, isUsed: false,
       expiresAt: getOtpExpiry(), lastResendAt: new Date(),
-      resendCount: { increment: 1 },
+      resendCount: { inc: 1 },
     },
     create: {
       userId, purpose, hashedOtp, expiresAt: getOtpExpiry(),
@@ -90,7 +105,9 @@ export const verifyOtp = async (userId, purpose, plainOtp) => {
   }
   const trimmedOtp = String(plainOtp ?? "").trim();
 
-  const otpDoc = await prisma.oTP.findFirst({ where: { userId, purpose, isUsed: false } });
+  // NOTE: no expiry predicate here — see the header. An expired row must be
+  // found so it can be reported as expired rather than as missing.
+  const otpDoc = await otpRepository.findFirstWhere({ userId, purpose, isUsed: false });
 
   if (!otpDoc) {
     await bcrypt.compare(trimmedOtp, DUMMY_HASH);
@@ -98,26 +115,23 @@ export const verifyOtp = async (userId, purpose, plainOtp) => {
   }
 
   if (isOtpExpired(otpDoc.expiresAt)) {
-    await prisma.oTP.delete({ where: { id: otpDoc.id } });
+    await otpRepository.delete(otpDoc.id);
     return { success: false, message: `OTP has expired. Please request a new one. (Valid for ${OTP_CONFIG.EXPIRES_IN_LABEL})` };
   }
 
   if (otpDoc.attempts >= OTP_CONFIG.MAX_ATTEMPTS) {
-    await prisma.oTP.delete({ where: { id: otpDoc.id } });
+    await otpRepository.delete(otpDoc.id);
     return { success: false, message: "Too many failed attempts. Please request a new OTP.", remainingAttempts: 0 };
   }
 
   const isMatch = await bcrypt.compare(trimmedOtp, otpDoc.hashedOtp);
 
   if (!isMatch) {
-    const updated = await prisma.oTP.update({
-      where: { id: otpDoc.id },
-      data: { attempts: { increment: 1 } },
-    });
+    const updated = await otpRepository.update(otpDoc.id, { attempts: { inc: 1 } });
     const remaining = getRemainingAttempts(updated.attempts);
 
     if (remaining <= 0) {
-      await prisma.oTP.delete({ where: { id: otpDoc.id } });
+      await otpRepository.delete(otpDoc.id);
       return { success: false, message: "Too many failed attempts. Please request a new OTP.", remainingAttempts: 0 };
     }
     return {
@@ -127,12 +141,12 @@ export const verifyOtp = async (userId, purpose, plainOtp) => {
     };
   }
 
-  await prisma.oTP.delete({ where: { id: otpDoc.id } });
+  await otpRepository.delete(otpDoc.id);
   return { success: true, message: "OTP verified successfully", remainingAttempts: null };
 };
 
 export const getStatus = async (userId, purpose) => {
-  const otpDoc = await prisma.oTP.findUnique({ where: { userId_purpose: { userId, purpose } } });
+  const otpDoc = await otpRepository.findByUserAndPurpose(userId, purpose);
   if (!otpDoc) return { exists: false };
 
   const expired = isOtpExpired(otpDoc.expiresAt);
@@ -149,9 +163,9 @@ export const getStatus = async (userId, purpose) => {
 };
 
 export const getRecentCount = (userId, windowMs = 3_600_000) =>
-  prisma.oTP.count({ where: { userId, createdAt: { gt: new Date(Date.now() - windowMs) } } });
+  otpRepository.count({ userId, createdAt: { gt: new Date(Date.now() - windowMs) } });
 
 export const deleteAllForUser = async (userId) => {
-  const result = await prisma.oTP.deleteMany({ where: { userId } });
+  const result = await otpRepository.deleteManyWhere({ userId });
   return { deletedCount: result.count };
 };

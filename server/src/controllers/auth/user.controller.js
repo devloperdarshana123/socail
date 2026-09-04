@@ -2,8 +2,6 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
-import { Prisma } from "@prisma/client";
 import * as UserHelper from "../../utils/userHelpers.js";
 import {
   uploadToCloudinary,
@@ -33,7 +31,7 @@ export const updateAvatar = asyncHandler(async (req, res, next) => {
   ]);
 
   const avatar = { url: result.secure_url, publicId: result.public_id };
-  await prisma.user.update({ where: { id: user.id }, data: { avatar } });
+  await UserHelper.updateUserAvatar(user.id, avatar);
   await redis.del(`user:auth:${user.id}`).catch(() => {});
 
   res.status(200).json({ success: true, message: "Avatar updated successfully.", data: { avatar } });
@@ -57,7 +55,7 @@ export const updateCoverPhoto = asyncHandler(async (req, res, next) => {
   ]);
 
   const coverPhoto = { url: result.secure_url, publicId: result.public_id };
-  await prisma.user.update({ where: { id: user.id }, data: { coverPhoto } });
+  await UserHelper.updateUserCoverPhoto(user.id, coverPhoto);
   await redis.del(`user:auth:${user.id}`).catch(() => {});
 
   res.status(200).json({ success: true, message: "Cover photo updated successfully.", data: { coverPhoto } });
@@ -71,7 +69,7 @@ export const removeAvatar = asyncHandler(async (req, res, next) => {
     await deleteFromCloudinary(user.avatar.publicId, "image").catch(() => {});
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { avatar: { url: null, publicId: null } } });
+  await UserHelper.updateUserAvatar(user.id, { url: null, publicId: null });
   await redis.del(`user:auth:${user.id}`).catch(() => {});
 
   res.status(200).json({ success: true, message: "Avatar removed." });
@@ -85,7 +83,7 @@ export const removeCoverPhoto = asyncHandler(async (req, res, next) => {
     await deleteFromCloudinary(user.coverPhoto.publicId, "image").catch(() => {});
   }
 
-  await prisma.user.update({ where: { id: user.id }, data: { coverPhoto: { url: null, publicId: null } } });
+  await UserHelper.updateUserCoverPhoto(user.id, { url: null, publicId: null });
   await redis.del(`user:auth:${user.id}`).catch(() => {});
 
   res.status(200).json({ success: true, message: "Cover photo removed." });
@@ -135,7 +133,7 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
     } catch {}
   }
 
-  const updatedUser = await prisma.user.update({ where: { id: req.user.id }, data: updateFields });
+  const updatedUser = await UserHelper.updateUserProfileFields(req.user.id, updateFields);
   await redis.del(`user:auth:${req.user.id}`).catch(() => {});
 
   res.status(200).json({
@@ -156,49 +154,12 @@ export const getMapSellers = asyncHandler(async (req, res) => {
 
   const currentUserId = req.user?.id;
 
-  // const baseConditions = [
-  //   { accountStatus: "active" },
-  //   { role: { not: "super_admin" } },
-  //   {
-  //     OR: [
-  //       { location: { path: ["coordinates", "coordinates"], not: null } },
-  //       { location: { path: ["city"], not: null } },
-  //     ],
-  //   },
-  // ];
-
-  const baseConditions = [
-  { accountStatus: "active" },
-  { role: { not: "super_admin" } },
-  {
-    NOT: { location: { equals: Prisma.JsonNull } },
-  },
-];
-  if (category && category !== "all") baseConditions.push({ businessCategory: category });
-
-  if (q) {
-    if (q.length > 100) return res.status(400).json({ success: false, message: "Search query too long." });
-    baseConditions.push({
-      OR: [
-        { fullName: { contains: q, mode: "insensitive" } },
-        { designation: { contains: q, mode: "insensitive" } },
-        { businessCategory: { contains: q, mode: "insensitive" } },
-      ],
-    });
-  }
+  if (q && q.length > 100) return res.status(400).json({ success: false, message: "Search query too long." });
 
   const [users, followingRows] = await Promise.all([
-    prisma.user.findMany({
-      where: { AND: baseConditions },
-      select: {
-        id: true, fullName: true, username: true, avatar: true, designation: true,
-        businessCategory: true, location: true, followersCount: true,
-        isVerifiedBadge: true, isPrivate: true,
-      },
-      take: 200,
-    }),
+    UserHelper.findMapSellers({ q, category }),
     currentUserId
-      ? prisma.follow.findMany({ where: { followerId: currentUserId, status: "accepted" }, select: { followingId: true } })
+      ? UserHelper.getAcceptedFollowingIds(currentUserId)
       : Promise.resolve([]),
   ]);
 
@@ -226,11 +187,7 @@ export const blockUser = asyncHandler(async (req, res, next) => {
   const targetUser = await UserHelper.findById(userId);
   if (!targetUser) return next(new AppError("User not found.", 404));
 
-  await prisma.block.upsert({
-    where: { blockerId_blockedId: { blockerId: currentUserId, blockedId: userId } },
-    update: {},
-    create: { blockerId: currentUserId, blockedId: userId },
-  });
+  await UserHelper.upsertBlock(currentUserId, userId);
 
   res.status(200).json({ success: true, message: "User blocked successfully." });
 });
@@ -239,16 +196,13 @@ export const unblockUser = asyncHandler(async (req, res, next) => {
   const { userId } = req.params;
   const currentUserId = req.user.id;
 
-  await prisma.block.deleteMany({ where: { blockerId: currentUserId, blockedId: userId } });
+  await UserHelper.deleteBlock(currentUserId, userId);
 
   res.status(200).json({ success: true, message: "User unblocked successfully." });
 });
 
 export const getBlockedUsers = asyncHandler(async (req, res, next) => {
-  const blocks = await prisma.block.findMany({
-    where: { blockerId: req.user.id },
-    include: { blocked: { select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true } } },
-  });
+  const blocks = await UserHelper.findBlockedUsers(req.user.id);
 
   res.status(200).json({ success: true, data: blocks.map((b) => b.blocked) });
 });
@@ -261,8 +215,8 @@ export const getBlockStatus = asyncHandler(async (req, res, next) => {
   if (!them) return next(new AppError("User not found.", 404));
 
   const [iBlockedThemRow, theyBlockedMeRow] = await Promise.all([
-    prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: currentUserId, blockedId: userId } } }),
-    prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: userId, blockedId: currentUserId } } }),
+    UserHelper.findBlock(currentUserId, userId),
+    UserHelper.findBlock(userId, currentUserId),
   ]);
 
   const iBlockedThem = !!iBlockedThemRow;

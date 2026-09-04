@@ -1,17 +1,12 @@
 // src/routes/healthRoutes.js
 import { Router } from "express";
-import prisma from "../config/prisma.js";
+import { pingDatabase } from "../config/database.js";
 
 const router = Router();
 
 router.get("/health", async (_req, res) => {
-  let dbStatus = "disconnected";
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    dbStatus = "connected";
-  } catch {
-    dbStatus = "disconnected";
-  }
+  // Provider-aware probe — same "connected"/"disconnected" values as before.
+  const dbStatus = await pingDatabase();
 
   res.json({
     status: "ok",

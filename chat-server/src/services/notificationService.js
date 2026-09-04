@@ -1,4 +1,4 @@
-import prisma from "../config/prisma.js";
+import { notificationRepository } from "../config/repositories.js";
 import { fetchSender } from "./userService.js";
 import { getIO } from "../socket/index.js";
 import logger from "../utils/logger.js";
@@ -24,15 +24,16 @@ export const emitNotification = async ({ to, from, type, refId = null, refModel 
   try {
     const io = getIO();
 
-    const saved = await prisma.notification.create({
-      data: {
-        receiverId: to.toString(),
-        senderId:   from.toString(),
-        type,
-        refId,
-        refModel,
-        meta,
-      },
+    // M-7: repository-backed. Same fields, same order, same failure
+    // contract — the surrounding try/catch still swallows so a DB blip
+    // degrades the notification rather than killing the socket.
+    const saved = await notificationRepository.create({
+      receiverId: to.toString(),
+      senderId:   from.toString(),
+      type,
+      refId,
+      refModel,
+      meta,
     });
 
     const sender = await fetchSender(from);

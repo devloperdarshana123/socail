@@ -3,7 +3,7 @@
 import "dotenv/config";
 
 import app from "./app.js";
-import prisma from "./config/prisma.js";
+import { connectDatabase, disconnectDatabase } from "./config/database.js";
 import { connectRedis } from "./config/redis.js";
 import { startAutoActivateJob } from "./jobs/autoActivateSuspendedUsers.js";
 import logger from "./config/logger.js";
@@ -19,8 +19,11 @@ process.on("uncaughtException", (err) => {
 // ── DB + Redis connect ──
 async function startServer() {
   try {
-    await prisma.$connect();
-    logger.info("PostgreSQL connected via Prisma");
+    // Provider-aware: opens Postgres or Mongo depending on
+    // DATABASE_PROVIDER, and on the prisma path opens Mongo alongside it as
+    // additive infrastructure. See config/database.js.
+    const backend = await connectDatabase();
+    logger.info(`${backend} connected`);
 
     await connectRedis();
 
@@ -43,8 +46,8 @@ async function startServer() {
     const shutdown = async (signal) => {
       logger.info(`${signal} received — shutting down gracefully`);
       server.close(async () => {
-        await prisma.$disconnect();
-        logger.info("Prisma disconnected");
+        const closed = await disconnectDatabase();
+        logger.info(`${closed} disconnected`);
         process.exit(0);
       });
     };
@@ -57,7 +60,7 @@ async function startServer() {
       message: err.message,
       stack  : err.stack,
     });
-    await prisma.$disconnect();
+    await disconnectDatabase().catch(() => {});
     process.exit(1);
   }
 }

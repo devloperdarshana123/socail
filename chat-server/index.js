@@ -8,15 +8,15 @@ import app from "./app.js";
 import { initSocket } from "./src/socket/index.js";
 import { connectRedis, disconnectRedis } from "./src/config/redis.js";
 import logger from "./src/utils/logger.js";
-import prisma from "./src/config/prisma.js";
+import { connectDatabase, disconnectDatabase } from "./src/config/database.js";
 
 const server = http.createServer(app);
 
 const startServer = async () => {
   try {
-    // 1. Prisma — DB connection test
-    await prisma.$connect();
-    logger.info("✅ PostgreSQL connected via Prisma");
+    // 1. Database — provider-aware (DATABASE_PROVIDER selects it)
+    const dbName = await connectDatabase();
+    logger.info(`✅ ${dbName} connected`);
 
     // 2. Redis
     const { pubClient, subClient } = await connectRedis();
@@ -47,8 +47,8 @@ const shutdown = async (signal) => {
 
   server.close(async () => {
     clearTimeout(forceExit);
-    await prisma.$disconnect();
-    logger.info("✅ PostgreSQL disconnected");
+    const closed = await disconnectDatabase();
+    logger.info(`✅ ${closed} disconnected`);
 
     await disconnectRedis();
     logger.info("✅ Redis closed");

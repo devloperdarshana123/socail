@@ -2,7 +2,7 @@
 
 // src/controllers/admin/dashboard.controller.js
 import asyncHandler from "../../middlewares/asyncHandler.js";
-import prisma       from "../../config/prisma.js";
+import * as AdminDashboardHelper from "../../utils/adminDashboardHelpers.js";
 import logger       from "../../config/logger.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -26,9 +26,6 @@ const pctChange = (prev, curr) => {
   if (!prev) return curr > 0 ? 100 : 0;
   return parseFloat((((curr - prev) / prev) * 100).toFixed(1));
 };
-
-// Regular user filter — super_admin exclude
-const regularUserWhere = { role: { not: "super_admin" } };
 
 // ─── 1. KPI Stats ─────────────────────────────────────────────────────────────
 // GET /api/v1/admin/dashboard/stats
@@ -54,59 +51,37 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     viewsAgg,
   ] = await Promise.all([
     // Total regular users
-    prisma.user.count({ where: regularUserWhere }),
+    AdminDashboardHelper.countRegularUsers(),
 
     // Total non-deleted, non-draft posts by non-admins
-    prisma.post.count({
-      where: {
-        isDeleted: false,
-        isDraft:   false,
-        author:    { role: { not: "super_admin" } },
-      },
-    }),
+    AdminDashboardHelper.countVisibleUserPosts(),
 
     // Pending reports
-    prisma.report.count({ where: { status: "pending" } }),
+    AdminDashboardHelper.countPendingReports(),
 
     // Active today
-    prisma.user.count({
-      where: { ...regularUserWhere, lastActiveAt: { gte: startOfToday } },
-    }),
+    AdminDashboardHelper.countActiveRegularUsersSince(startOfToday),
 
     // New signups this month
-    prisma.user.count({
-      where: { ...regularUserWhere, createdAt: { gte: startOfThisMonth } },
-    }),
+    AdminDashboardHelper.countRegularUsersCreatedSince(startOfThisMonth),
 
     // New signups last month
-    prisma.user.count({
-      where: { ...regularUserWhere, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } },
-    }),
+    AdminDashboardHelper.countRegularUsersCreatedBetween(startOfLastMonth, endOfLastMonth),
 
     // Posts this month
-    prisma.post.count({
-      where: { isDeleted: false, createdAt: { gte: startOfThisMonth } },
-    }),
+    AdminDashboardHelper.countPostsCreatedSince(startOfThisMonth),
 
     // Posts last month
-    prisma.post.count({
-      where: { isDeleted: false, createdAt: { gte: startOfLastMonth, lte: endOfLastMonth } },
-    }),
+    AdminDashboardHelper.countPostsCreatedBetween(startOfLastMonth, endOfLastMonth),
 
     // Total comments
-    prisma.comment.count({ where: { isDeleted: false } }),
+    AdminDashboardHelper.countActiveComments(),
 
     // Total likes (sum of likesCount on posts)
-    prisma.post.aggregate({
-      where:   { isDeleted: false },
-      _sum:    { likesCount: true },
-    }),
+    AdminDashboardHelper.sumPostLikes(),
 
     // Total views (sum of viewsCount on posts)
-    prisma.post.aggregate({
-      where:   { isDeleted: false },
-      _sum:    { viewsCount: true },
-    }),
+    AdminDashboardHelper.sumPostViews(),
   ]);
 
   logger.info("Admin fetched dashboard stats", { adminId: req.user.id });
@@ -116,9 +91,9 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     data: {
       totalUsers,
       totalPosts,
-      totalLikes:       likesAgg._sum.likesCount  ?? 0,
+      totalLikes:       likesAgg.likesCount  ?? 0,
       totalComments,
-      totalViews:       viewsAgg._sum.viewsCount  ?? 0,
+      totalViews:       viewsAgg.viewsCount  ?? 0,
       activeToday,
       newSignups:       newSignupsThisMonth,
       newSignupsChange: pctChange(newSignupsLastMonth, newSignupsThisMonth),
@@ -142,20 +117,9 @@ export const getUserGrowth = asyncHandler(async (req, res) => {
   const groupFormat = isDaily ? "YYYY-MM-DD" : "YYYY-MM";
 
   // Raw SQL — Prisma groupBy can't do date truncation
-  const newUsers = await prisma.$queryRawUnsafe(`
-    SELECT
-      TO_CHAR("createdAt" AT TIME ZONE 'UTC', '${groupFormat}') AS label,
-      COUNT(*)::int AS "newUsers"
-    FROM "User"
-    WHERE role != 'super_admin'
-      AND "createdAt" >= $1
-    GROUP BY label
-    ORDER BY label ASC
-  `, startDate);
+  const newUsers = await AdminDashboardHelper.findNewUsersTimeSeries(groupFormat, startDate);
 
-  const cumulativeStart = await prisma.user.count({
-    where: { ...regularUserWhere, createdAt: { lt: startDate } },
-  });
+  const cumulativeStart = await AdminDashboardHelper.countRegularUsersCreatedBefore(startDate);
 
   let running = cumulativeStart;
   const data = newUsers.map((point) => {
@@ -183,17 +147,7 @@ export const getPostGrowth = asyncHandler(async (req, res) => {
   const isDaily     = period === "30days";
   const groupFormat = isDaily ? "YYYY-MM-DD" : "YYYY-MM";
 
-  const raw = await prisma.$queryRawUnsafe(`
-    SELECT
-      TO_CHAR("createdAt" AT TIME ZONE 'UTC', '${groupFormat}') AS label,
-      type,
-      COUNT(*)::int AS count
-    FROM "Post"
-    WHERE "isDeleted" = false
-      AND "createdAt" >= $1
-    GROUP BY label, type
-    ORDER BY label ASC
-  `, startDate);
+  const raw = await AdminDashboardHelper.findPostsByTypeTimeSeries(groupFormat, startDate);
 
   // Group by label, pivot types
   const labelMap = {};
@@ -222,18 +176,7 @@ export const getEngagementTrend = asyncHandler(async (req, res) => {
   const days      = Math.min(parseInt(req.query.period) || 7, 90);
   const startDate = daysAgo(days);
 
-  const raw = await prisma.$queryRaw`
-    SELECT
-      TO_CHAR("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS label,
-      SUM("likesCount")::int    AS likes,
-      SUM("commentsCount")::int AS comments,
-      SUM("viewsCount")::int    AS views
-    FROM "Post"
-    WHERE "isDeleted" = false
-      AND "createdAt" >= ${startDate}
-    GROUP BY label
-    ORDER BY label ASC
-  `;
+  const raw = await AdminDashboardHelper.findEngagementTimeSeries(startDate);
 
   const data = raw.map((r) => ({
     label:    r.label,
@@ -251,24 +194,7 @@ export const getEngagementTrend = asyncHandler(async (req, res) => {
 export const getTopPosts = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 5, 20);
 
-  const posts = await prisma.post.findMany({
-    where:   { isDeleted: false },
-    orderBy: [{ viewsCount: "desc" }, { likesCount: "desc" }],
-    take:    limit,
-    select: {
-      id:            true,
-      caption:       true,
-      type:          true,
-      viewsCount:    true,
-      likesCount:    true,
-      commentsCount: true,
-      createdAt:     true,
-      media:         true,
-      author: {
-        select: { username: true, avatar: true },
-      },
-    },
-  });
+  const posts = await AdminDashboardHelper.findTopPosts(limit);
 
   const data = posts.map((p) => ({
     id:        p.id,
@@ -291,16 +217,7 @@ export const getTopPosts = asyncHandler(async (req, res) => {
 export const getHourlyActivity = asyncHandler(async (req, res) => {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const raw = await prisma.$queryRaw`
-    SELECT
-      EXTRACT(HOUR FROM "lastActiveAt" AT TIME ZONE 'UTC')::int AS hour,
-      COUNT(*)::int AS users
-    FROM "User"
-    WHERE role != 'super_admin'
-      AND "lastActiveAt" >= ${since}
-    GROUP BY hour
-    ORDER BY hour ASC
-  `;
+  const raw = await AdminDashboardHelper.findHourlyActiveUsers(since);
 
   const hourMap = {};
   raw.forEach(({ hour, users }) => { hourMap[hour] = users; });

@@ -6,7 +6,6 @@ import AppError from "../../utils/AppError.js";
 import { deleteFromCloudinary } from "../../helper/cloudinaryUpload.js";
 import logger from "../../config/logger.js";
 import * as PostHelper from "../../utils/postHelpers.js";
-import prisma from "../../config/prisma.js";
 import redis from "../../config/redis.js";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -120,18 +119,9 @@ export const getPostInteraction = asyncHandler(async (req, res, next) => {
   }
 
   const [liked, saved, post] = await Promise.all([
-    prisma.like.findFirst({
-      where: { likedById: userId, postId, commentId: null, storyId: null },
-      select: { id: true },
-    }),
-    prisma.saved.findUnique({
-      where: { savedById_postId: { savedById: userId, postId } },
-      select: { id: true },
-    }),
-    prisma.post.findUnique({
-      where: { id: postId },
-      select: { likesCount: true, commentsCount: true, viewsCount: true },
-    }),
+    PostHelper.findPostLikeByUser(userId, postId),
+    PostHelper.findPostSavedByUser(userId, postId),
+    PostHelper.getPostInteractionCounts(postId),
   ]);
 
   return res.status(200).json({
@@ -166,18 +156,12 @@ export const getFeedPosts = asyncHandler(async (req, res, next) => {
   const userId = req.user.id;
 
   // Get following list
-  const follows = await prisma.follow.findMany({
-    where: { followerId: userId, status: "accepted" },
-    select: { followingId: true },
-  });
+  const follows = await PostHelper.getAcceptedFollowingIds(userId);
 
   const rawIds = [userId, ...follows.map((f) => f.followingId)];
 
   // Filter out super_admin
-  const hiddenUsers = await prisma.user.findMany({
-    where: { role: "super_admin" },
-    select: { id: true },
-  });
+  const hiddenUsers = await PostHelper.getSuperAdminIds();
   const hiddenIds = new Set(hiddenUsers.map((u) => u.id));
   const authorIds = rawIds.filter((id) => !hiddenIds.has(id));
 
@@ -210,10 +194,7 @@ export const getUserPosts = asyncHandler(async (req, res, next) => {
   }
 
   // super_admin block
-  const targetUser = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, isPrivate: true },
-  });
+  const targetUser = await PostHelper.getUserRoleAndPrivacy(userId);
 
   if (targetUser?.role === "super_admin") {
     return res.status(200).json({
@@ -232,19 +213,10 @@ export const getUserPosts = asyncHandler(async (req, res, next) => {
 
   // Get postsCount and follow status in parallel
   const [postsCount, followRecord] = await Promise.all([
-    prisma.post.count({
-      where: {
-        authorId: userId,
-        isDeleted: false,
-        isDraft: false,
-      },
-    }),
+    PostHelper.countVisibleUserPosts(userId),
     isOwner
       ? Promise.resolve(null)
-      : prisma.follow.findUnique({
-          where: { followerId_followingId: { followerId: viewerId, followingId: userId } },
-          select: { status: true },
-        }),
+      : PostHelper.getFollowStatus(viewerId, userId),
   ]);
 
   const isFollower = followRecord?.status === "accepted";
@@ -359,10 +331,7 @@ export const updatePost = asyncHandler(async (req, res, next) => {
 
   try {
     // Get current media for deletion tracking
-    const current = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { media: true },
-    });
+    const current = await PostHelper.getPostMediaForUpdate(postId);
 
     if (!current) {
       return next(new AppError("Post not found.", 404));
@@ -432,10 +401,7 @@ export const recordView = asyncHandler(async (req, res, next) => {
     logger.info("View recorded", { postId, userId, source: safeSource, device });
   }
 
-  const updatedPost = await prisma.post.findUnique({
-  where: { id: postId },
-  select: { viewsCount: true },
-});
+  const updatedPost = await PostHelper.getPostViewsCount(postId);
 
 return res.status(200).json({
   success: true,

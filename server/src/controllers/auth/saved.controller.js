@@ -5,7 +5,6 @@ import AppError from "../../utils/AppError.js";
 import logger from "../../config/logger.js";
 import * as SavedHelper from "../../utils/savedHelpers.js";
 import redis from "../../config/redis.js";
-import prisma from "../../config/prisma.js";
 
 const isValidUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
@@ -35,10 +34,7 @@ export const toggleSave = asyncHandler(async (req, res, next) => {
   const { saved } = await SavedHelper.toggleSave(userId, postId);
 
   // Fetch updated count
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    select: { savedCount: true },
-  });
+  const post = await SavedHelper.getPostSavedCount(postId);
 
   const savedCount = Math.max(0, post?.savedCount ?? 0);
 

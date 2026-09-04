@@ -22,3 +22,7 @@ yarn-error.log*
 uploads/
 
 /src/generated/prisma
+
+# Disposable test database (embedded-postgres) — see tests/setup/
+/tests/.pgdata/
+/tests/.test-env.json

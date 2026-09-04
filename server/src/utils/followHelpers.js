@@ -1,10 +1,32 @@
-import prisma from "../config/prisma.js";
+import { followRepository, userRepository } from "../config/repositories.js";
+
+// Persistence for the follow domain now flows through the repository layer
+// (Phase 7A) instead of the Prisma client directly. Database/behavior are
+// unchanged — every query below is the same shape as the prisma.* call it
+// replaces; only the access path moved.
+//
+// NOTE on atomicity: this helper has NO transactions, and did not have any
+// before the migration either. The follow-row write and the two denormalized
+// counter updates are separate statements (the counter pair runs under a
+// Promise.all), so a crash between them can leave counters drifted. That is
+// pre-existing behavior and is deliberately preserved unchanged here — see
+// the follow characterization suite.
+
+// ── Follow-target summary (fields the follow controller needs to decide
+//    whether a follow is allowed and public-vs-private). Extracted verbatim
+//    from follow.controller.js so the controller no longer touches Prisma
+//    directly — Milestone 5 helpers-as-boundary. Query is byte-identical to
+//    the one it replaces; returns null for a non-existent user, exactly as
+//    Prisma's findUnique does. ────────────────────────────────────────────
+export const getFollowTargetSummary = async (userId) => {
+  return userRepository.findById(userId, {
+    select: { accountStatus: true, isPrivate: true, username: true },
+  });
+};
 
 // ── Send follow request (auto-accept if public account) ──────────────────
 export const sendFollowRequest = async (followerId, followingId, isPrivate) => {
-  const existing = await prisma.follow.findUnique({
-    where: { followerId_followingId: { followerId, followingId } },
-  });
+  const existing = await followRepository.findByFollowerAndFollowing(followerId, followingId);
 
   if (existing) {
     if (existing.status === "accepted" || existing.status === "pending") {
@@ -12,14 +34,11 @@ export const sendFollowRequest = async (followerId, followingId, isPrivate) => {
     }
     // rejected before — allow re-request
     const status = isPrivate ? "pending" : "accepted";
-    await prisma.follow.update({
-      where: { id: existing.id },
-      data: { status, rejectedAt: null },
-    });
+    await followRepository.update(existing.id, { status, rejectedAt: null });
     if (status === "accepted") {
       await Promise.all([
-        prisma.user.update({ where: { id: followerId }, data: { followingCount: { increment: 1 } } }),
-        prisma.user.update({ where: { id: followingId }, data: { followersCount: { increment: 1 } } }),
+        userRepository.update(followerId, { followingCount: { inc: 1 } }),
+        userRepository.update(followingId, { followersCount: { inc: 1 } }),
       ]);
     }
     return { status, alreadyFollowing: false };
@@ -27,12 +46,12 @@ export const sendFollowRequest = async (followerId, followingId, isPrivate) => {
 
   const status = isPrivate ? "pending" : "accepted";
 
-  await prisma.follow.create({ data: { followerId, followingId, status } });
+  await followRepository.create({ followerId, followingId, status });
 
   if (status === "accepted") {
     await Promise.all([
-      prisma.user.update({ where: { id: followerId }, data: { followingCount: { increment: 1 } } }),
-      prisma.user.update({ where: { id: followingId }, data: { followersCount: { increment: 1 } } }),
+      userRepository.update(followerId, { followingCount: { inc: 1 } }),
+      userRepository.update(followingId, { followersCount: { inc: 1 } }),
     ]);
   }
 
@@ -41,18 +60,16 @@ export const sendFollowRequest = async (followerId, followingId, isPrivate) => {
 
 // ── Unfollow / cancel pending request ──────────────────────────────────────
 export const unfollow = async (followerId, followingId) => {
-  const existing = await prisma.follow.findUnique({
-    where: { followerId_followingId: { followerId, followingId } },
-  });
+  const existing = await followRepository.findByFollowerAndFollowing(followerId, followingId);
 
   if (!existing) return { unfollowed: false };
 
-  await prisma.follow.delete({ where: { id: existing.id } });
+  await followRepository.delete(existing.id);
 
   if (existing.status === "accepted") {
     await Promise.all([
-      prisma.user.update({ where: { id: followerId }, data: { followingCount: { decrement: 1 } } }),
-      prisma.user.update({ where: { id: followingId }, data: { followersCount: { decrement: 1 } } }),
+      userRepository.update(followerId, { followingCount: { dec: 1 } }),
+      userRepository.update(followingId, { followersCount: { dec: 1 } }),
     ]);
   }
 
@@ -61,17 +78,15 @@ export const unfollow = async (followerId, followingId) => {
 
 // ── Accept follow request ───────────────────────────────────────────────
 export const acceptRequest = async (followerId, recipientId) => {
-  const existing = await prisma.follow.findUnique({
-    where: { followerId_followingId: { followerId, followingId: recipientId } },
-  });
+  const existing = await followRepository.findByFollowerAndFollowing(followerId, recipientId);
 
   if (!existing || existing.status !== "pending") return { accepted: false };
 
-  await prisma.follow.update({ where: { id: existing.id }, data: { status: "accepted" } });
+  await followRepository.update(existing.id, { status: "accepted" });
 
   await Promise.all([
-    prisma.user.update({ where: { id: followerId }, data: { followingCount: { increment: 1 } } }),
-    prisma.user.update({ where: { id: recipientId }, data: { followersCount: { increment: 1 } } }),
+    userRepository.update(followerId, { followingCount: { inc: 1 } }),
+    userRepository.update(recipientId, { followersCount: { inc: 1 } }),
   ]);
 
   return { accepted: true };
@@ -79,15 +94,13 @@ export const acceptRequest = async (followerId, recipientId) => {
 
 // ── Reject follow request (soft) ────────────────────────────────────────
 export const rejectRequest = async (followerId, recipientId) => {
-  const existing = await prisma.follow.findUnique({
-    where: { followerId_followingId: { followerId, followingId: recipientId } },
-  });
+  const existing = await followRepository.findByFollowerAndFollowing(followerId, recipientId);
 
   if (!existing || existing.status !== "pending") return { rejected: false };
 
-  await prisma.follow.update({
-    where: { id: existing.id },
-    data: { status: "rejected", rejectedAt: new Date() },
+  await followRepository.update(existing.id, {
+    status: "rejected",
+    rejectedAt: new Date(),
   });
 
   return { rejected: true };
@@ -95,16 +108,10 @@ export const rejectRequest = async (followerId, recipientId) => {
 
 // ── Pending follow requests (cursor-based) ────────────────────────────────
 export const getPendingRequests = async (userId, afterId, limit) => {
-  const rows = await prisma.follow.findMany({
-    where: { followingId: userId, status: "pending" },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    ...(afterId && { cursor: { id: afterId }, skip: 1 }),
-    include: {
-      follower: {
-        select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true },
-      },
-    },
+  const rows = await followRepository.findFollowersWithProfile(userId, {
+    status: "pending",
+    afterId,
+    limit,
   });
 
   const hasMore = rows.length > limit;
@@ -116,16 +123,10 @@ export const getPendingRequests = async (userId, afterId, limit) => {
 
 // ── Followers list (cursor-based) ─────────────────────────────────────────
 export const getFollowers = async (userId, afterId, limit) => {
-  const rows = await prisma.follow.findMany({
-    where: { followingId: userId, status: "accepted" },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    ...(afterId && { cursor: { id: afterId }, skip: 1 }),
-    include: {
-      follower: {
-        select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true },
-      },
-    },
+  const rows = await followRepository.findFollowersWithProfile(userId, {
+    status: "accepted",
+    afterId,
+    limit,
   });
 
   const hasMore = rows.length > limit;
@@ -137,16 +138,10 @@ export const getFollowers = async (userId, afterId, limit) => {
 
 // ── Following list (cursor-based) ─────────────────────────────────────────
 export const getFollowing = async (userId, afterId, limit) => {
-  const rows = await prisma.follow.findMany({
-    where: { followerId: userId, status: "accepted" },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
-    ...(afterId && { cursor: { id: afterId }, skip: 1 }),
-    include: {
-      following: {
-        select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true },
-      },
-    },
+  const rows = await followRepository.findFollowingWithProfile(userId, {
+    status: "accepted",
+    afterId,
+    limit,
   });
 
   const hasMore = rows.length > limit;
@@ -158,8 +153,7 @@ export const getFollowing = async (userId, afterId, limit) => {
 
 // ── Follow status between two users ───────────────────────────────────────
 export const getFollowStatus = async (followerId, followingId) => {
-  const row = await prisma.follow.findUnique({
-    where: { followerId_followingId: { followerId, followingId } },
+  const row = await followRepository.findByFollowerAndFollowing(followerId, followingId, {
     select: { status: true },
   });
   return row?.status ?? null;
@@ -168,27 +162,15 @@ export const getFollowStatus = async (followerId, followingId) => {
 // ── Mutual followers ───────────────────────────────────────────────────────
 export const getMutualFollowers = async (userAId, userBId, limit) => {
   // Step 1: get userA's followers list (accepted)
-  const aFollowers = await prisma.follow.findMany({
-    where: { followingId: userAId, status: "accepted" },
-    select: { followerId: true },
-  });
+  const aFollowers = await followRepository.findAllFollowerIds(userAId, { status: "accepted" });
   const aFollowerIds = aFollowers.map((f) => f.followerId);
 
   if (aFollowerIds.length === 0) return [];
 
   // Step 2: of those, who also follows userB
-  const mutuals = await prisma.follow.findMany({
-    where: {
-      followingId: userBId,
-      status: "accepted",
-      followerId: { in: aFollowerIds },
-    },
-    take: limit,
-    include: {
-      follower: {
-        select: { id: true, username: true, fullName: true, avatar: true, isVerifiedBadge: true },
-      },
-    },
+  const mutuals = await followRepository.findFollowersAmongWithProfile(userBId, aFollowerIds, {
+    status: "accepted",
+    limit,
   });
 
   return mutuals.map((m) => m.follower);
@@ -196,21 +178,14 @@ export const getMutualFollowers = async (userAId, userBId, limit) => {
 
 // ── Remove all follow relations between two users (for blocking) ──────────
 export const removeAllBetween = async (userAId, userBId) => {
-  const rows = await prisma.follow.findMany({
-    where: {
-      OR: [
-        { followerId: userAId, followingId: userBId },
-        { followerId: userBId, followingId: userAId },
-      ],
-    },
-  });
+  const rows = await followRepository.findAllBetween(userAId, userBId);
 
   for (const row of rows) {
-    await prisma.follow.delete({ where: { id: row.id } });
+    await followRepository.delete(row.id);
     if (row.status === "accepted") {
       await Promise.all([
-        prisma.user.update({ where: { id: row.followerId }, data: { followingCount: { decrement: 1 } } }),
-        prisma.user.update({ where: { id: row.followingId }, data: { followersCount: { decrement: 1 } } }),
+        userRepository.update(row.followerId, { followingCount: { dec: 1 } }),
+        userRepository.update(row.followingId, { followersCount: { dec: 1 } }),
       ]);
     }
   }

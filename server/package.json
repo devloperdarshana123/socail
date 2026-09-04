@@ -6,18 +6,19 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
-   "start": "npx prisma migrate deploy && npx prisma generate && node src/server.js",
-    "test": "NODE_ENV=test node --experimental-vm-modules node_modules/.bin/jest --runInBand --detectOpenHandles"
-  },
-  "jest": {
-    "testEnvironment": "node"
+    "start": "npx prisma migrate deploy && npx prisma generate && node src/server.js",
+    "test": "NODE_ENV=test node --experimental-vm-modules node_modules/.bin/jest --runInBand --detectOpenHandles",
+    "test:mongo": "NODE_ENV=test node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.mongo.config.js --runInBand --forceExit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "embedded-postgres": "^18.4.0-beta.17",
     "jest": "^30.4.2",
+    "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.1.14",
+    "socket.io-client": "^4.8.3",
     "supertest": "^7.2.2"
   },
   "dependencies": {

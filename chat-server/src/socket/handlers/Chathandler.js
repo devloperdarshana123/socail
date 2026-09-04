@@ -494,7 +494,15 @@
 
 
 
-import prisma from "../../config/prisma.js";
+import {
+  conversationRepository,
+  conversationParticipantRepository,
+  messageRepository,
+  messageReceiptRepository,
+  notificationRepository,
+  blockRepository,
+} from "../../config/repositories.js";
+import { transactionRunner } from "../../config/transaction.js";
 import { fetchSender, isBlocked } from "../../services/userService.js";
 import {
   addSocket, removeSocket,
@@ -505,9 +513,7 @@ import { encryptMessage, decryptMessage } from "../../utils/encryption.js";
 
 const syncLastMessage = async (conversationId, msg) => {
   try {
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: {
+    await conversationRepository.update(conversationId, {
         lastMessage: {
           messageId: msg.id,
           text:      msg.isDeleted ? "" : (msg.text?.slice(0, 100) ?? ""),
@@ -516,7 +522,6 @@ const syncLastMessage = async (conversationId, msg) => {
           isDeleted: msg.isDeleted ?? false,
         },
         updatedAt: new Date(),
-      },
     });
   } catch (err) {
     logger.error("❌ syncLastMessage error", { message: err.message });
@@ -558,14 +563,12 @@ const aggregateReactions = (reactions = []) => {
 
 const saveOfflineNotification = async ({ receiver, sender, conversationId }) => {
   try {
-    await prisma.notification.create({
-      data: {
-        receiverId: receiver,
-        senderId:   sender,
-        type:       "new_message",
-        refId:      conversationId,
-        refModel:   "Conversation",
-      },
+    await notificationRepository.create({
+      receiverId: receiver,
+      senderId:   sender,
+      type:       "new_message",
+      refId:      conversationId,
+      refModel:   "Conversation",
     });
   } catch (err) {
     logger.error("❌ Offline notification save error", { message: err.message });
@@ -601,8 +604,9 @@ export default async (io, socket) => {
   };
 
   const getPopulatedConversation = async (conversationId) => {
-    const conv = await prisma.conversation.findUnique({
-      where: { id: conversationId },
+    // M-10: the nested members→user include is preserved as-is; each
+    // backend's repository resolves it (Prisma join / Mongo populate).
+    const conv = await conversationRepository.findById(conversationId, {
       include: {
         members: {
           include: {
@@ -663,8 +667,7 @@ export default async (io, socket) => {
 
       let replyPreview = null;
       if (message.replyTo) {
-        const parent = await prisma.message.findUnique({
-          where: { id: message.replyTo },
+        const parent = await messageRepository.findById(message.replyTo, {
           select: { id: true, text: true, isDeleted: true, senderId: true },
         });
         if (parent) {
@@ -681,15 +684,13 @@ export default async (io, socket) => {
       if (message.audio && !message.text?.trim()) msgType = "audio";
       else if (message.image && !message.text?.trim()) msgType = "image";
 
-      const newMsg = await prisma.message.create({
-        data: {
-          conversationId,
-          senderId: userId,
-          text:     message.text?.trim() ? encryptMessage(message.text.trim()) : "",
-          image:    message.image ? { url: message.image?.url || message.image } : null,
-          type:     msgType,
-          replyTo:  replyPreview,
-        },
+      const newMsg = await messageRepository.create({
+        conversationId,
+        senderId: userId,
+        text:     message.text?.trim() ? encryptMessage(message.text.trim()) : "",
+        image:    message.image ? { url: message.image?.url || message.image } : null,
+        type:     msgType,
+        replyTo:  replyPreview,
       });
 
       // Plain decrypted text — used everywhere we show/preview/store last message
@@ -713,14 +714,21 @@ export default async (io, socket) => {
       // Unread count increment
       const recipientIds = participants.filter((pid) => pid !== userId);
       if (recipientIds.length) {
-        await prisma.$transaction(
-          recipientIds.map((pid) =>
-            prisma.conversationParticipant.updateMany({
-              where: { conversationId, userId: pid },
-              data:  { unreadCount: { increment: 1 } },
-            })
-          )
-        );
+        // Array-form $transaction → callback runner (the M-13 conversion).
+        // Element ORDER is preserved by awaiting sequentially, and the whole
+        // batch still commits or rolls back together, so a partial failure
+        // cannot leave some recipients' unread counts bumped and others not.
+        // `{ inc: 1 }` is the neutral mutation DSL — still an ATOMIC
+        // increment on both backends, never a read-modify-write.
+        await transactionRunner.run(async (tx) => {
+          for (const pid of recipientIds) {
+            await conversationParticipantRepository.updateManyWhere(
+              { conversationId, userId: pid },
+              { unreadCount: { inc: 1 } },
+              { tx },
+            );
+          }
+        });
       }
 
       for (const pid of participants) {
@@ -750,8 +758,11 @@ export default async (io, socket) => {
         }
       }
 
-      const members = await prisma.conversationParticipant.findMany({
-        where: { conversationId, userId: { in: participants } },
+      // findAllWhere, NOT findMany — the latter paginates (20-row cap) and
+      // applies soft-delete scoping, either of which would silently drop
+      // members from a large group's unread map.
+      const members = await conversationParticipantRepository.findAllWhere({
+        conversationId, userId: { in: participants },
       });
 
       // Save lastMessage in DB with the DECRYPTED text (so REST API fetches show plain text too)
@@ -815,19 +826,17 @@ export default async (io, socket) => {
   socket.on("message:seen", async ({ conversationId, messageId }) => {
     if (!conversationId || !messageId) return;
     try {
-      await prisma.messageReceipt.upsert({
-        where: { messageId_userId: { messageId, userId } },
+      await messageReceiptRepository.upsertByMessageAndUser(messageId, userId, {
         update: { seenAt: new Date(), readAt: new Date() },
         create: { messageId, userId, conversationId, seenAt: new Date(), readAt: new Date() },
       });
 
-      await prisma.conversationParticipant.updateMany({
-        where: { conversationId, userId },
-        data:  { unreadCount: 0, lastSeenAt: new Date() },
-      });
+      await conversationParticipantRepository.updateManyWhere(
+        { conversationId, userId },
+        { unreadCount: 0, lastSeenAt: new Date() },
+      );
 
-      const seenConv = await prisma.conversation.findUnique({
-        where: { id: conversationId },
+      const seenConv = await conversationRepository.findById(conversationId, {
         include: { members: { select: { userId: true } } },
       });
       const participants = (seenConv?.members || []).map((m) => m.userId);
@@ -851,16 +860,19 @@ export default async (io, socket) => {
     if (newText.trim().length > 2000)
       return socket.emit("error", { message: "Message too long." });
     try {
-      const msg = await prisma.message.findUnique({ where: { id: messageId } });
+      const msg = await messageRepository.findById(messageId);
       if (!msg) return socket.emit("error", { message: "Message not found." });
       if (msg.isDeleted) return socket.emit("error", { message: "Cannot edit deleted message." });
-      if (msg.senderId !== userId) return socket.emit("error", { message: "Unauthorized." });
+      // String(): on Postgres these ids are uuid STRINGS, on Mongo they are
+      // ObjectId instances, and `ObjectId !== "abc"` is true for every value.
+      // Left unguarded this rejected the sender as Unauthorized on every edit,
+      // delete and reaction under Mongo.
+      if (String(msg.senderId) !== userId) return socket.emit("error", { message: "Unauthorized." });
       if (Date.now() - new Date(msg.createdAt).getTime() > EDIT_WINDOW_MS)
         return socket.emit("error", { message: "Edit window of 15 minutes has passed." });
 
-      const updated = await prisma.message.update({
-        where: { id: messageId },
-        data: { text: encryptMessage(newText.trim()), isEdited: true, editedAt: new Date() },
+      const updated = await messageRepository.update(messageId, {
+        text: encryptMessage(newText.trim()), isEdited: true, editedAt: new Date(),
       });
 
       const decryptedEditedText = decryptMessage(updated.text);
@@ -868,8 +880,7 @@ export default async (io, socket) => {
       // Keep lastMessage in DB as plain text too
       await syncLastMessage(conversationId, { ...updated, text: decryptedEditedText });
 
-      const editConv = await prisma.conversation.findUnique({
-        where: { id: conversationId },
+      const editConv = await conversationRepository.findById(conversationId, {
         include: { members: { select: { userId: true } } },
       });
       const participants = (editConv?.members || []).map((m) => m.userId);
@@ -892,19 +903,24 @@ export default async (io, socket) => {
       return socket.emit("error", { message: "Session expired. Please refresh." });
     if (!conversationId || !messageId) return;
     try {
-      const msg = await prisma.message.findUnique({ where: { id: messageId } });
+      const msg = await messageRepository.findById(messageId);
       if (!msg) return socket.emit("error", { message: "Message not found." });
       if (msg.isDeleted) return socket.emit("error", { message: "Already deleted." });
-      if (msg.senderId !== userId) return socket.emit("error", { message: "Unauthorized." });
+      // String(): on Postgres these ids are uuid STRINGS, on Mongo they are
+      // ObjectId instances, and `ObjectId !== "abc"` is true for every value.
+      // Left unguarded this rejected the sender as Unauthorized on every edit,
+      // delete and reaction under Mongo.
+      if (String(msg.senderId) !== userId) return socket.emit("error", { message: "Unauthorized." });
 
-      const deleted = await prisma.message.update({
-        where: { id: messageId },
-        data: { isDeleted: true, deletedAt: new Date(), text: "", image: null, reactions: [] },
+      // update(), NOT delete() — the repository's delete() applies its own
+      // soft-delete payload; this keeps the handler's bundle (which also
+      // clears text/image/reactions) authoritative.
+      const deleted = await messageRepository.update(messageId, {
+        isDeleted: true, deletedAt: new Date(), text: "", image: null, reactions: [],
       });
       await syncLastMessage(conversationId, deleted);
 
-      const delConv = await prisma.conversation.findUnique({
-        where: { id: conversationId },
+      const delConv = await conversationRepository.findById(conversationId, {
         include: { members: { select: { userId: true } } },
       });
       const participants = (delConv?.members || []).map((m) => m.userId);
@@ -922,30 +938,26 @@ export default async (io, socket) => {
   socket.on("message:react", async ({ conversationId, messageId, emoji }) => {
     if (!conversationId || !messageId) return;
     try {
-      const msg = await prisma.message.findUnique({ where: { id: messageId } });
+      const msg = await messageRepository.findById(messageId);
       if (!msg || msg.isDeleted)
         return socket.emit("error", { message: "Message not found." });
 
       let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
       const existingIdx = reactions.findIndex(
-        (r) => r.userId === userId && r.emoji === emoji
+        (r) => String(r.userId) === userId && r.emoji === emoji
       );
       if (existingIdx !== -1) {
         reactions.splice(existingIdx, 1);
       } else {
-        reactions = reactions.filter((r) => r.userId !== userId);
+        reactions = reactions.filter((r) => String(r.userId) !== userId);
         if (emoji?.trim())
           reactions.push({ userId, emoji: emoji.trim(), reactedAt: new Date() });
       }
 
-      const updated = await prisma.message.update({
-        where: { id: messageId },
-        data: { reactions },
-      });
+      const updated = await messageRepository.update(messageId, { reactions });
 
       const aggregated = aggregateReactions(updated.reactions);
-      const reactConv = await prisma.conversation.findUnique({
-        where: { id: conversationId },
+      const reactConv = await conversationRepository.findById(conversationId, {
         include: { members: { select: { userId: true } } },
       });
       const participants = (reactConv?.members || []).map((m) => m.userId);
@@ -967,12 +979,11 @@ export default async (io, socket) => {
     if (!targetUserId) return;
     try {
       const blocked = await isBlocked(userId, targetUserId);
-      const iBlockedThem = await prisma.block.findFirst({
-        where: { blockerId: userId, blockedId: targetUserId },
-        select: { id: true },
+      const iBlockedThem = await blockRepository.exists({
+        blockerId: userId, blockedId: targetUserId,
       });
       socket.emit("user:blockStatus", {
-        targetUserId, blocked, iBlockedThem: !!iBlockedThem,
+        targetUserId, blocked, iBlockedThem,
       });
     } catch (err) {
       logger.error("❌ user:blockStatus error", { message: err.message });

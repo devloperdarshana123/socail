@@ -2,7 +2,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
+import * as AdminCommentHelper from "../../utils/adminCommentHelpers.js";
 import logger from "../../config/logger.js";
 import { auditLogger, AUDIT_ACTIONS } from "../../utils/auditLogger.js";
 import { dateRangeToCreatedAt } from "../../utils/dateRange.js";
@@ -68,10 +68,10 @@ export const getAllComments = asyncHandler(async (req, res) => {
 
   // Search — content, author username/fullName
   if (search.trim()) {
-    where.OR = [
-      { content:                    { contains: search.trim(), mode: "insensitive" } },
-      { author: { username:         { contains: search.trim(), mode: "insensitive" } } },
-      { author: { fullName:         { contains: search.trim(), mode: "insensitive" } } },
+    where.or = [
+      { content:            { like: search.trim(), caseInsensitive: true } },
+      { author: { username: { like: search.trim(), caseInsensitive: true } } },
+      { author: { fullName: { like: search.trim(), caseInsensitive: true } } },
     ];
   }
 
@@ -86,50 +86,8 @@ export const getAllComments = asyncHandler(async (req, res) => {
 
   // ── Run query + count in parallel ────────────────────────
   const [comments, total] = await Promise.all([
-    prisma.comment.findMany({
-      where,
-      orderBy,
-      skip,
-      take: limitNum,
-      select: {
-        id:              true,
-        content:         true,
-        status:          true,
-        isDeleted:       true,
-        isPinned:        true,
-        likesCount:      true,
-        repliesCount:    true,
-        createdAt:       true,
-        updatedAt:       true,
-        author: {
-          select: {
-            id:            true,
-            username:      true,
-            fullName:      true,
-            avatar:        true,
-            accountStatus: true,
-          },
-        },
-        post: {
-          select: {
-            id:        true,
-            caption:   true,
-            type:      true,
-            media:     true,
-            createdAt: true,
-            author: {
-              select: {
-                id:       true,
-                username: true,
-                fullName: true,
-                avatar:   true,
-              },
-            },
-          },
-        },
-      },
-    }),
-    prisma.comment.count({ where }),
+    AdminCommentHelper.findComments(where, orderBy, skip, limitNum),
+    AdminCommentHelper.countComments(where),
   ]);
 
   // ── Normalise avatars + trim media to first item ─────────
@@ -171,11 +129,11 @@ export const getAllComments = asyncHandler(async (req, res) => {
 
 export const getCommentStats = asyncHandler(async (_req, res) => {
   const [total, active, flagged, removed, pending] = await Promise.all([
-    prisma.comment.count({ where: { isDeleted: false } }),
-    prisma.comment.count({ where: { isDeleted: false, status: "active"  } }),
-    prisma.comment.count({ where: { isDeleted: false, status: "flagged" } }),
-    prisma.comment.count({ where: { isDeleted: false, status: "removed" } }),
-    prisma.comment.count({ where: { isDeleted: false, status: "pending" } }),
+    AdminCommentHelper.countComments({ isDeleted: false }),
+    AdminCommentHelper.countComments({ isDeleted: false, status: "active"  }),
+    AdminCommentHelper.countComments({ isDeleted: false, status: "flagged" }),
+    AdminCommentHelper.countComments({ isDeleted: false, status: "removed" }),
+    AdminCommentHelper.countComments({ isDeleted: false, status: "pending" }),
   ]);
 
   return res.status(200).json({
@@ -189,46 +147,12 @@ export const getCommentStats = asyncHandler(async (_req, res) => {
 // ─────────────────────────────────────────────────────────────
 
 export const getCommentById = asyncHandler(async (req, res, next) => {
-  const comment = await prisma.comment.findFirst({
-    where: { id: req.params.id, isDeleted: false },
-    include: {
-      author: {
-        select: {
-          id:            true,
-          username:      true,
-          fullName:      true,
-          avatar:        true,
-          accountStatus: true,
-          email:         true,
-        },
-      },
-      post: {
-        select: {
-          id:        true,
-          caption:   true,
-          type:      true,
-          createdAt: true,
-          author: {
-            select: { id: true, username: true, fullName: true, avatar: true },
-          },
-        },
-      },
-    },
-  });
+  const comment = await AdminCommentHelper.findCommentDetail(req.params.id);
 
   if (!comment) return next(new AppError("Comment not found", 404));
 
   // Fetch reports for this comment
-  const reports = await prisma.report.findMany({
-    where:  { postId: null }, // Comment-level reports — adjust if schema has commentId
-    select: {
-      id:        true,
-      reason:    true,
-      status:    true,
-      createdAt: true,
-      reportedBy: { select: { username: true } },
-    },
-  });
+  const reports = await AdminCommentHelper.findCommentLevelReports();
 
   const normalised = {
     ...comment,
@@ -268,39 +192,23 @@ export const updateCommentStatus = asyncHandler(async (req, res, next) => {
     return next(new AppError(`status must be one of: ${ALLOWED.join(", ")}`, 400));
   }
 
-  const existing = await prisma.comment.findFirst({
-    where: { id: req.params.id, isDeleted: false },
-  });
+  const existing = await AdminCommentHelper.findModeratableComment(req.params.id);
   if (!existing) return next(new AppError("Comment not found", 404));
 
   // commentsCount adjust
   if (existing.postId) {
     if ((status === "removed" || status === "flagged") && existing.status === "active") {
-      await prisma.post.update({
-        where: { id: existing.postId },
-        data: { commentsCount: { decrement: 1 } },
-      }).catch(() => {});
+      await AdminCommentHelper.decrementPostCommentsCount(existing.postId).catch(() => {});
     } else if (status === "active" && (existing.status === "removed" || existing.status === "flagged")) {
-      await prisma.post.update({
-        where: { id: existing.postId },
-        data: { commentsCount: { increment: 1 } },
-      }).catch(() => {});
+      await AdminCommentHelper.incrementPostCommentsCount(existing.postId).catch(() => {});
     }
   }
 
-  const comment = await prisma.comment.update({
-    where: { id: req.params.id },
-    data: {
-      status,
-      moderatedAt:      new Date(),
-      moderatedBy:      req.user.id,
-      ...(reason ? { moderationReason: reason } : {}),
-    },
-    include: {
-      author: {
-        select: { id: true, username: true, fullName: true, avatar: true },
-      },
-    },
+  const comment = await AdminCommentHelper.updateCommentModeration(req.params.id, {
+    status,
+    moderatedAt:      new Date(),
+    moderatedBy:      req.user.id,
+    ...(reason ? { moderationReason: reason } : {}),
   });
 
   const normalised = {
@@ -334,27 +242,19 @@ export const updateCommentStatus = asyncHandler(async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 
 export const deleteComment = asyncHandler(async (req, res, next) => {
-  const existing = await prisma.comment.findFirst({
-    where: { id: req.params.id, isDeleted: false },
-  });
+  const existing = await AdminCommentHelper.findModeratableComment(req.params.id);
   if (!existing) return next(new AppError("Comment not found", 404));
 
-  const comment = await prisma.comment.update({
-    where: { id: req.params.id },
-    data: {
-      isDeleted: true,
-      deletedAt: new Date(),
-      deletedBy: req.user.id,
-      status:    "removed",
-    },
+  const comment = await AdminCommentHelper.softDeleteCommentById(req.params.id, {
+    isDeleted: true,
+    deletedAt: new Date(),
+    deletedBy: req.user.id,
+    status:    "removed",
   });
 
   // commentsCount decrement
   if (existing.postId) {
-    await prisma.post.update({
-      where: { id: existing.postId },
-      data: { commentsCount: { decrement: 1 } },
-    }).catch(() => {});
+    await AdminCommentHelper.decrementPostCommentsCount(existing.postId).catch(() => {});
   }
 
   logger.info(`Admin ${req.user.id} soft-deleted comment ${req.params.id}`);
@@ -407,7 +307,7 @@ export const bulkUpdateComments = asyncHandler(async (req, res, next) => {
     };
   }
 
-  const result = await prisma.comment.updateMany({ where, data });
+  const result = await AdminCommentHelper.bulkUpdateComments(where, data);
 
   logger.info(`Admin ${req.user.id} bulk-${action}: ${result.count}/${ids.length} comments`);
 

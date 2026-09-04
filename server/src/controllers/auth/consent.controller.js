@@ -1,7 +1,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
+import * as ConsentHelper from "../../utils/consentHelpers.js";
 
 const VALID_VERSIONS = ["1.0", "1.1", "1.2"];
 
@@ -20,31 +20,14 @@ export const saveConsent = asyncHandler(async (req, res, next) => {
   const version = policyVersion || "1.0";
 
   // ✅ Fixed: composite unique key (sessionId + policyVersion)
-  const consent = await prisma.consent.upsert({
-    where: {
-      sessionId_policyVersion: {
-        sessionId,
-        policyVersion: version,
-      },
-    },
-    update: {
-      userId: req.user?.id || null,
-      analytics: analytics ?? false,
-      marketing: marketing ?? false,
-      ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] || null,
-      consentGivenAt: new Date(),
-    },
-    create: {
-      sessionId,
-      userId: req.user?.id || null,
-      analytics: analytics ?? false,
-      marketing: marketing ?? false,
-      policyVersion: version,
-      ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] || null,
-      consentGivenAt: new Date(),
-    },
+  const consent = await ConsentHelper.upsertConsent({
+    sessionId,
+    policyVersion: version,
+    userId: req.user?.id || null,
+    analytics: analytics ?? false,
+    marketing: marketing ?? false,
+    ipAddress: req.ip,
+    userAgent: req.headers["user-agent"] || null,
   });
 
   return res.status(200).json({
@@ -67,16 +50,7 @@ export const getConsent = asyncHandler(async (req, res, next) => {
   const { sessionId } = req.params;
 
   // ✅ Fixed: sessionId alone nahi, latest version dhundho
-  const consent = await prisma.consent.findFirst({
-    where: { sessionId },
-    orderBy: { createdAt: "desc" },
-    select: {
-      analytics: true,
-      marketing: true,
-      policyVersion: true,
-      updatedAt: true,
-    },
-  });
+  const consent = await ConsentHelper.getLatestConsent(sessionId);
 
   if (!consent) {
     return res.status(404).json({

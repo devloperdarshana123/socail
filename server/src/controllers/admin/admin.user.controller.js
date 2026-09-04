@@ -1,7 +1,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError     from "../../utils/AppError.js";
-import prisma       from "../../config/prisma.js";
+import * as AdminUserHelper from "../../utils/adminUserHelpers.js";
 import logger       from "../../config/logger.js";
 import { sendMail } from "../../utils/sendMail.js";
 import { postDeleted }      from "../../mail/templates/postDeleted.js";
@@ -51,11 +51,11 @@ export const getAllUsers = asyncHandler(async (req, res, next) => {
   if (createdAt) where.createdAt = createdAt;
 
   if (search?.trim()) {
-    where.OR = [
-      { username:    { contains: search.trim(), mode: "insensitive" } },
-      { fullName:    { contains: search.trim(), mode: "insensitive" } },
-      { email:       { contains: search.trim(), mode: "insensitive" } },
-      { phoneNumber: { contains: search.trim(), mode: "insensitive" } },
+    where.or = [
+      { username:    { like: search.trim(), caseInsensitive: true } },
+      { fullName:    { like: search.trim(), caseInsensitive: true } },
+      { email:       { like: search.trim(), caseInsensitive: true } },
+      { phoneNumber: { like: search.trim(), caseInsensitive: true } },
     ];
   }
 
@@ -87,34 +87,8 @@ export const getAllUsers = asyncHandler(async (req, res, next) => {
 
   // ── Parallel: users + count ───────────────────────────────────
   const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      orderBy,
-      skip,
-      take: limit,
-      select: {
-        id:                   true,
-        username:             true,
-        fullName:             true,
-        email:                true,
-        phoneNumber:          true,
-        avatar:               true,
-        accountStatus:        true,
-        role:                 true,
-        isVerifiedBadge:      true,
-        isEmailVerified:      true,
-        isMobileVerified:     true,
-        followersCount:       true,
-        followingCount:       true,
-        createdAt:            true,
-        _count: { select: { posts: { where: { isDeleted: false, isDraft: false } } } },
-        businessCategory:     true,
-        location:             true,
-        authProvider:         true,
-        isOnboardingComplete: true,
-      },
-    }),
-    prisma.user.count({ where }),
+    AdminUserHelper.findUsers(where, orderBy, skip, limit),
+    AdminUserHelper.countUsers(where),
   ]);
 
   logger.info("Admin fetched users list", { adminId: req.user.id, total });
@@ -139,76 +113,23 @@ export const getAllUsers = asyncHandler(async (req, res, next) => {
 export const getUserById = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
 
-  const user = await prisma.user.findUnique({
-    where:  { id },
-    select: {
-      id:                   true,
-      username:             true,
-      fullName:             true,
-      email:                true,
-      phoneNumber:          true,
-      avatar:               true,
-      coverPhoto:           true,
-      bio:                  true,
-      designation:          true,
-      website:              true,
-      gender:               true,
-      dateOfBirth:          true,
-      businessCategory:     true,
-      location:             true,
-      isEmailVerified:      true,
-      isMobileVerified:     true,
-      isPrivate:            true,
-      isVerifiedBadge:      true,
-      accountStatus:        true,
-      role:                 true,
-      isOnboardingComplete: true,
-      onboardingStep:       true,
-      followersCount:       true,
-      followingCount:       true,
-      postsCount:           true,
-      lastActiveAt:         true,
-      notificationsEnabled: true,
-      language:             true,
-      activeSuspension:     true,
-      createdAt:            true,
-      updatedAt:            true,
-    },
-  });
+  const user = await AdminUserHelper.findUserProfile(id);
 
   if (!user) return next(new AppError("User not found", 404));
 
   // Recent posts + report stats in parallel
   const [posts, reportsByStatus] = await Promise.all([
-    prisma.post.findMany({
-      where:   { authorId: id, isDeleted: false, isDraft: false },
-      orderBy: { createdAt: "desc" },
-      take:    30,
-      select: {
-        id:            true,
-        caption:       true,
-        type:          true,
-        media:         true,
-        likesCount:    true,
-        commentsCount: true,
-        viewsCount:    true,
-        createdAt:     true,
-      },
-    }),
+    AdminUserHelper.findRecentUserPosts(id),
 
     // Report stats grouped by status
-    prisma.report.groupBy({
-      by:    ["status"],
-      where: { reportedById: id },
-      _count: { _all: true },
-    }),
+    AdminUserHelper.groupUserReportsByStatus(id),
   ]);
 
   // Shape report stats
   const reportStats = { pending: 0, resolved: 0, dismissed: 0, total: 0 };
-  reportsByStatus.forEach(({ status, _count }) => {
-    if (status in reportStats) reportStats[status] = _count._all;
-    reportStats.total += _count._all;
+  reportsByStatus.forEach(({ key: status, count }) => {
+    if (status in reportStats) reportStats[status] = count;
+    reportStats.total += count;
   });
 
   logger.info("Admin viewed user profile", { adminId: req.user.id, targetUserId: id });
@@ -229,32 +150,14 @@ export const getUserPosts = asyncHandler(async (req, res, next) => {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const skip  = (page - 1) * limit;
 
-  const user = await prisma.user.findUnique({
-    where:  { id },
-    select: { id: true, username: true, fullName: true },
-  });
+  const user = await AdminUserHelper.findUserIdentity(id);
   if (!user) return next(new AppError("User not found", 404));
 
   const where = { authorId: id, isDeleted: false };
 
   const [posts, total] = await Promise.all([
-    prisma.post.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take:    limit,
-      select: {
-        id:            true,
-        caption:       true,
-        type:          true,
-        media:         true,
-        likesCount:    true,
-        commentsCount: true,
-        viewsCount:    true,
-        createdAt:     true,
-      },
-    }),
-    prisma.post.count({ where }),
+    AdminUserHelper.findUserPosts(where, skip, limit),
+    AdminUserHelper.countPosts(where),
   ]);
 
   return res.status(200).json({
@@ -275,26 +178,14 @@ export const getUserReports = asyncHandler(async (req, res, next) => {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const skip  = (page - 1) * limit;
 
-  const user = await prisma.user.findUnique({
-    where:  { id },
-    select: { id: true, username: true, fullName: true },
-  });
+  const user = await AdminUserHelper.findUserIdentity(id);
   if (!user) return next(new AppError("User not found", 404));
 
   const where = { reportedById: id };
 
   const [reports, total] = await Promise.all([
-    prisma.report.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip,
-      take:    limit,
-      include: {
-        reportedBy: { select: { id: true, username: true, fullName: true, avatar: true } },
-        post:       { select: { id: true, caption: true, media: true, createdAt: true, type: true } },
-      },
-    }),
-    prisma.report.count({ where }),
+    AdminUserHelper.findUserReports(where, skip, limit),
+    AdminUserHelper.countReports(where),
   ]);
 
   return res.status(200).json({
@@ -317,18 +208,7 @@ export const updateUserStatus = asyncHandler(async (req, res, next) => {
     return next(new AppError(`Invalid status. Allowed: ${ALLOWED_STATUSES.join(", ")}`, 400));
   }
 
-  const target = await prisma.user.findUnique({
-    where:  { id },
-    select: {
-      id:               true,
-      email:            true,
-      username:         true,
-      fullName:         true,
-      accountStatus:    true,
-      role:             true,
-      activeSuspension: true,
-    },
-  });
+  const target = await AdminUserHelper.findUserForStatusChange(id);
   if (!target) return next(new AppError("User not found", 404));
 
   if (target.role === "super_admin" && req.user.id !== target.id) {
@@ -358,29 +238,25 @@ export const updateUserStatus = asyncHandler(async (req, res, next) => {
     };
 
     // Add to suspension history
-    await prisma.suspensionHistory.create({
-      data: {
-        userId:      id,
-        action:      "suspended",
-        performedBy: req.user.id,
-        reason:      reason.trim(),
-        duration:    days,
-        expiresAt,
-      },
+    await AdminUserHelper.createSuspensionHistory({
+      userId:      id,
+      action:      "suspended",
+      performedBy: req.user.id,
+      reason:      reason.trim(),
+      duration:    days,
+      expiresAt,
     });
 
   } else if (status === "active" && previousStatus === "suspended") {
     data.activeSuspension = null;
 
-    await prisma.suspensionHistory.create({
-      data: {
-        userId:      id,
-        action:      "unsuspended",
-        performedBy: req.user.id,
-        reason:      reason?.trim() || "Manually lifted by admin",
-        duration:    null,
-        expiresAt:   null,
-      },
+    await AdminUserHelper.createSuspensionHistory({
+      userId:      id,
+      action:      "unsuspended",
+      performedBy: req.user.id,
+      reason:      reason?.trim() || "Manually lifted by admin",
+      duration:    null,
+      expiresAt:   null,
     });
 
   } else if (status === "banned") {
@@ -389,28 +265,17 @@ export const updateUserStatus = asyncHandler(async (req, res, next) => {
 
     data.activeSuspension = null;
 
-    await prisma.suspensionHistory.create({
-      data: {
-        userId:      id,
-        action:      "banned",
-        performedBy: req.user.id,
-        reason:      reason.trim(),
-        duration:    null,
-        expiresAt:   null,
-      },
+    await AdminUserHelper.createSuspensionHistory({
+      userId:      id,
+      action:      "banned",
+      performedBy: req.user.id,
+      reason:      reason.trim(),
+      duration:    null,
+      expiresAt:   null,
     });
   }
 
-  const updated = await prisma.user.update({
-    where: { id },
-    data,
-    select: {
-      id:               true,
-      username:         true,
-      accountStatus:    true,
-      activeSuspension: true,
-    },
-  });
+  const updated = await AdminUserHelper.updateUserStatusById(id, data);
 
   // Clear Redis cache
   try { await redis.del("admin:stats"); } catch { /* ignore */ }
@@ -462,10 +327,7 @@ export const updateUserStatus = asyncHandler(async (req, res, next) => {
 export const deleteUserAccount = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
 
-  const target = await prisma.user.findUnique({
-    where:  { id },
-    select: { id: true, username: true, email: true, role: true },
-  });
+  const target = await AdminUserHelper.findUserForDeletion(id);
   if (!target) return next(new AppError("User not found", 404));
 
   if (target.role === "super_admin") {
@@ -473,13 +335,9 @@ export const deleteUserAccount = asyncHandler(async (req, res, next) => {
   }
 
   // Soft-delete all posts + hard-delete user in transaction
-  await prisma.$transaction([
-    prisma.post.updateMany({
-      where: { authorId: id },
-      data:  { isDeleted: true, deletedAt: new Date() },
-    }),
-    prisma.user.delete({ where: { id } }),
-  ]);
+  await AdminUserHelper.deleteUserAndSoftDeleteTheirPosts(id, {
+    isDeleted: true, deletedAt: new Date(),
+  });
 
   logger.warn("Admin DELETED user account", {
     adminId:         req.user.id,
@@ -501,30 +359,19 @@ export const deletePost = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
   const { reason }  = req.body;
 
-  const post = await prisma.post.findFirst({
-    where:   { id: postId, isDeleted: false },
-    include: {
-      author: { select: { id: true, username: true, fullName: true, email: true, postsCount: true } },
-    },
-  });
+  const post = await AdminUserHelper.findPostForDeletion(postId);
 
   if (!post) return next(new AppError("Post not found", 404));
 
   const deletedAt = new Date();
 
   // Soft-delete post + decrement postsCount (guard: never below 0) in transaction
-  await prisma.$transaction([
-    prisma.post.update({
-      where: { id: postId },
-      data:  { isDeleted: true, deletedAt },
-    }),
-    ...(post.author.postsCount > 0
-      ? [prisma.user.update({
-          where: { id: post.author.id },
-          data:  { postsCount: { decrement: 1 } },
-        })]
-      : []),
-  ]);
+  await AdminUserHelper.softDeletePostAndDecrementAuthorCount(
+    postId,
+    { isDeleted: true, deletedAt },
+    post.author.id,
+    post.author.postsCount,
+  );
 
   // Send email (fire-and-forget)
   if (post.author?.email) {
@@ -566,17 +413,10 @@ export const deletePost = asyncHandler(async (req, res, next) => {
 export const toggleVerifiedBadge = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
 
-  const user = await prisma.user.findUnique({
-    where:  { id },
-    select: { id: true, username: true, isVerifiedBadge: true },
-  });
+  const user = await AdminUserHelper.findUserBadgeState(id);
   if (!user) return next(new AppError("User not found", 404));
 
-  const updated = await prisma.user.update({
-    where: { id },
-    data:  { isVerifiedBadge: !user.isVerifiedBadge },
-    select: { isVerifiedBadge: true },
-  });
+  const updated = await AdminUserHelper.updateUserVerifiedBadge(id, !user.isVerifiedBadge);
 
   logger.info("Admin toggled verified badge", {
     adminId:        req.user.id,
@@ -607,14 +447,14 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
 
 const [totalUsers, activeUsers, suspendedUsers, bannedUsers, verifiedUsers, totalPosts, pendingReports, newUsersToday] =
     await Promise.all([
-      prisma.user.count({ where: { role: { not: "super_admin" } } }),
-      prisma.user.count({ where: { role: { not: "super_admin" }, accountStatus: "active"    } }),
-      prisma.user.count({ where: { role: { not: "super_admin" }, accountStatus: "suspended" } }),
-      prisma.user.count({ where: { role: { not: "super_admin" }, accountStatus: "banned"    } }),
-      prisma.user.count({ where: { role: { not: "super_admin" }, isVerifiedBadge: true      } }),
-      prisma.post.count({ where: { isDeleted: false } }),
-      prisma.report.count({ where: { status: "pending" } }),
-      prisma.user.count({ where: { role: { not: "super_admin" }, createdAt: { gte: startOfToday } } }),
+      AdminUserHelper.countUsers({ role: { not: "super_admin" } }),
+      AdminUserHelper.countUsers({ role: { not: "super_admin" }, accountStatus: "active"    }),
+      AdminUserHelper.countUsers({ role: { not: "super_admin" }, accountStatus: "suspended" }),
+      AdminUserHelper.countUsers({ role: { not: "super_admin" }, accountStatus: "banned"    }),
+      AdminUserHelper.countUsers({ role: { not: "super_admin" }, isVerifiedBadge: true      }),
+      AdminUserHelper.countPosts({ isDeleted: false }),
+      AdminUserHelper.countReports({ status: "pending" }),
+      AdminUserHelper.countUsers({ role: { not: "super_admin" }, createdAt: { gte: startOfToday } }),
     ]);
 
   const statsData = {
@@ -656,40 +496,20 @@ export const getAllPosts = asyncHandler(async (req, res, next) => {
   }
 
   if (search?.trim()) {
-    where.caption = { contains: search.trim(), mode: "insensitive" };
+    where.caption = { like: search.trim(), caseInsensitive: true };
   }
 
   const SORT_WHITELIST = ["createdAt", "likesCount", "commentsCount", "viewsCount"];
   const sortField = SORT_WHITELIST.includes(sortBy) ? sortBy : "createdAt";
 
   const [posts, total] = await Promise.all([
-    prisma.post.findMany({
+    AdminUserHelper.findAllPosts(
       where,
-      orderBy: { [sortField]: sortOrder === "asc" ? "asc" : "desc" },
+      { [sortField]: sortOrder === "asc" ? "asc" : "desc" },
       skip,
-      take:    limit,
-      select: {
-        id:            true,
-        caption:       true,
-        type:          true,
-        media:         true,
-        likesCount:    true,
-        commentsCount: true,
-        viewsCount:    true,
-        createdAt:     true,
-        author: {
-          select: {
-            id:             true,
-            username:       true,
-            fullName:       true,
-            avatar:         true,
-            isVerifiedBadge: true,
-            accountStatus:  true,
-          },
-        },
-      },
-    }),
-    prisma.post.count({ where }),
+      limit,
+    ),
+    AdminUserHelper.countPosts(where),
   ]);
 
   logger.info("Admin fetched all posts", { adminId: req.user.id, total, page });
@@ -727,10 +547,7 @@ export const bulkUpdateStatus = asyncHandler(async (req, res, next) => {
   await Promise.allSettled(
     userIds.map(async (userId) => {
       try {
-        const user = await prisma.user.findUnique({
-          where:  { id: userId },
-          select: { id: true, role: true, accountStatus: true },
-        });
+        const user = await AdminUserHelper.findUserForBulkStatus(userId);
 
         if (!user || user.role === "super_admin") throw new Error("Not allowed");
 
@@ -746,19 +563,14 @@ export const bulkUpdateStatus = asyncHandler(async (req, res, next) => {
           };
         }
 
-        await prisma.$transaction([
-          prisma.user.update({ where: { id: userId }, data }),
-          prisma.suspensionHistory.create({
-            data: {
-              userId,
-              action:      status === "suspended" ? "suspended" : status,
-              performedBy: req.user.id,
-              reason:      reason?.trim() || null,
-              duration:    days,
-              expiresAt,
-            },
-          }),
-        ]);
+        await AdminUserHelper.updateUserStatusWithHistory(userId, data, {
+          userId,
+          action:      status === "suspended" ? "suspended" : status,
+          performedBy: req.user.id,
+          reason:      reason?.trim() || null,
+          duration:    days,
+          expiresAt,
+        });
 
         results.success.push(userId);
       } catch (err) {
@@ -782,25 +594,12 @@ export const bulkUpdateStatus = asyncHandler(async (req, res, next) => {
 export const getSuspensionHistory = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
 
-  const user = await prisma.user.findUnique({
-    where:  { id },
-    select: {
-      id:               true,
-      username:         true,
-      fullName:         true,
-      accountStatus:    true,
-      role:             true,
-      activeSuspension: true,
-    },
-  });
+  const user = await AdminUserHelper.findUserForSuspensionHistory(id);
 
   if (!user || user.role === "super_admin")
     return next(new AppError("User not found", 404));
 
-  const history = await prisma.suspensionHistory.findMany({
-    where:   { userId: id },
-    orderBy: { createdAt: "desc" },
-  });
+  const history = await AdminUserHelper.findSuspensionHistory(id);
 
   return res.status(200).json({
     success: true,

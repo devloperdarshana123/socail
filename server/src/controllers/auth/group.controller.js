@@ -2,7 +2,7 @@
 
 import asyncHandler from "../../middlewares/asyncHandler.js";
 import AppError from "../../utils/AppError.js";
-import prisma from "../../config/prisma.js";
+import * as GroupHelper from "../../utils/messageHelpers.js";
 
 const isValidUUID = (id) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -13,24 +13,6 @@ const getAdminId = (groupAdmin) =>
   typeof groupAdmin === "object" && groupAdmin !== null
     ? groupAdmin.id
     : groupAdmin;
-
-const memberInclude = {
-  members: {
-    where: { isDeleted: false },
-    include: {
-      user: {
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatar: true,
-          isVerifiedBadge: true,
-          accountStatus: true,
-        },
-      },
-    },
-  },
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/v2/conversations/group
@@ -54,30 +36,17 @@ export const createGroupConversation = asyncHandler(async (req, res, next) => {
     return next(new AppError("Group cannot have more than 500 participants.", 400));
 
   // Check all participants exist
-  const users = await prisma.user.findMany({
-    where: { id: { in: participantIds } },
-    select: { id: true },
-  });
+  const users = await GroupHelper.findUsersByIds(participantIds);
   if (users.length !== participantIds.length)
     return next(new AppError("One or more participant IDs do not exist.", 404));
 
   const allParticipants = [...new Set([adminId, ...participantIds])];
 
-  const conversation = await prisma.conversation.create({
-    data: {
-      isGroup: true,
-      groupName: groupName.trim(),
-      groupAdmin: {
-        connect: { id: adminId },
-      },
-      groupAvatar: avatarUrl ? { url: avatarUrl, publicId: null } : null,
-      members: {
-        create: allParticipants.map((userId) => ({
-          userId,
-        })),
-      },
-    },
-    include: memberInclude,
+  const conversation = await GroupHelper.createGroupConversation({
+    groupName,
+    adminId,
+    avatarUrl,
+    allParticipants,
   });
 
   return res.status(201).json({ success: true, data: conversation });
@@ -97,10 +66,7 @@ export const addGroupMember = asyncHandler(async (req, res, next) => {
   if (!userId || !isValidUUID(userId))
     return next(new AppError("Valid userId is required.", 400));
 
-  const conv = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true, isGroup: true, groupAdmin: true },
-  });
+  const conv = await GroupHelper.getGroupForAdminCheck(conversationId);
 
   if (!conv) return next(new AppError("Conversation not found.", 404));
   if (!conv.isGroup) return next(new AppError("Not a group conversation.", 400));
@@ -108,29 +74,17 @@ export const addGroupMember = asyncHandler(async (req, res, next) => {
     return next(new AppError("Only the group admin can add members.", 403));
 
   // Check user exists
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true },
-  });
+  const user = await GroupHelper.findParticipantById(userId);
   if (!user) return next(new AppError("User not found.", 404));
 
   // Check already an active member
-  const existing = await prisma.conversationParticipant.findFirst({
-    where: { conversationId, userId, isDeleted: false },
-  });
+  const existing = await GroupHelper.findActiveGroupMember(conversationId, userId);
   if (existing)
     return next(new AppError("User is already a member.", 400));
 
-  await prisma.conversationParticipant.upsert({
-    where: { conversationId_userId: { conversationId, userId } },
-    update: { isDeleted: false },
-    create: { conversationId, userId },
-  });
+  await GroupHelper.upsertGroupMember(conversationId, userId);
 
-  const updated = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    include: memberInclude,
-  });
+  const updated = await GroupHelper.getGroupWithMemberDetails(conversationId);
 
   return res.status(200).json({ success: true, data: updated });
 });
@@ -149,10 +103,7 @@ export const removeGroupMember = asyncHandler(async (req, res, next) => {
   if (!userId || !isValidUUID(userId))
     return next(new AppError("Valid userId is required.", 400));
 
-  const conv = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true, isGroup: true, groupAdmin: true },
-  });
+  const conv = await GroupHelper.getGroupForAdminCheck(conversationId);
 
   if (!conv) return next(new AppError("Conversation not found.", 404));
   if (!conv.isGroup) return next(new AppError("Not a group conversation.", 400));
@@ -161,15 +112,9 @@ export const removeGroupMember = asyncHandler(async (req, res, next) => {
   if (userId === requesterId)
     return next(new AppError("Admin cannot remove themselves — use leave or transfer admin first.", 400));
 
-  await prisma.conversationParticipant.updateMany({
-    where: { conversationId, userId },
-    data: { isDeleted: true },
-  });
+  await GroupHelper.softDeleteGroupMember(conversationId, userId);
 
-  const updated = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    include: memberInclude,
-  });
+  const updated = await GroupHelper.getGroupWithMemberDetails(conversationId);
 
   return res.status(200).json({ success: true, data: updated });
 });
@@ -184,17 +129,7 @@ export const leaveGroup = asyncHandler(async (req, res, next) => {
   if (!isValidUUID(conversationId))
     return next(new AppError("Invalid conversationId.", 400));
 
-  const conv = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: {
-      id: true,
-      isGroup: true,
-      members: {
-        where: { isDeleted: false },
-        select: { userId: true },
-      },
-    },
-  });
+  const conv = await GroupHelper.getGroupWithMembers(conversationId);
 
   if (!conv) return next(new AppError("Conversation not found.", 404));
   if (!conv.isGroup) return next(new AppError("Not a group conversation.", 400));
@@ -203,10 +138,7 @@ export const leaveGroup = asyncHandler(async (req, res, next) => {
   if (!isMember)
     return next(new AppError("You are not a member of this group.", 403));
 
- await prisma.conversationParticipant.updateMany({
-    where: { conversationId, userId },
-    data: { isDeleted: true },
-  });
+ await GroupHelper.softDeleteGroupMember(conversationId, userId);
 
   return res.status(200).json({ success: true, message: "Left the group." });
 });
@@ -225,22 +157,16 @@ export const renameGroup = asyncHandler(async (req, res, next) => {
   if (!groupName?.trim() && !avatarUrl)
     return next(new AppError("groupName or avatarUrl is required.", 400));
 
-  const conv = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true, isGroup: true, groupAdmin: true },
-  });
+  const conv = await GroupHelper.getGroupForAdminCheck(conversationId);
 
   if (!conv) return next(new AppError("Conversation not found.", 404));
   if (!conv.isGroup) return next(new AppError("Not a group conversation.", 400));
   if (getAdminId(conv.groupAdmin) !== requesterId)
     return next(new AppError("Only the group admin can update group info.", 403));
 
-  const updated = await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      ...(groupName?.trim() && { groupName: groupName.trim() }),
-      ...(avatarUrl && { groupAvatar: { url: avatarUrl, publicId: null } }),
-    },
+  const updated = await GroupHelper.updateGroupInfo(conversationId, {
+    ...(groupName?.trim() && { groupName: groupName.trim() }),
+    ...(avatarUrl && { groupAvatar: { url: avatarUrl, publicId: null } }),
   });
 
   return res.status(200).json({
@@ -267,18 +193,7 @@ export const transferGroupAdmin = asyncHandler(async (req, res, next) => {
   if (!newAdminId || !isValidUUID(newAdminId))
     return next(new AppError("Valid newAdminId is required.", 400));
 
-  const conv = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: {
-      id: true,
-      isGroup: true,
-      groupAdmin: true,
-      members: {
-        where: { isDeleted: false },
-        select: { userId: true },
-      },
-    },
-  });
+  const conv = await GroupHelper.getGroupForAdminTransfer(conversationId);
 
   if (!conv) return next(new AppError("Conversation not found.", 404));
   if (!conv.isGroup) return next(new AppError("Not a group conversation.", 400));
@@ -289,13 +204,7 @@ export const transferGroupAdmin = asyncHandler(async (req, res, next) => {
   if (!isMember)
     return next(new AppError("New admin must be a member of the group.", 400));
 
-  const updated = await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      groupAdmin: { connect: { id: newAdminId } },
-    },
-    include: memberInclude,
-  });
+  const updated = await GroupHelper.updateGroupAdmin(conversationId, newAdminId);
 
   return res.status(200).json({ success: true, data: updated });
 });
@@ -311,20 +220,14 @@ export const disbandGroupConversation = asyncHandler(async (req, res, next) => {
   if (!isValidUUID(conversationId))
     return next(new AppError("Invalid conversationId.", 400));
 
-  const conv = await prisma.conversation.findUnique({
-    where: { id: conversationId },
-    select: { id: true, isGroup: true, groupAdmin: true },
-  });
+  const conv = await GroupHelper.getGroupForAdminCheck(conversationId);
 
   if (!conv) return next(new AppError("Conversation not found.", 404));
   if (!conv.isGroup) return next(new AppError("Not a group conversation.", 400));
   if (getAdminId(conv.groupAdmin) !== requesterId)
     return next(new AppError("Only the group admin can disband the group.", 403));
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { isActive: false },
-  });
+  await GroupHelper.deactivateGroupConversation(conversationId);
 
   return res.status(200).json({ success: true, message: "Group disbanded." });
 });
