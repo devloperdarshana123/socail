@@ -24,11 +24,7 @@ import {
 } from "../../utils/usernameUtils.js";
 import jwt from "jsonwebtoken";
 import { getAuth } from "firebase-admin/auth";
-import { initializeApp, getApps } from "firebase-admin/app";
-
-if (!getApps().length) {
-  initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID });
-}
+import { firebaseReady } from "../../config/firebase.js";
 
 // ═════════════════════════════════════════════
 //  POST /auth/register
@@ -526,6 +522,15 @@ export const googleAuth = asyncHandler(async (req, res, next) => {
 
   if (!idToken) {
     return next(new AppError("Google ID token is required", 400));
+  }
+
+  if (!firebaseReady) {
+    return next(
+      new AppError(
+        "Google sign-in is not configured on the server. Add valid Firebase Admin credentials.",
+        503,
+      ),
+    );
   }
 
   let decoded;
